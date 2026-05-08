@@ -1,0 +1,58 @@
+{
+  "project_id": "5088684a-0ab8-4d4b-8f35-b52094ced849",
+  "created_at": "2026-04-15T00:34:55.345614",
+  "spec_summary": "Crear una clase Validadores con métodos estáticos: es_email_valido(email) -> bool y es_telefono_valido(telefono) -> bool",
+  "tasks": [
+    {
+      "id": "T1",
+      "name": "Generar método es_email_valido",
+      "description": "Implementar función estática que valide formato de email usando expresión regular estándar.",
+      "depends_on": [],
+      "inputs": [
+        "email: string"
+      ],
+      "expected_output": "bool",
+      "acceptance_criterion": "Devuelve True para 'user@example.com', False para 'email'",
+      "task_type": "generation",
+      "status": "pending",
+      "attempts": 0,
+      "result": null,
+      "model_used": null
+    },
+    {
+      "id": "T2",
+      "name": "Generar método es_telefono_valido",
+      "description": "Implementar función estática que valide teléfono español de 9 dígitos comenzando por 6,7,8 o 9.",
+      "depends_on": [],
+      "inputs": [
+        "telefono: string"
+      ],
+      "expected_output": "bool",
+      "acceptance_criterion": "Devuelve True para '912345678', False para '123456789'",
+      "task_type": "generation",
+      "status": "pending",
+      "attempts": 0,
+      "result": null,
+      "model_used": null
+    },
+    {
+      "id": "T3",
+      "name": "Ejecutar asserts de validación",
+      "description": "Ejecutar bloque __main__ con asserts para casos válidos e inválidos de ambos validadores.",
+      "depends_on": [
+        "T1",
+        "T2"
+      ],
+      "inputs": [],
+      "expected_output": "Impresión de 'CRITERIO OK' si todos los asserts pasan",
+      "acceptance_criterion": "El programa imprime exactamente 'CRITERIO OK' sin errores",
+      "task_type": "evaluation",
+      "status": "pending",
+      "attempts": 0,
+      "result": null,
+      "model_used": null
+    }
+  ],
+  "model_used": "openrouter/elephant-alpha",
+  "multi_file": false
+}

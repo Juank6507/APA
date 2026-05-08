@@ -1,0 +1,1 @@
+"""Bucle principal de ejecución. Gestiona el ciclo de retroalimentación, validación continua y reintento ante fallos."""

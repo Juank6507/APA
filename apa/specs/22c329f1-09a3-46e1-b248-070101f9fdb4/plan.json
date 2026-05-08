@@ -1,0 +1,98 @@
+{
+  "project_id": "22c329f1-09a3-46e1-b248-070101f9fdb4",
+  "created_at": "2026-04-12T23:10:25.601826",
+  "spec_summary": "Calculadora modular con validación y caché",
+  "tasks": [
+    {
+      "id": "utils_validators",
+      "name": "Crear utils/validators.py",
+      "description": "Define una función `es_numero(valor)` que retorna True si valor es int o float, False en caso contrario.\nDebe incluir un bloque `if __name__ == '__main__':` que pruebe la función e imprima 'CRITERIO OK' si pasa.",
+      "depends_on": [],
+      "inputs": [],
+      "expected_output": "Archivo utils/validators.py generado y funcional",
+      "acceptance_criterion": "",
+      "task_type": "generation",
+      "status": "completed",
+      "attempts": 0,
+      "result": {
+        "success": true,
+        "code": "import os\n\ndef es_numero(valor):\n    \"\"\"Devuelve True si valor es int o float (no str ni otro tipo).\"\"\"\n    return isinstance(valor, (int, float)) and not isinstance(valor, bool)\n\nif __name__ == '__main__':\n    # Crear directorio utils si no existe\n    os.makedirs('utils', exist_ok=True)\n\n    # Tests de criterio\n    try:\n        assert es_numero(5) is True\n        assert es_numero(3.14) is True\n        assert es_numero('5') is False\n        assert es_numero(None) is False\n        print('CRITERIO OK')\n    except Exception as e:\n        print(f'CRITERIO FALLO: {e}')",
+        "filename": "crearutilsvalidatorspy.py",
+        "criterion_passed": true,
+        "attempts_used": 2,
+        "model_used": null,
+        "diagnosis": "Corregido en 2 intentos"
+      },
+      "model_used": null,
+      "file_path": "utils/validators.py",
+      "imports": []
+    },
+    {
+      "id": "utils_operations",
+      "name": "Crear utils/operations.py",
+      "description": "Importa `es_numero` desde `utils/validators.py`.\nDefine:\n- `sumar(a, b)`: retorna a + b si ambos son números, lanza ValueError si no.\n- `restar(a, b)`: retorna a - b si ambos son números, lanza ValueError si no.\nDebe incluir test en `__main__` que imprima 'CRITERIO OK'.",
+      "depends_on": [
+        "utils_validators"
+      ],
+      "inputs": [
+        "utils/validators.py",
+        "es_numero",
+        "__main__"
+      ],
+      "expected_output": "Archivo utils/operations.py generado y funcional",
+      "acceptance_criterion": "",
+      "task_type": "generation",
+      "status": "failed",
+      "attempts": 0,
+      "result": {
+        "success": false,
+        "code": "import sys\nimport os\n\nsys.path.insertar(0, os.path.dirname(os.path.abspath(__ __file__)))\n\ndef es_numero(x):\n):\n    return isinstance(x, (int,,, float)) and not isinstance(x, bool)\n\ndef sumar(a, b<|tool_call_end|><|tool_calls_section_end|>",
+        "filename": "crearutilsoperationspy.py",
+        "criterion_passed": false,
+        "attempts_used": 4,
+        "model_used": null,
+        "diagnosis": "No se pudo identificar una estrategia de corrección efectiva. Estrategias intentadas: retry_execution, rewrite"
+      },
+      "model_used": null,
+      "file_path": "utils/operations.py",
+      "imports": [
+        "utils/validators.py",
+        "es_numero",
+        "__main__"
+      ]
+    },
+    {
+      "id": "main",
+      "name": "Crear main.py",
+      "description": "Importa `sumar` y `restar` desde `utils/operations.py`.\nDefine `calcular(operacion, a, b)` que dispatcha a sumar o restar.\nManeja ValueError y retorna mensaje de error si la operación es desconocida.\nDebe incluir test en `__main__` que imprima 'CRITERIO OK'.",
+      "depends_on": [
+        "utils_operations"
+      ],
+      "inputs": [
+        "utils/operations.py",
+        "sumar",
+        "restar",
+        "__main__"
+      ],
+      "expected_output": "Archivo main.py generado y funcional",
+      "acceptance_criterion": "",
+      "task_type": "generation",
+      "status": "failed",
+      "attempts": 0,
+      "result": null,
+      "model_used": null,
+      "file_path": "main.py",
+      "imports": [
+        "utils/operations.py",
+        "sumar",
+        "restar",
+        "__main__"
+      ]
+    }
+  ],
+  "model_used": null,
+  "multi_file": true,
+  "files_count": 3,
+  "checkpoint_at": "2026-04-12T23:11:40.161250",
+  "checkpoint_version": 4
+}

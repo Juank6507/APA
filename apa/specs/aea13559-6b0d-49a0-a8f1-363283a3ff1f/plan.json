@@ -1,0 +1,57 @@
+{
+  "project_id": "aea13559-6b0d-49a0-a8f1-363283a3ff1f",
+  "created_at": "2026-04-12T02:37:51.920075",
+  "spec_summary": "suma dos números enteros y retorna el resultado.",
+  "tasks": [
+    {
+      "id": "T1",
+      "name": "Implement sum function",
+      "description": "Create a function sum that takes two integer parameters a and b and returns their integer sum.",
+      "depends_on": [],
+      "inputs": [
+        "a",
+        "b"
+      ],
+      "expected_output": "Function sum defined",
+      "acceptance_criterion": "The function sum returns a+b for any integer inputs a and b.",
+      "task_type": "generation",
+      "status": "completed",
+      "attempts": 0,
+      "result": {
+        "success": true,
+        "code": "def sum(a, b):\n    return a + b\n\ndef _test():\n    test_cases = [\n        (0, 0),\n        (1, 2),\n        (-1, 5),\n        (100, -50),\n        (-10, -20),\n        (2**31-1, -(2**31)),\n    ]\n    for a, b in test_cases:\n        result = sum(a, b)\n        expected = a + b\n        if result != expected:\n            print(f'CRITERIO FALLO: sum({a}, {b}) returned {result} expected {expected}')\n            return\n    print('CRITERIO OK')\n\nif __name__ == '__main__':\n    _test()",
+        "filename": "implement_sum_function.py",
+        "criterion_passed": true,
+        "attempts_used": 1,
+        "model_used": "nvidia/nemotron-3-super-120b-a12b:free",
+        "diagnosis": "Generado y verificado en primer intento"
+      },
+      "model_used": "nvidia/nemotron-3-super-120b-a12b:free"
+    },
+    {
+      "id": "T2",
+      "name": "Validate sum with example",
+      "description": "Call sum(2,3) and verify that the result equals 5.",
+      "depends_on": [
+        "T1"
+      ],
+      "inputs": [],
+      "expected_output": "5",
+      "acceptance_criterion": "The call sum(2,3) returns exactly 5.",
+      "task_type": "evaluation",
+      "status": "completed",
+      "attempts": 0,
+      "result": {
+        "success": true,
+        "code": "def sum(a, b):\n    return a + b\n\nif __name__ == '__main__':\n    result = sum(2, 3)\n    if result == 5:\n        print('CRITERIO OK')\n    else:\n        print(f'CRITERIO FALLO: expected 5, got {result}')",
+        "filename": "validate_sum_with_example.py",
+        "criterion_passed": true,
+        "attempts_used": 1,
+        "model_used": "nvidia/nemotron-3-super-120b-a12b:free",
+        "diagnosis": "Generado y verificado en primer intento"
+      },
+      "model_used": "nvidia/nemotron-3-super-120b-a12b:free"
+    }
+  ],
+  "model_used": "nvidia/nemotron-3-super-120b-a12b:free"
+}

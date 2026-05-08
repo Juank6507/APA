@@ -1,0 +1,57 @@
+{
+  "project_id": "ae929cf6-56db-4c66-b8af-83267f0313d8",
+  "created_at": "2026-04-12T03:08:26.840603",
+  "spec_summary": "suma dos números enteros y retorna el resultado",
+  "tasks": [
+    {
+      "id": "T1",
+      "name": "Implementar función suma",
+      "description": "Crear la función suma que reciba dos enteros y devuelva su suma",
+      "depends_on": [],
+      "inputs": [
+        "a",
+        "b"
+      ],
+      "expected_output": "Función suma definida",
+      "acceptance_criterion": "La función suma existe y acepta exactamente dos parámetros",
+      "task_type": "generation",
+      "status": "completed",
+      "attempts": 0,
+      "result": {
+        "success": true,
+        "code": "def suma(a, b):\n    return a + b\n\nif __name__ == '__main__':\n    try:\n        # Verificar que la función existe y acepta exactamente dos parámetros\n        import inspect\n        sig = inspect.signature(suma)\n        params = list(sig.parameters.keys())\n        if len(params) != 2:\n            raise ValueError(f\"La función debe aceptar exactamente 2 parámetros, acepta {len(params)}\")\n        \n        # Verificar que funciona correctamente\n        resultado = suma(2, 3)\n        if resultado != 5:\n            raise ValueError(f\"suma(2,3) debería devolver 5, devolvió {resultado}\")\n        \n        print('CRITERIO OK')\n    except Exception as e:\n        print(f'CRITERIO FALLO: {e}')",
+        "filename": "implementar_funcion_suma.py",
+        "criterion_passed": true,
+        "attempts_used": 1,
+        "model_used": "moonshotai/kimi-k2-instruct-0905",
+        "diagnosis": "Generado y verificado en primer intento"
+      },
+      "model_used": "moonshotai/kimi-k2-instruct-0905"
+    },
+    {
+      "id": "T2",
+      "name": "Verificar suma(2, 3)",
+      "description": "Ejecutar la función con los valores 2 y 3 y comprobar que el resultado sea 5",
+      "depends_on": [
+        "T1"
+      ],
+      "inputs": [],
+      "expected_output": "Resultado de la ejecución",
+      "acceptance_criterion": "suma(2, 3) == 5",
+      "task_type": "evaluation",
+      "status": "completed",
+      "attempts": 0,
+      "result": {
+        "success": true,
+        "code": "def suma(a, b):\n    return a + b\n\nif __name__ == '__main__':\n    resultado = suma(2, 3)\n    if resultado == 5:\n        print('CRITERIO OK')\n    else:\n        print(f'CRITERIO FALLO: suma(2, 3) devolvió {resultado}, se esperaba 5')",
+        "filename": "verificar_suma2_3.py",
+        "criterion_passed": true,
+        "attempts_used": 1,
+        "model_used": "moonshotai/kimi-k2-instruct-0905",
+        "diagnosis": "Generado y verificado en primer intento"
+      },
+      "model_used": "moonshotai/kimi-k2-instruct-0905"
+    }
+  ],
+  "model_used": "meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8"
+}

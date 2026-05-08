@@ -1,0 +1,144 @@
+{
+  "project_id": "068b8c3b-1ccf-40cc-b9b8-38caa539e321",
+  "created_at": "2026-04-09T09:53:46.930412",
+  "spec_summary": "crear una aplicación web local con FastAPI que permita al usuario pegar una spec en markdown, lanzar el orquestador APA y ver el progreso de cada tarea en tiempo real.",
+  "tasks": [
+    {
+      "id": "T1",
+      "name": "Crear estructura básica de la aplicación FastAPI",
+      "description": "Configurar un proyecto FastAPI con un archivo app.py que arranque un servidor en localhost:8080.",
+      "depends_on": [],
+      "inputs": [
+        "FastAPI y uvicorn disponibles para instalar"
+      ],
+      "expected_output": "Servidor FastAPI corriendo en localhost:8080 al ejecutar python interface/app.py.",
+      "acceptance_criterion": "Al ejecutar python interface/app.py, el servidor arranca en localhost:8080 sin errores.",
+      "task_type": "generation",
+      "status": "failed",
+      "attempts": 0,
+      "result": {
+        "success": false,
+        "code": "import uvicorn\nfrom fastapi import FastAPI\n\napp = FastAPI()\n\n@app.get(\"/\")\ndef read_root():\n    return {\"message\": \"Hello, FastAPI\"}\n\nif __name__ == '__main__':\n    try:\n        # Intentar arrancar el servidor en localhost:8080\n        uvicorn.run(app, host=\"0.0.0.0\", port=8080)\n        print(\"CRITERIO OK\")\n    except Exception as e:\n        print(f\"CRITERIO FALLO: {e}\")",
+        "filename": "crear_estructura_basica_de_la_aplicacion_fastapi.py",
+        "criterion_passed": false,
+        "attempts_used": 4,
+        "model_used": null,
+        "diagnosis": "No se pudo identificar una estrategia de corrección efectiva. Estrategias intentadas: rewrite"
+      },
+      "model_used": null
+    },
+    {
+      "id": "T2",
+      "name": "Implementar endpoint GET /",
+      "description": "Crear un endpoint que sirva una página HTML inicial con un formulario para pegar la spec en markdown.",
+      "depends_on": [
+        "T1"
+      ],
+      "inputs": [
+        "FastAPI"
+      ],
+      "expected_output": "Endpoint GET / devuelve una página HTML con un formulario para pegar la spec.",
+      "acceptance_criterion": "Al acceder a localhost:8080/, se muestra una página HTML con un formulario funcional.",
+      "task_type": "generation",
+      "status": "failed",
+      "attempts": 0,
+      "result": null,
+      "model_used": null
+    },
+    {
+      "id": "T3",
+      "name": "Implementar endpoint POST /run",
+      "description": "Crear un endpoint que reciba la spec en markdown, la guarde como archivo .md y lance el método Orchestrator.run.",
+      "depends_on": [
+        "T1"
+      ],
+      "inputs": [
+        "apa/core/orchestrator.py con clase Orchestrator"
+      ],
+      "expected_output": "Endpoint POST /run guarda la spec como archivo .md y ejecuta Orchestrator.run.",
+      "acceptance_criterion": "Al enviar una spec al endpoint POST /run, se guarda un archivo .md y se inicia el orquestador sin errores.",
+      "task_type": "generation",
+      "status": "failed",
+      "attempts": 0,
+      "result": null,
+      "model_used": null
+    },
+    {
+      "id": "T4",
+      "name": "Implementar endpoint GET /status/{project_id}",
+      "description": "Crear un endpoint que devuelva el estado actual de las tareas del orquestador para un project_id dado.",
+      "depends_on": [
+        "T3"
+      ],
+      "inputs": [
+        "apa/core/orchestrator.py con clase Orchestrator"
+      ],
+      "expected_output": "Endpoint GET /status/{project_id} devuelve el estado actual de las tareas en formato JSON.",
+      "acceptance_criterion": "Al consultar GET /status/{project_id}, se devuelve un JSON con el estado de las tareas del orquestador.",
+      "task_type": "generation",
+      "status": "failed",
+      "attempts": 0,
+      "result": null,
+      "model_used": null
+    },
+    {
+      "id": "T5",
+      "name": "Implementar endpoint GET /stream/{project_id}",
+      "description": "Crear un endpoint que permita transmitir eventos de progreso en tiempo real usando Server-Sent Events (SSE).",
+      "depends_on": [
+        "T3"
+      ],
+      "inputs": [
+        "FastAPI",
+        "apa/core/orchestrator.py con clase Orchestrator"
+      ],
+      "expected_output": "Endpoint GET /stream/{project_id} transmite eventos de progreso en tiempo real.",
+      "acceptance_criterion": "Al consultar GET /stream/{project_id}, se reciben eventos SSE con el progreso de las tareas.",
+      "task_type": "generation",
+      "status": "failed",
+      "attempts": 0,
+      "result": null,
+      "model_used": null
+    },
+    {
+      "id": "T6",
+      "name": "Implementar funcionalidad para mostrar progreso en tiempo real",
+      "description": "Actualizar la página HTML inicial para mostrar el progreso de las tareas en tiempo real usando el endpoint /stream/{project_id}.",
+      "depends_on": [
+        "T2",
+        "T5"
+      ],
+      "inputs": [
+        "FastAPI",
+        "HTML"
+      ],
+      "expected_output": "La página inicial muestra el progreso de las tareas en tiempo real sin recargar la página.",
+      "acceptance_criterion": "Al lanzar una spec, el progreso de las tareas se actualiza en tiempo real en la página inicial.",
+      "task_type": "generation",
+      "status": "failed",
+      "attempts": 0,
+      "result": null,
+      "model_used": null
+    },
+    {
+      "id": "T7",
+      "name": "Implementar funcionalidad para descargar archivos generados",
+      "description": "Agregar funcionalidad para que los archivos generados por el orquestador puedan descargarse desde la página inicial.",
+      "depends_on": [
+        "T3"
+      ],
+      "inputs": [
+        "FastAPI",
+        "HTML"
+      ],
+      "expected_output": "Los archivos generados están disponibles para descargar desde la página inicial.",
+      "acceptance_criterion": "Al completar las tareas, los archivos generados pueden descargarse desde la página inicial.",
+      "task_type": "generation",
+      "status": "failed",
+      "attempts": 0,
+      "result": null,
+      "model_used": null
+    }
+  ],
+  "model_used": "gpt-4o"
+}

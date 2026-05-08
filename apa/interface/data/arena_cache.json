@@ -1,0 +1,1705 @@
+{
+  "updated_at": "2026-04-22T21:24:20.999989",
+  "models": {
+    "claudeopus47thinking": {
+      "elo": 1506.1544830745627,
+      "category": "spanish",
+      "votes": 0
+    },
+    "claudeopus46thinking": {
+      "elo": 1508.330151830889,
+      "category": "spanish",
+      "votes": 0
+    },
+    "claudeopus47": {
+      "elo": 1466.128187199152,
+      "category": "spanish",
+      "votes": 0
+    },
+    "claudeopus46": {
+      "elo": 1495.8619936853474,
+      "category": "spanish",
+      "votes": 0
+    },
+    "musespark": {
+      "elo": 1470.411649030886,
+      "category": "spanish",
+      "votes": 0
+    },
+    "gemini31pro": {
+      "elo": 1490.4728375315801,
+      "category": "spanish",
+      "votes": 0
+    },
+    "gemini3pro": {
+      "elo": 1473.3025745233356,
+      "category": "spanish",
+      "votes": 0
+    },
+    "grok420beta1": {
+      "elo": 1468.189932144659,
+      "category": "spanish",
+      "votes": 0
+    },
+    "gpt54high": {
+      "elo": 1462.9136210861836,
+      "category": "spanish",
+      "votes": 0
+    },
+    "grok420beta0309reasoning": {
+      "elo": 1445.826799760213,
+      "category": "spanish",
+      "votes": 0
+    },
+    "gpt52chatlatest20260210": {
+      "elo": 1466.7280545163785,
+      "category": "spanish",
+      "votes": 0
+    },
+    "gemini3flash": {
+      "elo": 1470.5367028101682,
+      "category": "spanish",
+      "votes": 0
+    },
+    "grok420multiagentbeta0309": {
+      "elo": 1435.6814422198356,
+      "category": "spanish",
+      "votes": 0
+    },
+    "claudeopus4520251101thinking32k": {
+      "elo": 1469.9668654119728,
+      "category": "spanish",
+      "votes": 0
+    },
+    "grok41thinking": {
+      "elo": 1471.5599856232045,
+      "category": "spanish",
+      "votes": 0
+    },
+    "glm51": {
+      "elo": 1455.236366841119,
+      "category": "spanish",
+      "votes": 0
+    },
+    "claudeopus4520251101": {
+      "elo": 1467.251311085824,
+      "category": "spanish",
+      "votes": 0
+    },
+    "gpt54": {
+      "elo": 1463.1884341073082,
+      "category": "spanish",
+      "votes": 0
+    },
+    "qwen35max": {
+      "elo": 1426.3694173098625,
+      "category": "spanish",
+      "votes": 0
+    },
+    "claudesonnet46": {
+      "elo": 1474.242351154779,
+      "category": "spanish",
+      "votes": 0
+    },
+    "gemini3flash (thinkingminimal)": {
+      "elo": 1434.2908210315945,
+      "category": "spanish",
+      "votes": 0
+    },
+    "grok41": {
+      "elo": 1439.5967478370246,
+      "category": "spanish",
+      "votes": 0
+    },
+    "dolaseed20pro": {
+      "elo": 1481.0874476228635,
+      "category": "spanish",
+      "votes": 0
+    },
+    "gpt54minihigh": {
+      "elo": 1439.4514134856793,
+      "category": "spanish",
+      "votes": 0
+    },
+    "glm5": {
+      "elo": 1436.2751238871483,
+      "category": "spanish",
+      "votes": 0
+    },
+    "gpt51high": {
+      "elo": 1447.9085555127388,
+      "category": "spanish",
+      "votes": 0
+    },
+    "claudesonnet4520250929thinking32k": {
+      "elo": 1447.5583205037801,
+      "category": "spanish",
+      "votes": 0
+    },
+    "claudesonnet4520250929": {
+      "elo": 1466.0948061993763,
+      "category": "spanish",
+      "votes": 0
+    },
+    "gemma431b": {
+      "elo": 1468.600244318319,
+      "category": "spanish",
+      "votes": 0
+    },
+    "ernie500110": {
+      "elo": 1441.1668927488868,
+      "category": "spanish",
+      "votes": 0
+    },
+    "gpt53chatlatest": {
+      "elo": 1444.764681502502,
+      "category": "spanish",
+      "votes": 0
+    },
+    "kimik25thinking": {
+      "elo": 1473.9571844492746,
+      "category": "spanish",
+      "votes": 0
+    },
+    "ernie50preview1203": {
+      "elo": 1473.5348317204637,
+      "category": "spanish",
+      "votes": 0
+    },
+    "claudeopus4120250805thinking16k": {
+      "elo": 1463.1162277187973,
+      "category": "spanish",
+      "votes": 0
+    },
+    "gemini25pro": {
+      "elo": 1452.6917180968003,
+      "category": "spanish",
+      "votes": 0
+    },
+    "qwen36plus": {
+      "elo": 1411.4887373519123,
+      "category": "spanish",
+      "votes": 0
+    },
+    "qwen35397ba17b": {
+      "elo": 1439.4362832854229,
+      "category": "spanish",
+      "votes": 0
+    },
+    "claudeopus4120250805": {
+      "elo": 1461.864303167648,
+      "category": "spanish",
+      "votes": 0
+    },
+    "mimov2pro": {
+      "elo": 1477.6687051888782,
+      "category": "spanish",
+      "votes": 0
+    },
+    "gpt45preview20250227": {
+      "elo": 1445.1599247734339,
+      "category": "russian",
+      "votes": 0
+    },
+    "chatgpt4olatest20250326": {
+      "elo": 1446.1007658016172,
+      "category": "spanish",
+      "votes": 0
+    },
+    "glm47": {
+      "elo": 1424.3981679522478,
+      "category": "spanish",
+      "votes": 0
+    },
+    "gpt52high": {
+      "elo": 1427.1338777543597,
+      "category": "spanish",
+      "votes": 0
+    },
+    "gpt52": {
+      "elo": 1424.5958505249791,
+      "category": "spanish",
+      "votes": 0
+    },
+    "gemma426ba4b": {
+      "elo": 1444.121546125913,
+      "category": "russian",
+      "votes": 0
+    },
+    "gpt51": {
+      "elo": 1438.9369580927148,
+      "category": "spanish",
+      "votes": 0
+    },
+    "gemini31flashlite": {
+      "elo": 1452.8392812464942,
+      "category": "spanish",
+      "votes": 0
+    },
+    "qwen3max": {
+      "elo": 1449.2241179377825,
+      "category": "spanish",
+      "votes": 0
+    },
+    "gpt5high": {
+      "elo": 1407.0836396223856,
+      "category": "spanish",
+      "votes": 0
+    },
+    "longcatflashchat2602": {
+      "elo": 1432.5806782052723,
+      "category": "spanish",
+      "votes": 0
+    },
+    "kimik25instant": {
+      "elo": 1447.408723760677,
+      "category": "spanish",
+      "votes": 0
+    },
+    "grok41fastreasoning": {
+      "elo": 1431.4675861563298,
+      "category": "spanish",
+      "votes": 0
+    },
+    "o320250416": {
+      "elo": 1405.9811366439653,
+      "category": "spanish",
+      "votes": 0
+    },
+    "kimik2thinking": {
+      "elo": 1422.1587325459711,
+      "category": "spanish",
+      "votes": 0
+    },
+    "amazonnovaexperimentalchat260210": {
+      "elo": 1403.3430692959446,
+      "category": "russian",
+      "votes": 0
+    },
+    "gpt5": {
+      "elo": 1413.100438974264,
+      "category": "spanish",
+      "votes": 0
+    },
+    "glm46": {
+      "elo": 1413.3457929776862,
+      "category": "spanish",
+      "votes": 0
+    },
+    "deepseekv32expthinking": {
+      "elo": 1382.4676045073193,
+      "category": "spanish",
+      "votes": 0
+    },
+    "deepseekv32": {
+      "elo": 1409.287807408124,
+      "category": "spanish",
+      "votes": 0
+    },
+    "qwen3max20250923": {
+      "elo": 1407.0087052340102,
+      "category": "spanish",
+      "votes": 0
+    },
+    "claudeopus420250514thinking16k": {
+      "elo": 1420.1907010652264,
+      "category": "spanish",
+      "votes": 0
+    },
+    "qwen3235ba22binstruct2507": {
+      "elo": 1423.2247008247903,
+      "category": "spanish",
+      "votes": 0
+    },
+    "deepseekr10528": {
+      "elo": 1394.365647961664,
+      "category": "spanish",
+      "votes": 0
+    },
+    "deepseekv32thinking": {
+      "elo": 1410.8187420021407,
+      "category": "spanish",
+      "votes": 0
+    },
+    "grok4fast": {
+      "elo": 1426.3348271330217,
+      "category": "spanish",
+      "votes": 0
+    },
+    "ernie50preview1022": {
+      "elo": 1391.440254078651,
+      "category": "russian",
+      "votes": 0
+    },
+    "qwen35122ba10b": {
+      "elo": 1418.7261705543892,
+      "category": "spanish",
+      "votes": 0
+    },
+    "kimik20905": {
+      "elo": 1419.1470181314091,
+      "category": "spanish",
+      "votes": 0
+    },
+    "deepseekv31": {
+      "elo": 1403.7523983807605,
+      "category": "spanish",
+      "votes": 0
+    },
+    "kimik20711": {
+      "elo": 1379.3780489349451,
+      "category": "spanish",
+      "votes": 0
+    },
+    "deepseekv31thinking": {
+      "elo": 1405.9197005478543,
+      "category": "spanish",
+      "votes": 0
+    },
+    "deepseekv31terminusthinking": {
+      "elo": 1426.5448305160844,
+      "category": "russian",
+      "votes": 0
+    },
+    "deepseekv31terminus": {
+      "elo": 1425.4460874868823,
+      "category": "russian",
+      "votes": 0
+    },
+    "amazonnovaexperimentalchat260110": {
+      "elo": 1410.179116751363,
+      "category": "russian",
+      "votes": 0
+    },
+    "qwen3vl235ba22b": {
+      "elo": 1400.6886801006158,
+      "category": "spanish",
+      "votes": 0
+    },
+    "mistrallarge3": {
+      "elo": 1410.324613483934,
+      "category": "spanish",
+      "votes": 0
+    },
+    "gpt4120250414": {
+      "elo": 1401.3388624553736,
+      "category": "spanish",
+      "votes": 0
+    },
+    "claudeopus420250514": {
+      "elo": 1398.515653613707,
+      "category": "spanish",
+      "votes": 0
+    },
+    "grok3preview0224": {
+      "elo": 1398.0255173930343,
+      "category": "spanish",
+      "votes": 0
+    },
+    "glm45": {
+      "elo": 1425.687598891847,
+      "category": "spanish",
+      "votes": 0
+    },
+    "gemini25flash": {
+      "elo": 1400.550016750728,
+      "category": "spanish",
+      "votes": 0
+    },
+    "grok40709": {
+      "elo": 1407.538844926469,
+      "category": "spanish",
+      "votes": 0
+    },
+    "mistralmedium2508": {
+      "elo": 1394.396148062565,
+      "category": "spanish",
+      "votes": 0
+    },
+    "claudehaiku4520251001": {
+      "elo": 1421.9025731599907,
+      "category": "spanish",
+      "votes": 0
+    },
+    "gemini25flashpreview092025": {
+      "elo": 1386.9734150780303,
+      "category": "spanish",
+      "votes": 0
+    },
+    "qwen3527b": {
+      "elo": 1394.5348504309163,
+      "category": "spanish",
+      "votes": 0
+    },
+    "grok4fastreasoning": {
+      "elo": 1413.5936338699516,
+      "category": "spanish",
+      "votes": 0
+    },
+    "gpt54nanohigh": {
+      "elo": 1407.3799134884134,
+      "category": "spanish",
+      "votes": 0
+    },
+    "qwen3235ba22bnothinking": {
+      "elo": 1411.2907632726487,
+      "category": "spanish",
+      "votes": 0
+    },
+    "minimaxm27": {
+      "elo": 1409.3504008435793,
+      "category": "spanish",
+      "votes": 0
+    },
+    "o120241217": {
+      "elo": 1387.7921324112274,
+      "category": "spanish",
+      "votes": 0
+    },
+    "qwen3next80ba3b": {
+      "elo": 1420.1809106519063,
+      "category": "spanish",
+      "votes": 0
+    },
+    "longcatflash": {
+      "elo": 1406.8006397037648,
+      "category": "spanish",
+      "votes": 0
+    },
+    "minimaxm25": {
+      "elo": 1389.4128108123075,
+      "category": "spanish",
+      "votes": 0
+    },
+    "qwen3235ba22bthinking2507": {
+      "elo": 1381.09524787388,
+      "category": "spanish",
+      "votes": 0
+    },
+    "qwen35flash": {
+      "elo": 1414.32527294632,
+      "category": "spanish",
+      "votes": 0
+    },
+    "claudesonnet420250514thinking32k": {
+      "elo": 1398.0391884943767,
+      "category": "spanish",
+      "votes": 0
+    },
+    "deepseekr1": {
+      "elo": 1393.4288865962164,
+      "category": "spanish",
+      "votes": 0
+    },
+    "hunyuanvision15thinking": {
+      "elo": 1416.1281284886725,
+      "category": "multi_turn",
+      "votes": 0
+    },
+    "qwen3vl235ba22bthinking": {
+      "elo": 1382.9058671616517,
+      "category": "spanish",
+      "votes": 0
+    },
+    "qwen3535ba3b": {
+      "elo": 1373.196966946111,
+      "category": "spanish",
+      "votes": 0
+    },
+    "amazonnovaexperimentalchat1210": {
+      "elo": 1391.4515083667602,
+      "category": "russian",
+      "votes": 0
+    },
+    "deepseekv30324": {
+      "elo": 1360.9356508908581,
+      "category": "spanish",
+      "votes": 0
+    },
+    "step35flash": {
+      "elo": 1399.0800527253189,
+      "category": "spanish",
+      "votes": 0
+    },
+    "mimov2flash (nonthinking)": {
+      "elo": 1387.4629066593486,
+      "category": "spanish",
+      "votes": 0
+    },
+    "mai1": {
+      "elo": 1386.950755224209,
+      "category": "spanish",
+      "votes": 0
+    },
+    "gpt5minihigh": {
+      "elo": 1376.6933536096326,
+      "category": "spanish",
+      "votes": 0
+    },
+    "o4mini20250416": {
+      "elo": 1383.5916241889954,
+      "category": "spanish",
+      "votes": 0
+    },
+    "claudesonnet420250514": {
+      "elo": 1401.181297373753,
+      "category": "spanish",
+      "votes": 0
+    },
+    "o1": {
+      "elo": 1349.1826585244455,
+      "category": "spanish",
+      "votes": 0
+    },
+    "hunyuant120250711": {
+      "elo": 1374.3711905308853,
+      "category": "russian",
+      "votes": 0
+    },
+    "qwen3coder480ba35b": {
+      "elo": 1378.179816589036,
+      "category": "spanish",
+      "votes": 0
+    },
+    "mimov2flash (thinking)": {
+      "elo": 1370.1741290657374,
+      "category": "spanish",
+      "votes": 0
+    },
+    "claude37sonnet20250219thinking32k": {
+      "elo": 1381.9776491904183,
+      "category": "spanish",
+      "votes": 0
+    },
+    "mistralmedium2505": {
+      "elo": 1377.2429440867982,
+      "category": "spanish",
+      "votes": 0
+    },
+    "minimaxm21": {
+      "elo": 1378.1340031763623,
+      "category": "spanish",
+      "votes": 0
+    },
+    "qwen330ba3binstruct2507": {
+      "elo": 1385.8214895174906,
+      "category": "spanish",
+      "votes": 0
+    },
+    "hunyuanturbos20250416": {
+      "elo": 1380.0592311658158,
+      "category": "russian",
+      "votes": 0
+    },
+    "gpt41mini20250414": {
+      "elo": 1355.7518880779335,
+      "category": "spanish",
+      "votes": 0
+    },
+    "gemini25flashlitepreview092025nothinking": {
+      "elo": 1391.9489660831437,
+      "category": "spanish",
+      "votes": 0
+    },
+    "glm46v": {
+      "elo": 1344.1840021436728,
+      "category": "russian",
+      "votes": 0
+    },
+    "trinitylarge": {
+      "elo": 1399.2868494413597,
+      "category": "spanish",
+      "votes": 0
+    },
+    "qwen3235ba22b": {
+      "elo": 1367.7373703557987,
+      "category": "spanish",
+      "votes": 0
+    },
+    "gemini25flashlitepreview0617thinking": {
+      "elo": 1359.5033814394328,
+      "category": "spanish",
+      "votes": 0
+    },
+    "qwen25max": {
+      "elo": 1374.7746087827813,
+      "category": "spanish",
+      "votes": 0
+    },
+    "glm45air": {
+      "elo": 1361.057672789975,
+      "category": "spanish",
+      "votes": 0
+    },
+    "claude35sonnet20241022": {
+      "elo": 1363.8444187129082,
+      "category": "spanish",
+      "votes": 0
+    },
+    "claude37sonnet20250219": {
+      "elo": 1361.9964692581627,
+      "category": "spanish",
+      "votes": 0
+    },
+    "qwen3next80ba3bthinking": {
+      "elo": 1349.2921632164284,
+      "category": "spanish",
+      "votes": 0
+    },
+    "glm47flash": {
+      "elo": 1369.5365458910603,
+      "category": "spanish",
+      "votes": 0
+    },
+    "amazonnovaexperimentalchat1110": {
+      "elo": 1368.7601368814737,
+      "category": "spanish",
+      "votes": 0
+    },
+    "gemma327b": {
+      "elo": 1350.1366918286963,
+      "category": "spanish",
+      "votes": 0
+    },
+    "minimaxm1": {
+      "elo": 1350.9121894296325,
+      "category": "spanish",
+      "votes": 0
+    },
+    "o3minihigh": {
+      "elo": 1342.9077718467652,
+      "category": "spanish",
+      "votes": 0
+    },
+    "grok3minihigh": {
+      "elo": 1352.8226164189741,
+      "category": "spanish",
+      "votes": 0
+    },
+    "nvidianemotron3super120ba12b": {
+      "elo": 1386.3788722304614,
+      "category": "spanish",
+      "votes": 0
+    },
+    "gemini20flash001": {
+      "elo": 1366.9199539814438,
+      "category": "spanish",
+      "votes": 0
+    },
+    "deepseekv3": {
+      "elo": 1376.566597344069,
+      "category": "spanish",
+      "votes": 0
+    },
+    "mistralsmall2506": {
+      "elo": 1365.7526417105883,
+      "category": "spanish",
+      "votes": 0
+    },
+    "grok3minibeta": {
+      "elo": 1372.1211309547639,
+      "category": "spanish",
+      "votes": 0
+    },
+    "intellect3": {
+      "elo": 1330.0610047244395,
+      "category": "russian",
+      "votes": 0
+    },
+    "commanda032025": {
+      "elo": 1354.017490301539,
+      "category": "spanish",
+      "votes": 0
+    },
+    "gptoss120b": {
+      "elo": 1364.2862582639511,
+      "category": "spanish",
+      "votes": 0
+    },
+    "glm45v": {
+      "elo": 1354.2931621482962,
+      "category": "spanish",
+      "votes": 0
+    },
+    "gemini20flashlitepreview0205": {
+      "elo": 1333.2200296906522,
+      "category": "spanish",
+      "votes": 0
+    },
+    "gemini15pro002": {
+      "elo": 1345.8875715969336,
+      "category": "spanish",
+      "votes": 0
+    },
+    "amazonnovaexperimentalchat1020": {
+      "elo": 1305.9415818621683,
+      "category": "spanish",
+      "votes": 0
+    },
+    "hunyuanturbos20250226": {
+      "elo": 1341.2254074954672,
+      "category": "russian",
+      "votes": 0
+    },
+    "step3": {
+      "elo": 1375.7417396856783,
+      "category": "spanish",
+      "votes": 0
+    },
+    "o3mini": {
+      "elo": 1327.62753634288,
+      "category": "spanish",
+      "votes": 0
+    },
+    "amazonnovaexperimentalchat1009": {
+      "elo": 1348.7212233810114,
+      "category": "multi_turn",
+      "votes": 0
+    },
+    "qwen332b": {
+      "elo": 1326.9914057375609,
+      "category": "russian",
+      "votes": 0
+    },
+    "llama31nemotronultra253bv1": {
+      "elo": 1311.9121780433138,
+      "category": "russian",
+      "votes": 0
+    },
+    "mercury2": {
+      "elo": 1304.7317092059989,
+      "category": "russian",
+      "votes": 0
+    },
+    "minimaxm2": {
+      "elo": 1310.5930291445927,
+      "category": "spanish",
+      "votes": 0
+    },
+    "lingflash20": {
+      "elo": 1377.2444795652063,
+      "category": "spanish",
+      "votes": 0
+    },
+    "qwenplus0125": {
+      "elo": 1351.4318388935942,
+      "category": "russian",
+      "votes": 0
+    },
+    "gpt4o20240513": {
+      "elo": 1339.0819721032444,
+      "category": "spanish",
+      "votes": 0
+    },
+    "nvidiallama33nemotronsuper49bv15": {
+      "elo": 1341.9298722053677,
+      "category": "multi_turn",
+      "votes": 0
+    },
+    "glm4plus0111": {
+      "elo": 1329.421447305948,
+      "category": "russian",
+      "votes": 0
+    },
+    "claude35sonnet20240620": {
+      "elo": 1349.8641365840294,
+      "category": "spanish",
+      "votes": 0
+    },
+    "gemma312b": {
+      "elo": 1357.2241722797698,
+      "category": "russian",
+      "votes": 0
+    },
+    "hunyuanturbo0110": {
+      "elo": 1331.6791582763026,
+      "category": "russian",
+      "votes": 0
+    },
+    "nova2lite": {
+      "elo": 1328.4658248811947,
+      "category": "spanish",
+      "votes": 0
+    },
+    "gpt5nanohigh": {
+      "elo": 1384.090812883553,
+      "category": "spanish",
+      "votes": 0
+    },
+    "o1mini": {
+      "elo": 1331.7412084798348,
+      "category": "spanish",
+      "votes": 0
+    },
+    "qwq32b": {
+      "elo": 1343.5873045072258,
+      "category": "spanish",
+      "votes": 0
+    },
+    "grok220240813": {
+      "elo": 1308.7324979312584,
+      "category": "spanish",
+      "votes": 0
+    },
+    "gpt4o20240806": {
+      "elo": 1325.5023959984192,
+      "category": "spanish",
+      "votes": 0
+    },
+    "geminiadvanced0514": {
+      "elo": 1294.336711706865,
+      "category": "spanish",
+      "votes": 0
+    },
+    "llama31405binstructbf16": {
+      "elo": 1309.6042537044063,
+      "category": "spanish",
+      "votes": 0
+    },
+    "step216kexp202412": {
+      "elo": 1340.4399638036207,
+      "category": "russian",
+      "votes": 0
+    },
+    "llama31405binstructfp8": {
+      "elo": 1307.203078932061,
+      "category": "spanish",
+      "votes": 0
+    },
+    "olmo3132b": {
+      "elo": 1352.6720410076534,
+      "category": "spanish",
+      "votes": 0
+    },
+    "yilightning": {
+      "elo": 1337.513309898301,
+      "category": "spanish",
+      "votes": 0
+    },
+    "llama33nemotron49bsuperv1": {
+      "elo": 1287.389144798459,
+      "category": "russian",
+      "votes": 0
+    },
+    "molmo28b": {
+      "elo": 1307.883677632652,
+      "category": "instruction_following",
+      "votes": 0
+    },
+    "qwen330ba3b": {
+      "elo": 1323.379876311545,
+      "category": "spanish",
+      "votes": 0
+    },
+    "llama4maverick17b128e": {
+      "elo": 1317.933482249543,
+      "category": "spanish",
+      "votes": 0
+    },
+    "hunyuanlarge20250210": {
+      "elo": 1301.982128149225,
+      "category": "russian",
+      "votes": 0
+    },
+    "gpt4turbo20240409": {
+      "elo": 1312.6445333296601,
+      "category": "spanish",
+      "votes": 0
+    },
+    "deepseekv251210": {
+      "elo": 1320.6760384822717,
+      "category": "russian",
+      "votes": 0
+    },
+    "gemini15pro001": {
+      "elo": 1294.2781398649408,
+      "category": "spanish",
+      "votes": 0
+    },
+    "claude35haiku20241022": {
+      "elo": 1322.8432873428146,
+      "category": "spanish",
+      "votes": 0
+    },
+    "llama4scout17b16e": {
+      "elo": 1303.521385392422,
+      "category": "spanish",
+      "votes": 0
+    },
+    "gpt41nano20250414": {
+      "elo": 1298.7127433845385,
+      "category": "russian",
+      "votes": 0
+    },
+    "claude3opus20240229": {
+      "elo": 1305.4105567906322,
+      "category": "spanish",
+      "votes": 0
+    },
+    "ringflash20": {
+      "elo": 1372.4504325326557,
+      "category": "spanish",
+      "votes": 0
+    },
+    "step1oturbo202506": {
+      "elo": 1324.4828277601628,
+      "category": "russian",
+      "votes": 0
+    },
+    "glm4plus": {
+      "elo": 1338.4703622791017,
+      "category": "spanish",
+      "votes": 0
+    },
+    "gemma3ne4b": {
+      "elo": 1301.2024456238914,
+      "category": "spanish",
+      "votes": 0
+    },
+    "llama3370b": {
+      "elo": 1301.07816577808,
+      "category": "spanish",
+      "votes": 0
+    },
+    "qwenmax0919": {
+      "elo": 1324.3143643525264,
+      "category": "spanish",
+      "votes": 0
+    },
+    "gptoss20b": {
+      "elo": 1303.14446911341,
+      "category": "spanish",
+      "votes": 0
+    },
+    "gpt4omini20240718": {
+      "elo": 1308.663949767755,
+      "category": "spanish",
+      "votes": 0
+    },
+    "nvidianemotron3nano30ba3bbf16": {
+      "elo": 1328.568465208652,
+      "category": "spanish",
+      "votes": 0
+    },
+    "qwen25plus1127": {
+      "elo": 1296.4453784498724,
+      "category": "russian",
+      "votes": 0
+    },
+    "athenev2": {
+      "elo": 1294.4293011888465,
+      "category": "spanish",
+      "votes": 0
+    },
+    "mistrallarge2407": {
+      "elo": 1284.503920374998,
+      "category": "spanish",
+      "votes": 0
+    },
+    "gpt40125": {
+      "elo": 1302.0193900917384,
+      "category": "spanish",
+      "votes": 0
+    },
+    "gpt41106": {
+      "elo": 1311.0481826907103,
+      "category": "spanish",
+      "votes": 0
+    },
+    "hunyuanstandard20250210": {
+      "elo": 1293.6177359649573,
+      "category": "russian",
+      "votes": 0
+    },
+    "gemini15flash002": {
+      "elo": 1269.4452386426992,
+      "category": "spanish",
+      "votes": 0
+    },
+    "grok2mini20240813": {
+      "elo": 1308.011010426938,
+      "category": "spanish",
+      "votes": 0
+    },
+    "deepseekv25": {
+      "elo": 1281.7795290220179,
+      "category": "spanish",
+      "votes": 0
+    },
+    "mercury": {
+      "elo": 1301.0105517680258,
+      "category": "multi_turn",
+      "votes": 0
+    },
+    "athene70b0725": {
+      "elo": 1287.1305447270067,
+      "category": "spanish",
+      "votes": 0
+    },
+    "olmo332bthink": {
+      "elo": 1267.8496660999801,
+      "category": "russian",
+      "votes": 0
+    },
+    "mistrallarge2411": {
+      "elo": 1303.8972356168097,
+      "category": "spanish",
+      "votes": 0
+    },
+    "magistralmedium2506": {
+      "elo": 1321.1098882945182,
+      "category": "spanish",
+      "votes": 0
+    },
+    "mistralsmall3124binstruct2503": {
+      "elo": 1304.7102430395084,
+      "category": "spanish",
+      "votes": 0
+    },
+    "gemma34b": {
+      "elo": 1313.9296634500984,
+      "category": "russian",
+      "votes": 0
+    },
+    "qwen2572b": {
+      "elo": 1290.2371068291368,
+      "category": "spanish",
+      "votes": 0
+    },
+    "llama31nemotron70b": {
+      "elo": 1240.4485870061312,
+      "category": "russian",
+      "votes": 0
+    },
+    "hunyuanlarge": {
+      "elo": 1278.9882504208795,
+      "category": "russian",
+      "votes": 0
+    },
+    "llama3170b": {
+      "elo": 1285.5266572419712,
+      "category": "spanish",
+      "votes": 0
+    },
+    "amazonnovaprov10": {
+      "elo": 1222.6118056401156,
+      "category": "spanish",
+      "votes": 0
+    },
+    "jamba15large": {
+      "elo": 1248.8265707480177,
+      "category": "russian",
+      "votes": 0
+    },
+    "gemma227b": {
+      "elo": 1289.9150923644,
+      "category": "spanish",
+      "votes": 0
+    },
+    "rekacore20240904": {
+      "elo": 1292.9182481947814,
+      "category": "russian",
+      "votes": 0
+    },
+    "ibmgranitehsmall": {
+      "elo": 1301.5588506635304,
+      "category": "spanish",
+      "votes": 0
+    },
+    "gpt40314": {
+      "elo": 1280.0657591471913,
+      "category": "spanish",
+      "votes": 0
+    },
+    "llama31tulu370b": {
+      "elo": 1275.8845289967385,
+      "category": "russian",
+      "votes": 0
+    },
+    "llama31nemotron51b": {
+      "elo": 1246.480005419337,
+      "category": "russian",
+      "votes": 0
+    },
+    "olmo3132bthink": {
+      "elo": 1301.7880812368783,
+      "category": "spanish",
+      "votes": 0
+    },
+    "gemini15flash001": {
+      "elo": 1275.2049624022075,
+      "category": "spanish",
+      "votes": 0
+    },
+    "claude3sonnet20240229": {
+      "elo": 1266.108010756047,
+      "category": "spanish",
+      "votes": 0
+    },
+    "gemma29bitsimpo": {
+      "elo": 1269.3598601890164,
+      "category": "russian",
+      "votes": 0
+    },
+    "nemotron4340b": {
+      "elo": 1247.149458999288,
+      "category": "spanish",
+      "votes": 0
+    },
+    "commandrplus082024": {
+      "elo": 1268.1454116682783,
+      "category": "russian",
+      "votes": 0
+    },
+    "llama370b": {
+      "elo": 1288.0224510414114,
+      "category": "spanish",
+      "votes": 0
+    },
+    "gpt40613": {
+      "elo": 1264.4848461138008,
+      "category": "spanish",
+      "votes": 0
+    },
+    "mistralsmall24binstruct2501": {
+      "elo": 1258.9885592179244,
+      "category": "russian",
+      "votes": 0
+    },
+    "glm40520": {
+      "elo": 1258.8567816937593,
+      "category": "russian",
+      "votes": 0
+    },
+    "rekaflash20240904": {
+      "elo": 1263.9423104158377,
+      "category": "russian",
+      "votes": 0
+    },
+    "qwen25coder32b": {
+      "elo": 1268.6534371855466,
+      "category": "russian",
+      "votes": 0
+    },
+    "c4aiayaexpanse32b": {
+      "elo": 1240.9177299449648,
+      "category": "spanish",
+      "votes": 0
+    },
+    "gemma29b": {
+      "elo": 1263.2286470116633,
+      "category": "spanish",
+      "votes": 0
+    },
+    "deepseekcoderv2": {
+      "elo": 1224.144137191518,
+      "category": "spanish",
+      "votes": 0
+    },
+    "commandrplus": {
+      "elo": 1250.7650384616372,
+      "category": "spanish",
+      "votes": 0
+    },
+    "qwen272b": {
+      "elo": 1246.5318587920094,
+      "category": "spanish",
+      "votes": 0
+    },
+    "claude3haiku20240307": {
+      "elo": 1237.298603266456,
+      "category": "spanish",
+      "votes": 0
+    },
+    "amazonnovalitev10": {
+      "elo": 1268.9661260275975,
+      "category": "spanish",
+      "votes": 0
+    },
+    "gemini15flash8b001": {
+      "elo": 1246.5083548941448,
+      "category": "spanish",
+      "votes": 0
+    },
+    "phi4": {
+      "elo": 1266.0183846821033,
+      "category": "spanish",
+      "votes": 0
+    },
+    "olmo2032532b": {
+      "elo": 1224.3861162201786,
+      "category": "russian",
+      "votes": 0
+    },
+    "commandr082024": {
+      "elo": 1227.2073371131855,
+      "category": "russian",
+      "votes": 0
+    },
+    "mistrallarge2402": {
+      "elo": 1258.981049231014,
+      "category": "spanish",
+      "votes": 0
+    },
+    "amazonnovamicrov10": {
+      "elo": 1249.1260177810168,
+      "category": "spanish",
+      "votes": 0
+    },
+    "jamba15mini": {
+      "elo": 1214.7149928375563,
+      "category": "russian",
+      "votes": 0
+    },
+    "ministral8b2410": {
+      "elo": 1242.8896645964,
+      "category": "russian",
+      "votes": 0
+    },
+    "geminiprodevapi": {
+      "elo": 1225.29639825396,
+      "category": "spanish",
+      "votes": 0
+    },
+    "qwen15110b": {
+      "elo": 1209.9562122307855,
+      "category": "spanish",
+      "votes": 0
+    },
+    "hunyuanstandard256k": {
+      "elo": 1191.9843955755387,
+      "category": "russian",
+      "votes": 0
+    },
+    "rekaflash21b20240226online": {
+      "elo": 1215.0143779985297,
+      "category": "spanish",
+      "votes": 0
+    },
+    "qwen1572b": {
+      "elo": 1183.142452517197,
+      "category": "spanish",
+      "votes": 0
+    },
+    "mixtral8x22binstructv01": {
+      "elo": 1225.668469682265,
+      "category": "spanish",
+      "votes": 0
+    },
+    "commandr": {
+      "elo": 1219.6387028925087,
+      "category": "spanish",
+      "votes": 0
+    },
+    "rekaflash21b20240226": {
+      "elo": 1197.3739760545332,
+      "category": "spanish",
+      "votes": 0
+    },
+    "gpt35turbo0125": {
+      "elo": 1227.2560535640234,
+      "category": "spanish",
+      "votes": 0
+    },
+    "llama38b": {
+      "elo": 1223.1039071012115,
+      "category": "spanish",
+      "votes": 0
+    },
+    "c4aiayaexpanse8b": {
+      "elo": 1227.8435077889199,
+      "category": "russian",
+      "votes": 0
+    },
+    "mistralmedium": {
+      "elo": 1200.3681929551565,
+      "category": "spanish",
+      "votes": 0
+    },
+    "geminipro": {
+      "elo": 1197.0426441357074,
+      "category": "multi_turn",
+      "votes": 0
+    },
+    "llama31tulu38b": {
+      "elo": 1223.197076348071,
+      "category": "russian",
+      "votes": 0
+    },
+    "yi1534b": {
+      "elo": 1166.8744510028723,
+      "category": "spanish",
+      "votes": 0
+    },
+    "zephyrorpo141ba35bv01": {
+      "elo": 1183.1631258813654,
+      "category": "russian",
+      "votes": 0
+    },
+    "llama318b": {
+      "elo": 1186.4325968133546,
+      "category": "spanish",
+      "votes": 0
+    },
+    "granite318b": {
+      "elo": 1148.6707857931078,
+      "category": "russian",
+      "votes": 0
+    },
+    "qwen1532b": {
+      "elo": 1166.7527580811116,
+      "category": "spanish",
+      "votes": 0
+    },
+    "gpt35turbo1106": {
+      "elo": 1209.3887357172953,
+      "category": "spanish",
+      "votes": 0
+    },
+    "gemma22b": {
+      "elo": 1187.2739145399569,
+      "category": "spanish",
+      "votes": 0
+    },
+    "phi3medium4k": {
+      "elo": 1163.35081606651,
+      "category": "spanish",
+      "votes": 0
+    },
+    "mixtral8x7binstructv01": {
+      "elo": 1174.2224601771702,
+      "category": "spanish",
+      "votes": 0
+    },
+    "dbrxinstruct": {
+      "elo": 1151.9793262819335,
+      "category": "spanish",
+      "votes": 0
+    },
+    "internlm2520b": {
+      "elo": 1144.9712204787206,
+      "category": "russian",
+      "votes": 0
+    },
+    "qwen1514b": {
+      "elo": 1154.8779964240475,
+      "category": "spanish",
+      "votes": 0
+    },
+    "wizardlm70b": {
+      "elo": 1213.1625098273576,
+      "category": "russian",
+      "votes": 0
+    },
+    "deepseekllm67b": {
+      "elo": 1150.991757986908,
+      "category": "multi_turn",
+      "votes": 0
+    },
+    "yi34b": {
+      "elo": 1129.1822225636229,
+      "category": "spanish",
+      "votes": 0
+    },
+    "openchat350106": {
+      "elo": 1147.8186288366192,
+      "category": "russian",
+      "votes": 0
+    },
+    "openchat35": {
+      "elo": 1183.5190408297603,
+      "category": "russian",
+      "votes": 0
+    },
+    "granite308b": {
+      "elo": 1134.7662592691086,
+      "category": "russian",
+      "votes": 0
+    },
+    "gemma117b": {
+      "elo": 1152.1027404043048,
+      "category": "spanish",
+      "votes": 0
+    },
+    "snowflakearctic": {
+      "elo": 1174.1918245437985,
+      "category": "spanish",
+      "votes": 0
+    },
+    "granite312b": {
+      "elo": 1109.3375859269584,
+      "category": "russian",
+      "votes": 0
+    },
+    "tulu2dpo70b": {
+      "elo": 1134.1182650775104,
+      "category": "multi_turn",
+      "votes": 0
+    },
+    "openhermes25mistral7b": {
+      "elo": 1134.3191401637234,
+      "category": "multi_turn",
+      "votes": 0
+    },
+    "vicuna33b": {
+      "elo": 1145.2143904463308,
+      "category": "spanish",
+      "votes": 0
+    },
+    "starlinglm7bbeta": {
+      "elo": 1137.402579011529,
+      "category": "russian",
+      "votes": 0
+    },
+    "phi3small8k": {
+      "elo": 1178.06364574196,
+      "category": "spanish",
+      "votes": 0
+    },
+    "llama270b": {
+      "elo": 1192.1853768254996,
+      "category": "spanish",
+      "votes": 0
+    },
+    "starlinglm7balpha": {
+      "elo": 1151.5917391779994,
+      "category": "russian",
+      "votes": 0
+    },
+    "llama323b": {
+      "elo": 1004.2600570714039,
+      "category": "russian",
+      "votes": 0
+    },
+    "noushermes2mixtral8x7bdpo": {
+      "elo": 1126.9058191169418,
+      "category": "multi_turn",
+      "votes": 0
+    },
+    "granite302b": {
+      "elo": 1106.4780460953689,
+      "category": "russian",
+      "votes": 0
+    },
+    "llama270bsteerlm": {
+      "elo": 1110.672042386785,
+      "category": "multi_turn",
+      "votes": 0
+    },
+    "solar107binstructv10": {
+      "elo": 1109.6927891223909,
+      "category": "multi_turn",
+      "votes": 0
+    },
+    "dolphin221mistral7b": {
+      "elo": 1083.5788088834258,
+      "category": "multi_turn",
+      "votes": 0
+    },
+    "mpt30b": {
+      "elo": 1123.3439856722807,
+      "category": "multi_turn",
+      "votes": 0
+    },
+    "mistral7binstructv02": {
+      "elo": 1094.8543361160253,
+      "category": "spanish",
+      "votes": 0
+    },
+    "wizardlm13b": {
+      "elo": 1109.169676094846,
+      "category": "multi_turn",
+      "votes": 0
+    },
+    "falcon180b": {
+      "elo": 1095.7717912041023,
+      "category": "multi_turn",
+      "votes": 0
+    },
+    "qwen157b": {
+      "elo": 1066.1909360270126,
+      "category": "russian",
+      "votes": 0
+    },
+    "phi3mini4kinstructjune2024": {
+      "elo": 1072.861385361518,
+      "category": "russian",
+      "votes": 0
+    },
+    "llama213b": {
+      "elo": 1142.192503588772,
+      "category": "spanish",
+      "votes": 0
+    },
+    "vicuna13b": {
+      "elo": 1163.9640677398024,
+      "category": "spanish",
+      "votes": 0
+    },
+    "qwen14b": {
+      "elo": 1094.5801375615395,
+      "category": "multi_turn",
+      "votes": 0
+    },
+    "palm2": {
+      "elo": 1089.8558458812304,
+      "category": "multi_turn",
+      "votes": 0
+    },
+    "gemma7b": {
+      "elo": 1075.3592809699544,
+      "category": "russian",
+      "votes": 0
+    },
+    "codellama34b": {
+      "elo": 1072.501231621681,
+      "category": "multi_turn",
+      "votes": 0
+    },
+    "zephyr7bbeta": {
+      "elo": 1138.6995767285916,
+      "category": "spanish",
+      "votes": 0
+    },
+    "phi3mini128k": {
+      "elo": 1143.5644976649178,
+      "category": "spanish",
+      "votes": 0
+    },
+    "phi3mini4k": {
+      "elo": 1142.3970629268833,
+      "category": "spanish",
+      "votes": 0
+    },
+    "guanaco33b": {
+      "elo": 1069.7371148535576,
+      "category": "multi_turn",
+      "votes": 0
+    },
+    "zephyr7balpha": {
+      "elo": 1073.5975768415585,
+      "category": "multi_turn",
+      "votes": 0
+    },
+    "stripedhyenanous7b": {
+      "elo": 1073.9876979287824,
+      "category": "multi_turn",
+      "votes": 0
+    },
+    "codellama70b": {
+      "elo": 1093.5055457254875,
+      "category": "instruction_following",
+      "votes": 0
+    },
+    "gemma112b": {
+      "elo": 1085.7093733535216,
+      "category": "russian",
+      "votes": 0
+    },
+    "vicuna7b": {
+      "elo": 1059.9944573892967,
+      "category": "multi_turn",
+      "votes": 0
+    },
+    "smollm217b": {
+      "elo": 1053.4054430448484,
+      "category": "russian",
+      "votes": 0
+    },
+    "llama321b": {
+      "elo": 987.6422138623855,
+      "category": "russian",
+      "votes": 0
+    },
+    "mistral7b": {
+      "elo": 1084.191763757253,
+      "category": "russian",
+      "votes": 0
+    },
+    "llama27b": {
+      "elo": 1061.8840124574092,
+      "category": "spanish",
+      "votes": 0
+    },
+    "gemma2b": {
+      "elo": 1026.5052104623614,
+      "category": "russian",
+      "votes": 0
+    },
+    "qwen154b": {
+      "elo": 1037.9821265027242,
+      "category": "russian",
+      "votes": 0
+    },
+    "olmo7b": {
+      "elo": 979.4676979533792,
+      "category": "russian",
+      "votes": 0
+    },
+    "koala13b": {
+      "elo": 996.6443749139523,
+      "category": "multi_turn",
+      "votes": 0
+    },
+    "alpaca13b": {
+      "elo": 1008.9172036176976,
+      "category": "multi_turn",
+      "votes": 0
+    },
+    "gpt4all13bsnoozy": {
+      "elo": 1027.0831705809278,
+      "category": "multi_turn",
+      "votes": 0
+    },
+    "mpt7b": {
+      "elo": 1001.6158043713472,
+      "category": "multi_turn",
+      "votes": 0
+    },
+    "chatglm36b": {
+      "elo": 1033.6436937007443,
+      "category": "multi_turn",
+      "votes": 0
+    },
+    "rwkv4raven14b": {
+      "elo": 977.9978319560673,
+      "category": "multi_turn",
+      "votes": 0
+    },
+    "chatglm26b": {
+      "elo": 974.3487467304618,
+      "category": "multi_turn",
+      "votes": 0
+    },
+    "oasstpythia12b": {
+      "elo": 958.635902659168,
+      "category": "multi_turn",
+      "votes": 0
+    },
+    "chatglm6b": {
+      "elo": 922.7678182055197,
+      "category": "multi_turn",
+      "votes": 0
+    },
+    "fastchatt53b": {
+      "elo": 938.3873652762577,
+      "category": "multi_turn",
+      "votes": 0
+    },
+    "dollyv212b": {
+      "elo": 865.0146626139535,
+      "category": "multi_turn",
+      "votes": 0
+    },
+    "llama13b": {
+      "elo": 890.6408883209573,
+      "category": "multi_turn",
+      "votes": 0
+    },
+    "stablelmtunedalpha7b": {
+      "elo": 896.6028307740216,
+      "category": "multi_turn",
+      "votes": 0
+    }
+  }
+}

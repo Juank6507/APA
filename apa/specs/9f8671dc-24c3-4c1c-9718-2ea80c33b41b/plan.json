@@ -1,0 +1,44 @@
+{
+  "project_id": "9f8671dc-24c3-4c1c-9718-2ea80c33b41b",
+  "created_at": "2026-04-15T00:35:44.409564",
+  "spec_summary": "Crear una clase Settings que cargue HOST, PORT y DEBUG desde variables de entorno o .env.",
+  "tasks": [
+    {
+      "id": "T1",
+      "name": "Establecer variables de entorno temporales",
+      "description": "Definir las variables de entorno HOST, PORT y DEBUG con valores de prueba antes de la instanciación.",
+      "depends_on": [],
+      "inputs": [
+        "Variables de entorno: HOST, PORT, DEBUG"
+      ],
+      "expected_output": "Variables de entorno configuradas: HOST=localhost, PORT=8080, DEBUG=true",
+      "acceptance_criterion": "Las variables de entorno están definidas y accesibles antes de crear la instancia de Settings.",
+      "task_type": "planning",
+      "status": "pending",
+      "attempts": 0,
+      "result": null,
+      "model_used": null
+    },
+    {
+      "id": "T2",
+      "name": "Instanciar la clase Settings y verificar atributos",
+      "description": "Crear una instancia de Settings y comprobar que host, port y debug coinciden con las variables de entorno.",
+      "depends_on": [
+        "T1"
+      ],
+      "inputs": [
+        "Settings class",
+        "Variables de entorno: HOST, PORT, DEBUG"
+      ],
+      "expected_output": "Instancia de Settings con host='localhost', port=8080, debug=true",
+      "acceptance_criterion": "Los atributos host, port y debug de la instancia coinciden exactamente con los valores de las variables de entorno.",
+      "task_type": "generation",
+      "status": "pending",
+      "attempts": 0,
+      "result": null,
+      "model_used": null
+    }
+  ],
+  "model_used": "openrouter/elephant-alpha",
+  "multi_file": false
+}

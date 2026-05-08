@@ -1,0 +1,103 @@
+{
+  "project_id": "e7a5ef56-3d00-4bf3-b09b-ea8da2becc44",
+  "created_at": "2026-04-13T00:37:37.864727",
+  "spec_summary": "Servicio de Gestión de Tareas (Task Manager API)",
+  "tasks": [
+    {
+      "id": "models_task",
+      "name": "Crear models/task.py",
+      "description": "Define la clase `Task` con los siguientes atributos:\n- `id`: entero único.\n- `title`: string no vacío.\n- `completed`: booleano (por defecto False).\n\nLa clase debe tener un método `to_dict()` que retorna un diccionario con los atributos.\n\nAdemás, define una clase `TaskManager` que gestione una lista de tareas con métodos:\n- `add_task(title: str) -> Task`: crea una tarea con id autoincremental y la añade a la lista.\n- `get_task(task_id: int) -> Optional[Task]`: retorna la tarea por id o None.\n- `list_tasks(completed_only: bool = False) -> List[Task]`: retorna todas las tareas o solo las completadas.\n- `mark_completed(task_id: int) -> bool`: marca la tarea como completada. Retorna True si existía, False en caso contrario.",
+      "depends_on": [],
+      "inputs": [
+        "Task",
+        "id",
+        "title",
+        "completed",
+        "TaskManager"
+      ],
+      "expected_output": "Archivo models/task.py generado y funcional",
+      "acceptance_criterion": "",
+      "task_type": "generation",
+      "status": "running",
+      "attempts": 0,
+      "result": null,
+      "model_used": null,
+      "file_path": "models/task.py",
+      "imports": [
+        "Task",
+        "id",
+        "title",
+        "completed",
+        "TaskManager"
+      ]
+    },
+    {
+      "id": "utils_validators",
+      "name": "Crear utils/validators.py",
+      "description": "Define funciones de validación:\n- `validate_title(title: str) -> None`: lanza `ValueError` si el título está vacío o solo contiene espacios.\n- `validate_id(task_id: int) -> None`: lanza `ValueError` si el id es negativo.",
+      "depends_on": [],
+      "inputs": [
+        "ValueError"
+      ],
+      "expected_output": "Archivo utils/validators.py generado y funcional",
+      "acceptance_criterion": "",
+      "task_type": "generation",
+      "status": "running",
+      "attempts": 0,
+      "result": null,
+      "model_used": null,
+      "file_path": "utils/validators.py",
+      "imports": [
+        "ValueError"
+      ]
+    },
+    {
+      "id": "api",
+      "name": "Crear api.py",
+      "description": "Implementa una API FastAPI con los siguientes endpoints:\n- `POST /tasks` → recibe JSON `{\"title\": str}` y retorna la tarea creada (JSON de Task) con código 201.\n- `GET /tasks` → retorna lista de todas las tareas (opcional query param `completed_only`).\n- `GET /tasks/{task_id}` → retorna una tarea por id o 404 si no existe.\n- `PUT /tasks/{task_id}/complete` → marca la tarea como completada, retorna la tarea actualizada o 404.\n\nUtiliza las clases de `models/task.py` y las validaciones de `utils/validators.py`.\nLa aplicación debe ejecutarse con `uvicorn` si se llama directamente.",
+      "depends_on": [
+        "models_task",
+        "utils_validators"
+      ],
+      "inputs": [
+        "models/task.py",
+        "utils/validators.py",
+        "completed_only",
+        "uvicorn"
+      ],
+      "expected_output": "Archivo api.py generado y funcional",
+      "acceptance_criterion": "",
+      "task_type": "generation",
+      "status": "pending",
+      "attempts": 0,
+      "result": null,
+      "model_used": null,
+      "file_path": "api.py",
+      "imports": [
+        "models/task.py",
+        "utils/validators.py",
+        "completed_only",
+        "uvicorn"
+      ]
+    },
+    {
+      "id": "tests_test_integration",
+      "name": "Crear tests/test_integration.py",
+      "description": "Pruebas con pytest que verifican:\n- Crear una tarea válida y recuperarla.\n- Intentar crear tarea con título inválido retorna error 400.\n- Listar tareas filtradas por completadas.\n- Marcar tarea como completada y verificar cambio.\n\nNo es necesario implementar todas las pruebas, pero sí al menos tres tests que cubran los casos anteriores.",
+      "depends_on": [],
+      "inputs": [],
+      "expected_output": "Archivo tests/test_integration.py generado y funcional",
+      "acceptance_criterion": "",
+      "task_type": "generation",
+      "status": "running",
+      "attempts": 0,
+      "result": null,
+      "model_used": null,
+      "file_path": "tests/test_integration.py",
+      "imports": []
+    }
+  ],
+  "model_used": null,
+  "multi_file": true,
+  "files_count": 4
+}

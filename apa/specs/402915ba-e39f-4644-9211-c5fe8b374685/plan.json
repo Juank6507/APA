@@ -1,0 +1,41 @@
+{
+  "project_id": "402915ba-e39f-4644-9211-c5fe8b374685",
+  "created_at": "2026-04-08T19:08:57.330075",
+  "spec_summary": "suma dos números enteros y retorna el resultado.",
+  "tasks": [
+    {
+      "id": "T1",
+      "name": "Define sum function",
+      "description": "Create a function named sum that takes two integer parameters a and b and returns their sum.",
+      "depends_on": [],
+      "inputs": [
+        "a",
+        "b"
+      ],
+      "expected_output": "integer",
+      "acceptance_criterion": "The function sum is syntactically correct and returns a + b for any integer inputs.",
+      "task_type": "generation",
+      "status": "pending",
+      "attempts": 0,
+      "result": null,
+      "model_used": null
+    },
+    {
+      "id": "T2",
+      "name": "Verify sum with example",
+      "description": "Call the sum function with inputs 2 and 3 and check that the result equals 5.",
+      "depends_on": [
+        "T1"
+      ],
+      "inputs": [],
+      "expected_output": "5",
+      "acceptance_criterion": "sum(2, 3) evaluates to 5.",
+      "task_type": "evaluation",
+      "status": "pending",
+      "attempts": 0,
+      "result": null,
+      "model_used": null
+    }
+  ],
+  "model_used": "nvidia/nemotron-3-super-120b-a12b:free"
+}

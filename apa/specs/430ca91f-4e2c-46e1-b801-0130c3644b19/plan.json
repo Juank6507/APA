@@ -1,0 +1,64 @@
+{
+  "project_id": "430ca91f-4e2c-46e1-b801-0130c3644b19",
+  "created_at": "2026-04-13T15:43:13.954106",
+  "spec_summary": "suma dos números enteros y retorna el resultado.",
+  "tasks": [
+    {
+      "id": "T1",
+      "name": "sum_two_integers",
+      "description": "Compute the sum of two integers a and b.",
+      "depends_on": [],
+      "inputs": [
+        "a",
+        "b"
+      ],
+      "expected_output": "a + b",
+      "acceptance_criterion": "sum_two_integers(2, 3) == 5",
+      "task_type": "generation",
+      "status": "completed",
+      "attempts": 0,
+      "result": {
+        "success": true,
+        "code": "def sum_two_integers(a, b):\n    # Compute the sum of two integers a and b.\n    return a + b\n\nif __name__ == '__main__':\n    try:\n        if sum_two_integers(2, 3) == 5:\n            print('CRITERIO OK')\n        else:\n            print('CRITERIO FALLO: resultado no es 5')\n    except Exception as e:\n        print(f'CRITERIO FALLO: {e}')",
+        "filename": "sumtwointegers.py",
+        "criterion_passed": true,
+        "attempts_used": 1,
+        "model_used": "openrouter/elephant-alpha",
+        "diagnosis": "Generado y verificado en primer intento"
+      },
+      "model_used": "openrouter/elephant-alpha"
+    },
+    {
+      "id": "T2",
+      "name": "validate_sum_result",
+      "description": "Validate that the computed sum matches the expected result.",
+      "depends_on": [
+        "T1"
+      ],
+      "inputs": [
+        "a",
+        "b",
+        "expected_result"
+      ],
+      "expected_output": "true or false",
+      "acceptance_criterion": "validate_sum_result(2, 3, 5) == true",
+      "task_type": "evaluation",
+      "status": "completed",
+      "attempts": 0,
+      "result": {
+        "success": true,
+        "code": "def validate_sum_result(a, b, expected_result):\n    # Validate that the computed sum matches the expected result.\n    return a + b == expected_result\n\nif __name__ == '__main__':\n    # Criterio de aceptación: validate_sum_result(2, 3, 5) == true\n    if validate_sum_result(2, 3, 5) is True:\n        print('CRITERIO OK')\n    else:\n        print('CRITERIO FALLO: validate_sum_result(2, 3, 5) did not return True')",
+        "filename": "validatesumresult.py",
+        "criterion_passed": true,
+        "attempts_used": 1,
+        "model_used": "openrouter/elephant-alpha",
+        "diagnosis": "Generado y verificado en primer intento"
+      },
+      "model_used": "openrouter/elephant-alpha"
+    }
+  ],
+  "model_used": "openrouter/elephant-alpha",
+  "multi_file": false,
+  "checkpoint_at": "2026-04-13T15:44:05.887599",
+  "checkpoint_version": 4
+}

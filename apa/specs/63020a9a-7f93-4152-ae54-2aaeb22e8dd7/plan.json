@@ -1,0 +1,60 @@
+{
+  "project_id": "63020a9a-7f93-4152-ae54-2aaeb22e8dd7",
+  "created_at": "2026-04-13T09:50:59.774979",
+  "spec_summary": "suma dos números enteros y retorna el resultado",
+  "tasks": [
+    {
+      "id": "T1",
+      "name": "Implementar función suma",
+      "description": "Crear la función suma que reciba dos enteros y devuelva su suma",
+      "depends_on": [],
+      "inputs": [
+        "a",
+        "b"
+      ],
+      "expected_output": "Función suma en el lenguaje objetivo",
+      "acceptance_criterion": "La función compila sin errores y tiene la firma esperada",
+      "task_type": "generation",
+      "status": "completed",
+      "attempts": 0,
+      "result": {
+        "success": true,
+        "code": "def suma(a, b):\n    return a + b\n\nif __name__ == '__main__':\n    try:\n        # Test de compilación y firma\n        resultado = suma(2, 3)\n        if resultado == 5:\n            print('CRITERIO OK')\n        else:\n            print('CRITERIO FALLO: resultado incorrecto')\n    except Exception as e:\n        print(f'CRITERIO FALLO: {e}')",
+        "filename": "implementarfuncionsuma.py",
+        "criterion_passed": true,
+        "attempts_used": 1,
+        "model_used": "moonshotai/kimi-k2-instruct-0905",
+        "diagnosis": "Generado y verificado en primer intento"
+      },
+      "model_used": "moonshotai/kimi-k2-instruct-0905"
+    },
+    {
+      "id": "T2",
+      "name": "Verificar resultado con caso de prueba",
+      "description": "Ejecutar la función con los valores 2 y 3 y comprobar que el resultado sea 5",
+      "depends_on": [
+        "T1"
+      ],
+      "inputs": [],
+      "expected_output": "Resultado de la ejecución",
+      "acceptance_criterion": "suma(2, 3) == 5",
+      "task_type": "evaluation",
+      "status": "completed",
+      "attempts": 0,
+      "result": {
+        "success": true,
+        "code": "def suma(a, b):\n    return a + b\n\nif __name__ == '__main__':\n    resultado = suma(2, 3)\n    if resultado == 5:\n        print('CRITERIO OK')\n    else:\n        print(f'CRITERIO FALLO: suma(2, 3) devolvió {resultado} en lugar de 5')",
+        "filename": "verificarresultadoconcasodeprueba.py",
+        "criterion_passed": true,
+        "attempts_used": 1,
+        "model_used": "moonshotai/kimi-k2-instruct-0905",
+        "diagnosis": "Generado y verificado en primer intento"
+      },
+      "model_used": "moonshotai/kimi-k2-instruct-0905"
+    }
+  ],
+  "model_used": "moonshotai/kimi-k2-instruct-0905",
+  "multi_file": false,
+  "checkpoint_at": "2026-04-13T09:51:41.014471",
+  "checkpoint_version": 4
+}

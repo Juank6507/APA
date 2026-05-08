@@ -1,0 +1,45 @@
+{
+  "project_id": "52edfcab-0deb-433a-a999-204db5773de2",
+  "created_at": "2026-04-12T21:22:33.370535",
+  "spec_summary": "suma dos números enteros y retorna el resultado",
+  "tasks": [
+    {
+      "id": "T1",
+      "name": "Implementar función suma",
+      "description": "Crear la función suma que reciba dos enteros y devuelva su suma",
+      "depends_on": [],
+      "inputs": [
+        "a",
+        "b"
+      ],
+      "expected_output": "Función suma que acepta dos enteros",
+      "acceptance_criterion": "La función suma existe y compila sin errores",
+      "task_type": "generation",
+      "status": "pending",
+      "attempts": 0,
+      "result": null,
+      "model_used": null
+    },
+    {
+      "id": "T2",
+      "name": "Validar resultado con caso de prueba",
+      "description": "Ejecutar la función suma con los valores 2 y 3 y verificar que el resultado sea 5",
+      "depends_on": [
+        "T1"
+      ],
+      "inputs": [
+        "2",
+        "3"
+      ],
+      "expected_output": "5",
+      "acceptance_criterion": "suma(2, 3) == 5",
+      "task_type": "evaluation",
+      "status": "pending",
+      "attempts": 0,
+      "result": null,
+      "model_used": null
+    }
+  ],
+  "model_used": "moonshotai/kimi-k2-instruct-0905",
+  "multi_file": false
+}

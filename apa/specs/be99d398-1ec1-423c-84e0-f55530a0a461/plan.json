@@ -1,0 +1,109 @@
+{
+  "project_id": "be99d398-1ec1-423c-84e0-f55530a0a461",
+  "created_at": "2026-04-13T14:49:43.588253",
+  "spec_summary": "Calculadora modular con validación y caché",
+  "tasks": [
+    {
+      "id": "utils_validators",
+      "name": "Crear utils/validators.py",
+      "description": "Define una función `es_numero(valor)` que retorna True si valor es int o float, False en caso contrario.\nDebe incluir un bloque `if __name__ == '__main__':` que pruebe la función e imprima 'CRITERIO OK' si pasa.",
+      "depends_on": [],
+      "inputs": [],
+      "expected_output": "Archivo utils/validators.py generado y funcional",
+      "acceptance_criterion": "",
+      "task_type": "generation",
+      "status": "completed",
+      "attempts": 0,
+      "result": {
+        "success": true,
+        "code": "import os\nimport sys\n\ndef es_numero(valor):\n    # Excluir bool explícitamente porque isinstance(True, int) es True\n    if isinstance(valor, bool):\n        return False\n    return isinstance(valor, (int, float))\n\nif __name__ == '__main__':\n    # Test cases\n    test_cases = [\n        (5, True),\n        (3.14, True),\n        (0, True),\n        (-7, True),\n        (-2.5, True),\n        ('5', False),\n        (None, False),\n        ([], False),\n        ({}, False),\n        (True, False),\n    ]\n    \n    try:\n        for valor, expected in test_cases:\n            result = es_numero(valor)\n            if result != expected:\n                print(f'CRITERIO FALLO: es_numero({valor}) devolvió {result}, se esperaba {expected}')\n                sys.exit(1)\n        \n        print('CRITERIO OK')\n    except Exception as e:\n        print(f'CRITERIO FALLO: {e}')\n        sys.exit(1)",
+        "filename": "crearutilsvalidatorspy.py",
+        "criterion_passed": true,
+        "attempts_used": 2,
+        "model_used": null,
+        "diagnosis": "Corregido en 2 intentos"
+      },
+      "model_used": null,
+      "file_path": "utils/validators.py",
+      "target_path": "utils/validators.py",
+      "imports": []
+    },
+    {
+      "id": "utils_operations",
+      "name": "Crear utils/operations.py",
+      "description": "Importa `es_numero` desde `utils/validators.py`.\nDefine:\n- `sumar(a, b)`: retorna a + b si ambos son números, lanza ValueError si no.\n- `restar(a, b)`: retorna a - b si ambos son números, lanza ValueError si no.\nDebe incluir test en `__main__` que imprima 'CRITERIO OK'.",
+      "depends_on": [
+        "utils_validators"
+      ],
+      "inputs": [
+        "utils/validators.py",
+        "es_numero",
+        "__main__"
+      ],
+      "expected_output": "Archivo utils/operations.py generado y funcional",
+      "acceptance_criterion": "",
+      "task_type": "generation",
+      "status": "completed",
+      "attempts": 0,
+      "result": {
+        "success": true,
+        "code": "from utils.validators import es_numero\n\ndef sumar(a, b):\n    if not es_numero(a) or not es_numero(b):\n        raise ValueError(\"Ambos argumentos deben ser números\")\n    return a + b\n\ndef restar(a, b):\n    if not es_numero(a) or not es_numero(b):\n        raise ValueError(\"Ambos argumentos deben ser números\")\n    return a - b\n\nif __name__ == '__main__':\n    try:\n        # Test sumar con números válidos\n        assert sumar(3, 5) == 8\n        assert sumar(2.5, 1.5) == 4.0\n        \n        # Test restar con números válidos\n        assert restar(10, 4) == 6\n        assert restar(7.5, 2.5) == 5.0\n        \n        # Test con argumentos no numéricos\n        try:\n            sumar(\"a\", 3)\n            assert False, \"Debería lanzar ValueError\"\n        except ValueError:\n            pass\n        \n        try:\n            restar(3, None)\n            assert False, \"Debería lanzar ValueError\"\n        except ValueError:\n            pass\n        \n        print('CRITERIO OK')\n    except Exception as e:\n        print(f'CRITERIO FALLO: {e}')",
+        "filename": "utils/operations.py",
+        "criterion_passed": true,
+        "attempts_used": 1,
+        "model_used": "moonshotai/kimi-k2-instruct-0905",
+        "diagnosis": "Generado y verificado en primer intento"
+      },
+      "model_used": "moonshotai/kimi-k2-instruct-0905",
+      "file_path": "utils/operations.py",
+      "target_path": "utils/operations.py",
+      "imports": [
+        "utils/validators.py",
+        "es_numero",
+        "__main__"
+      ]
+    },
+    {
+      "id": "main",
+      "name": "Crear main.py",
+      "description": "Importa `sumar` y `restar` desde `utils/operations.py`.\nDefine `calcular(operacion, a, b)` que dispatcha a sumar o restar.\nManeja ValueError y retorna mensaje de error si la operación es desconocida.\nDebe incluir test en `__main__` que imprima 'CRITERIO OK'.",
+      "depends_on": [
+        "utils_operations"
+      ],
+      "inputs": [
+        "utils/operations.py",
+        "sumar",
+        "restar",
+        "__main__"
+      ],
+      "expected_output": "Archivo main.py generado y funcional",
+      "acceptance_criterion": "",
+      "task_type": "generation",
+      "status": "completed",
+      "attempts": 0,
+      "result": {
+        "success": true,
+        "code": "# utils/operations.py\ndef sumar(a, b):\n    return a + b\n\ndef restar(a, b):\n    return a - b\n\n# main.py\nfrom utils.operations import sumar, restar\n\ndef calcular(operacion, a, b):\n    try:\n        if operacion == 'sumar':\n            return sumar(a, b)\n        elif operacion == 'restar':\n            return restar(a, b)\n        else:\n            raise ValueError(\"Operación desconocida\")\n    except ValueError as e:\n        return f\"Error: {e}\"\n\nif __name__ == '__main__':\n    try:\n        assert calcular('sumar', 5, 3) == 8\n        assert calcular('restar', 5, 3) == 2\n        assert calcular('multiplicar', 5, 3) == \"Error: Operación desconocida\"\n        print('CRITERIO OK')\n    except Exception as e:\n        print(f'CRITERIO FALLO: {e}')",
+        "filename": "main.py",
+        "criterion_passed": true,
+        "attempts_used": 1,
+        "model_used": "moonshotai/kimi-k2-instruct-0905",
+        "diagnosis": "Generado y verificado en primer intento"
+      },
+      "model_used": "moonshotai/kimi-k2-instruct-0905",
+      "file_path": "main.py",
+      "target_path": "main.py",
+      "imports": [
+        "utils/operations.py",
+        "sumar",
+        "restar",
+        "__main__"
+      ]
+    }
+  ],
+  "model_used": null,
+  "multi_file": true,
+  "files_count": 3,
+  "checkpoint_at": "2026-04-13T14:50:41.287127",
+  "checkpoint_version": 6
+}

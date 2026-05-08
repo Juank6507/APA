@@ -1,0 +1,76 @@
+{
+  "project_id": "c9ebffb1-451c-49fb-a76f-be7b420bd7f3",
+  "created_at": "2026-04-12T17:28:45.003966",
+  "spec_summary": "Generar tres funciones simples, cada una en su propio archivo Python, que realicen operaciones matemáticas básicas",
+  "tasks": [
+    {
+      "id": "T1",
+      "name": "Crear función suma",
+      "description": "Generar el archivo suma.py que contenga una función suma(a, b) que devuelva la suma de dos números",
+      "depends_on": [],
+      "inputs": [],
+      "expected_output": "Archivo suma.py con la función suma",
+      "acceptance_criterion": "El archivo existe, contiene la función suma(a,b) y al importarla suma(2,3) devuelve 5",
+      "task_type": "generation",
+      "status": "completed",
+      "attempts": 0,
+      "result": {
+        "success": true,
+        "code": "def suma(a, b):\n    return a + b\n\nif __name__ == '__main__':\n    try:\n        resultado = suma(2, 3)\n        if resultado == 5:\n            print('CRITERIO OK')\n        else:\n            print(f'CRITERIO FALLO: suma(2,3) devolvió {resultado} en lugar de 5')\n    except Exception as e:\n        print(f'CRITERIO FALLO: {e}')",
+        "filename": "crearfuncionsuma.py",
+        "criterion_passed": true,
+        "attempts_used": 1,
+        "model_used": "moonshotai/kimi-k2-instruct-0905",
+        "diagnosis": "Generado y verificado en primer intento"
+      },
+      "model_used": "moonshotai/kimi-k2-instruct-0905"
+    },
+    {
+      "id": "T2",
+      "name": "Crear función resta",
+      "description": "Generar el archivo resta.py que contenga una función resta(a, b) que devuelva la diferencia entre dos números",
+      "depends_on": [],
+      "inputs": [],
+      "expected_output": "Archivo resta.py con la función resta",
+      "acceptance_criterion": "El archivo existe, contiene la función resta(a,b) y al importarla resta(5,3) devuelve 2",
+      "task_type": "generation",
+      "status": "completed",
+      "attempts": 0,
+      "result": {
+        "success": true,
+        "code": "def resta(a, b):\n    return a - b\n\nif __name__ == '__main__':\n    try:\n        resultado = resta(5, 3)\n        if resultado == 2:\n            print('CRITERIO OK')\n        else:\n            print(f'CRITERIO FALLO: resta(5,3) devolvió {resultado}, se esperaba 2')\n    except Exception as e:\n        print(f'CRITERIO FALLO: {e}')",
+        "filename": "crearfuncionresta.py",
+        "criterion_passed": true,
+        "attempts_used": 1,
+        "model_used": "moonshotai/kimi-k2-instruct-0905",
+        "diagnosis": "Generado y verificado en primer intento"
+      },
+      "model_used": "moonshotai/kimi-k2-instruct-0905"
+    },
+    {
+      "id": "T3",
+      "name": "Crear función multiplicación",
+      "description": "Generar el archivo multiplicacion.py que contenga una función multiplicacion(a, b) que devuelva el producto de dos números",
+      "depends_on": [],
+      "inputs": [],
+      "expected_output": "Archivo multiplicacion.py con la función multiplicacion",
+      "acceptance_criterion": "El archivo existe, contiene la función multiplicacion(a,b) y al importarla multiplicacion(4,3) devuelve 12",
+      "task_type": "generation",
+      "status": "completed",
+      "attempts": 0,
+      "result": {
+        "success": true,
+        "code": "def multiplicacion(a, b):\n    return a * b\n\nif __name__ == '__main__':\n    try:\n        resultado = multiplicacion(4, 3)\n        if resultado == 12:\n            print('CRITERIO OK')\n        else:\n            print(f'CRITERIO FALLO: multiplicacion(4,3) devolvió {resultado} en lugar de 12')\n    except Exception as e:\n        print(f'CRITERIO FALLO: {e}')",
+        "filename": "crearfuncionmultiplicacion.py",
+        "criterion_passed": true,
+        "attempts_used": 1,
+        "model_used": "moonshotai/kimi-k2-instruct-0905",
+        "diagnosis": "Generado y verificado en primer intento"
+      },
+      "model_used": "moonshotai/kimi-k2-instruct-0905"
+    }
+  ],
+  "model_used": "moonshotai/kimi-k2-instruct-0905",
+  "checkpoint_at": "2026-04-12T17:29:20.480883",
+  "checkpoint_version": 4
+}

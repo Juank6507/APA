@@ -1,0 +1,81 @@
+{
+  "project_id": "01a851a8-1ce9-4e67-875a-e52a2a002028",
+  "created_at": "2026-04-15T00:35:05.925933",
+  "spec_summary": "Implementar una herramienta de línea de comandos que acepte --input y --output, lea el archivo de entrada, convierta todo el texto a mayúsculas y lo guarde en el archivo de salida.",
+  "tasks": [
+    {
+      "id": "T1",
+      "name": "Leer archivo de entrada",
+      "description": "Leer el contenido del archivo especificado por --input.",
+      "depends_on": [],
+      "inputs": [
+        "--input: ruta del archivo de texto a leer"
+      ],
+      "expected_output": "Contenido original del archivo de texto",
+      "acceptance_criterion": "El contenido del archivo de entrada se almacena correctamente en una variable.",
+      "task_type": "generation",
+      "status": "pending",
+      "attempts": 0,
+      "result": null,
+      "model_used": null
+    },
+    {
+      "id": "T2",
+      "name": "Convertir texto a mayúsculas",
+      "description": "Transformar todo el texto leído a mayúsculas.",
+      "depends_on": [
+        "T1"
+      ],
+      "inputs": [
+        "Contenido original del archivo"
+      ],
+      "expected_output": "Texto convertido a mayúsculas",
+      "acceptance_criterion": "El texto transformado está completamente en mayúsculas.",
+      "task_type": "generation",
+      "status": "pending",
+      "attempts": 0,
+      "result": null,
+      "model_used": null
+    },
+    {
+      "id": "T3",
+      "name": "Guardar archivo de salida",
+      "description": "Escribir el texto en mayúsculas en el archivo especificado por --output.",
+      "depends_on": [
+        "T2"
+      ],
+      "inputs": [
+        "--output: ruta del archivo de salida",
+        "Texto convertido a mayúsculas"
+      ],
+      "expected_output": "Archivo de salida con texto en mayúsculas",
+      "acceptance_criterion": "El archivo de salida existe y su contenido es idéntico al texto en mayúsculas.",
+      "task_type": "generation",
+      "status": "pending",
+      "attempts": 0,
+      "result": null,
+      "model_used": null
+    },
+    {
+      "id": "T4",
+      "name": "Verificar resultado final",
+      "description": "Comparar el contenido del archivo de salida con la versión en mayúsculas del archivo de entrada.",
+      "depends_on": [
+        "T3"
+      ],
+      "inputs": [
+        "Archivo de salida",
+        "Archivo de entrada original"
+      ],
+      "expected_output": "Confirmación de que el archivo de salida coincide con el esperado",
+      "acceptance_criterion": "El contenido del archivo de salida es exactamente el texto del archivo de entrada convertido a mayúsculas.",
+      "task_type": "evaluation",
+      "status": "pending",
+      "attempts": 0,
+      "result": null,
+      "model_used": null
+    }
+  ],
+  "model_used": "openrouter/elephant-alpha",
+  "multi_file": false
+}

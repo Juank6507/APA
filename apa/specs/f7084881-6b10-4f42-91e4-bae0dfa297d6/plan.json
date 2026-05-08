@@ -1,0 +1,60 @@
+{
+  "project_id": "f7084881-6b10-4f42-91e4-bae0dfa297d6",
+  "created_at": "2026-04-12T02:33:40.280933",
+  "spec_summary": "suma dos números enteros y retorna el resultado.",
+  "tasks": [
+    {
+      "id": "T1",
+      "name": "Implement sum function",
+      "description": "Create a function that takes two integer inputs a and b and returns their sum.",
+      "depends_on": [],
+      "inputs": [
+        "a",
+        "b"
+      ],
+      "expected_output": "a + b",
+      "acceptance_criterion": "The function returns the integer result of adding a and b.",
+      "task_type": "generation",
+      "status": "completed",
+      "attempts": 0,
+      "result": {
+        "success": true,
+        "code": "def sum_func(a, b):\n    return a + b\n\nif __name__ == '__main__':\n    a = 3\n    b = 5\n    expected = a + b\n    result = sum_func(a, b)\n    if result == expected and isinstance(result, int):\n        print('CRITERIO OK')\n    else:\n        print(f'CRITERIO FALLO: expected {expected}, got {result}')",
+        "filename": "implement_sum_function.py",
+        "criterion_passed": true,
+        "attempts_used": 1,
+        "model_used": "nvidia/nemotron-3-super-120b-a12b:free",
+        "diagnosis": "Generado y verificado en primer intento"
+      },
+      "model_used": "nvidia/nemotron-3-super-120b-a12b:free"
+    },
+    {
+      "id": "T2",
+      "name": "Test sum with 2 and 3",
+      "description": "Verify that the implemented sum function returns 5 when called with inputs 2 and 3.",
+      "depends_on": [
+        "T1"
+      ],
+      "inputs": [
+        "2",
+        "3"
+      ],
+      "expected_output": "5",
+      "acceptance_criterion": "sum(2, 3) evaluates to 5.",
+      "task_type": "evaluation",
+      "status": "completed",
+      "attempts": 0,
+      "result": {
+        "success": true,
+        "code": "def sum(a, b):\n    return a + b\n\nif __name__ == '__main__':\n    try:\n        result = sum(2, 3)\n        if result == 5:\n            print('CRITERIO OK')\n        else:\n            print(f'CRITERIO FALLO: expected 5 got {result}')\n    except Exception as e:\n        print(f'CRITERIO FALLO: {e}')",
+        "filename": "test_sum_with_2_and_3.py",
+        "criterion_passed": true,
+        "attempts_used": 1,
+        "model_used": "nvidia/nemotron-3-super-120b-a12b:free",
+        "diagnosis": "Generado y verificado en primer intento"
+      },
+      "model_used": "nvidia/nemotron-3-super-120b-a12b:free"
+    }
+  ],
+  "model_used": "nvidia/nemotron-3-super-120b-a12b:free"
+}

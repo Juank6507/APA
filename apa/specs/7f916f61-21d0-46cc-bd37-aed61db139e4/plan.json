@@ -1,0 +1,41 @@
+{
+  "project_id": "7f916f61-21d0-46cc-bd37-aed61db139e4",
+  "created_at": "2026-04-15T00:36:23.286302",
+  "spec_summary": "Leer un archivo CSV con columnas 'nombre,edad' y mostrar por consola el promedio de edad y el nombre de la persona más joven.",
+  "tasks": [
+    {
+      "id": "T1",
+      "name": "Generar CSV temporal",
+      "description": "Crear un archivo CSV con columnas 'nombre,edad' y datos de ejemplo.",
+      "depends_on": [],
+      "inputs": [],
+      "expected_output": "archivo CSV temporal con filas válidas",
+      "acceptance_criterion": "El archivo existe y contiene al menos una fila con formato 'nombre,edad'.",
+      "task_type": "generation",
+      "status": "pending",
+      "attempts": 0,
+      "result": null,
+      "model_used": null
+    },
+    {
+      "id": "T2",
+      "name": "Ejecutar script y verificar salida",
+      "description": "Leer el CSV, calcular promedio de edad y nombre de la persona más joven, luego mostrar por consola.",
+      "depends_on": [
+        "T1"
+      ],
+      "inputs": [
+        "ruta_al_archivo_csv"
+      ],
+      "expected_output": "Promedio de edad (float) y Nombre de la persona más joven (string)",
+      "acceptance_criterion": "La salida impresa coincide con los valores calculados manualmente (promedio y nombre).",
+      "task_type": "evaluation",
+      "status": "pending",
+      "attempts": 0,
+      "result": null,
+      "model_used": null
+    }
+  ],
+  "model_used": "openrouter/elephant-alpha",
+  "multi_file": false
+}

@@ -1,0 +1,87 @@
+{
+  "project_id": "331bc7c6-d465-46d7-b066-db0fbd211c1c",
+  "created_at": "2026-04-10T08:42:56.827505",
+  "spec_summary": "suma dos números enteros y retorna el resultado",
+  "tasks": [
+    {
+      "id": "T1",
+      "name": "Definir función suma",
+      "description": "Crear una función que acepte dos parámetros enteros",
+      "depends_on": [],
+      "inputs": [
+        "a",
+        "b"
+      ],
+      "expected_output": "función suma definida",
+      "acceptance_criterion": "La función suma existe y acepta dos parámetros",
+      "task_type": "generation",
+      "status": "completed",
+      "attempts": 0,
+      "result": {
+        "success": true,
+        "code": "def suma(a: int, b: int) -> int:\n # Función que acepta dos parámetros enteros y devuelve su suma\n return a + b\n\nif __name__ == '__main__':\n try:\n  # Verificar que la función existe\n  assert 'suma' in globals(), \"La función suma no existe\"\n  \n  # Verificar que la función acepta dos parámetros\n  assert suma.__code__.co_argcount == 2, \"La función suma no acepta dos parámetros\"\n  \n  print('CRITERIO OK')\n except AssertionError as e:\n  print(f'CRITERIO FALLO: {e}')",
+        "filename": "definir_funcion_suma.py",
+        "criterion_passed": true,
+        "attempts_used": 1,
+        "model_used": "Meta-Llama-3.1-405B-Instruct",
+        "diagnosis": "Generado y verificado en primer intento"
+      },
+      "model_used": "Meta-Llama-3.1-405B-Instruct"
+    },
+    {
+      "id": "T2",
+      "name": "Implementar lógica de suma",
+      "description": "Agregar la lógica para sumar los dos números enteros",
+      "depends_on": [
+        "T1"
+      ],
+      "inputs": [
+        "a",
+        "b"
+      ],
+      "expected_output": "resultado de la suma",
+      "acceptance_criterion": "La función suma retorna un valor numérico",
+      "task_type": "generation",
+      "status": "completed",
+      "attempts": 0,
+      "result": {
+        "success": true,
+        "code": "def suma(a, b):\n    # Función que suma dos números enteros\n    return a + b\n\nif __name__ == '__main__':\n    # Test del criterio de aceptación\n    try:\n        a = 2\n        b = 3\n        resultado = suma(a, b)\n        assert isinstance(resultado, (int, float)), \"El resultado no es numérico\"\n        print('CRITERIO OK')\n    except AssertionError as e:\n        print(f'CRITERIO FALLO: {e}')",
+        "filename": "implementar_logica_de_suma.py",
+        "criterion_passed": true,
+        "attempts_used": 2,
+        "model_used": null,
+        "diagnosis": "Corregido en 2 intentos"
+      },
+      "model_used": null
+    },
+    {
+      "id": "T3",
+      "name": "Verificar resultado de suma",
+      "description": "Verificar que la función suma retorne el resultado correcto",
+      "depends_on": [
+        "T2"
+      ],
+      "inputs": [
+        "2",
+        "3"
+      ],
+      "expected_output": "5",
+      "acceptance_criterion": "suma(2, 3) retorna 5",
+      "task_type": "evaluation",
+      "status": "completed",
+      "attempts": 0,
+      "result": {
+        "success": true,
+        "code": "def suma(a, b):\n # Función que retorna la suma de dos números\n return a + b\n\nif __name__=='__main__':\n # Criterio de aceptación: suma(2, 3) retorna 5\n resultado = suma(2, 3)\n if resultado == 5:\n print('CRITERIO OK')\n else:\n print(f'CRITERIO FALLO: se esperaba 5, se obtuvo {resultado}')",
+        "filename": "verificar_resultado_de_suma.py",
+        "criterion_passed": true,
+        "attempts_used": 1,
+        "model_used": "Meta-Llama-3.1-405B-Instruct",
+        "diagnosis": "Generado y verificado en primer intento"
+      },
+      "model_used": "Meta-Llama-3.1-405B-Instruct"
+    }
+  ],
+  "model_used": "Meta-Llama-3.1-405B-Instruct"
+}

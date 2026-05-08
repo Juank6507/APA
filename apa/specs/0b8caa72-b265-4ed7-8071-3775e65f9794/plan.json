@@ -1,0 +1,43 @@
+{
+  "project_id": "0b8caa72-b265-4ed7-8071-3775e65f9794",
+  "created_at": "2026-04-15T00:33:45.936554",
+  "spec_summary": "Crear una API REST con un endpoint GET /saludo/{nombre} que retorne un JSON {\"mensaje\": \"Hola, <nombre>\"}",
+  "tasks": [
+    {
+      "id": "T1",
+      "name": "Crear servidor API REST",
+      "description": "Implementar un servidor HTTP en http://127.0.0.1:8000 con un endpoint GET /saludo/{nombre}",
+      "depends_on": [],
+      "inputs": [
+        "nombre: string (parte de la URL)"
+      ],
+      "expected_output": "Servidor corriendo en http://127.0.0.1:8000",
+      "acceptance_criterion": "El servidor responde con estado 200 en http://127.0.0.1:8000",
+      "task_type": "generation",
+      "status": "pending",
+      "attempts": 0,
+      "result": null,
+      "model_used": null
+    },
+    {
+      "id": "T2",
+      "name": "Verificar respuesta del endpoint /saludo",
+      "description": "Realizar una petición HTTP GET al endpoint /saludo/{nombre} y validar la respuesta JSON",
+      "depends_on": [
+        "T1"
+      ],
+      "inputs": [
+        "nombre: string (parte de la URL)"
+      ],
+      "expected_output": "JSON {\"mensaje\": \"Hola, <nombre>\"}",
+      "acceptance_criterion": "Para nombre='Mundo', la respuesta es {\"mensaje\": \"Hola, Mundo\"} con estado 200",
+      "task_type": "evaluation",
+      "status": "pending",
+      "attempts": 0,
+      "result": null,
+      "model_used": null
+    }
+  ],
+  "model_used": "openrouter/elephant-alpha",
+  "multi_file": false
+}

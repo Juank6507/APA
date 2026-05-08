@@ -1,0 +1,61 @@
+{
+  "project_id": "edd6da54-66d0-408b-ae6e-ec321d84d38e",
+  "created_at": "2026-04-12T04:32:49.215095",
+  "spec_summary": "suma dos números enteros y retorna el resultado",
+  "tasks": [
+    {
+      "id": "T1",
+      "name": "Implementar función suma",
+      "description": "Crear una función que reciba dos enteros y devuelva su suma",
+      "depends_on": [],
+      "inputs": [
+        "a",
+        "b"
+      ],
+      "expected_output": "Función suma(a, b) que retorna a + b",
+      "acceptance_criterion": "La función compila sin errores y tiene la firma esperada",
+      "task_type": "generation",
+      "status": "completed",
+      "attempts": 0,
+      "result": {
+        "success": true,
+        "code": "def suma(a, b):\n    return a + b\n\nif __name__ == '__main__':\n    try:\n        assert suma(2, 3) == 5\n        assert suma(-1, 1) == 0\n        assert suma(0, 0) == 0\n        print('CRITERIO OK')\n    except Exception as e:\n        print(f'CRITERIO FALLO: {e}')",
+        "filename": "implementar_funcion_suma.py",
+        "criterion_passed": true,
+        "attempts_used": 1,
+        "model_used": "moonshotai/kimi-k2-instruct-0905",
+        "diagnosis": "Generado y verificado en primer intento"
+      },
+      "model_used": "moonshotai/kimi-k2-instruct-0905"
+    },
+    {
+      "id": "T2",
+      "name": "Validar resultado con caso de prueba",
+      "description": "Ejecutar la función con los valores 2 y 3 y verificar que el resultado sea 5",
+      "depends_on": [
+        "T1"
+      ],
+      "inputs": [
+        "suma(2, 3)"
+      ],
+      "expected_output": "5",
+      "acceptance_criterion": "suma(2, 3) == 5",
+      "task_type": "evaluation",
+      "status": "completed",
+      "attempts": 0,
+      "result": {
+        "success": true,
+        "code": "def suma(a, b):\n    return a + b\n\nif __name__ == '__main__':\n    resultado = suma(2, 3)\n    if resultado == 5:\n        print('CRITERIO OK')\n    else:\n        print(f'CRITERIO FALLO: suma(2, 3) devolvió {resultado}, se esperaba 5')",
+        "filename": "validar_resultado_con_caso_de_prueba.py",
+        "criterion_passed": true,
+        "attempts_used": 1,
+        "model_used": "moonshotai/kimi-k2-instruct-0905",
+        "diagnosis": "Generado y verificado en primer intento"
+      },
+      "model_used": "moonshotai/kimi-k2-instruct-0905"
+    }
+  ],
+  "model_used": "moonshotai/kimi-k2-instruct-0905",
+  "checkpoint_at": "2026-04-12T04:33:45.553812",
+  "checkpoint_version": 6
+}
