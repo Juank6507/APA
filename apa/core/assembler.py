@@ -390,8 +390,16 @@ class PlannerOutputParser:
             
             if anchor_raw == "FIN_IMPORTS":
                 last_import_line = 0
+                # Bug 3.4 fix: skip imports inside if __name__ == "__main__"
+                _in_main = False
                 for i, line in enumerate(lines):
                     stripped = line.strip()
+                    if "if __name__" in line and "__main__" in line:
+                        _in_main = True
+                        continue
+                    if _in_main:
+                        # Stop scanning — module-level imports are done
+                        break
                     if stripped.startswith("import ") or stripped.startswith("from "):
                         last_import_line = i + 1
                     elif stripped and not stripped.startswith("#") and last_import_line > 0:
@@ -1106,9 +1114,17 @@ class Assembler:
         lines = content.split('\n')
         
         # Detectar imports existentes para deduplicación
+        # Bug 3.4 fix: skip imports inside if __name__ == "__main__" block
         existing_imports = set()
+        _in_main = False
         for line in lines:
             stripped = line.strip()
+            if "if __name__" in line and "__main__" in line:
+                _in_main = True
+                continue
+            if _in_main:
+                # Skip deduplication against scoped imports
+                continue
             if stripped.startswith("import ") or stripped.startswith("from "):
                 existing_imports.add(stripped)
         
@@ -1308,10 +1324,18 @@ class Assembler:
     @staticmethod
     def remove_existing_imports(content: str) -> tuple:
         """Elimina imports existentes del contenido. Retorna (content_without_imports, existing_imports_list)."""
+        # Bug 3.4 fix: track scope to avoid capturing/removing imports
+        # inside if __name__ == "__main__" blocks.
         existing_imports_list = []
         has_existing_imports = False
+        _in_main = False
         for line in content.split("\n"):
             stripped = line.strip()
+            if "if __name__" in line and "__main__" in line:
+                _in_main = True
+                continue
+            if _in_main:
+                continue
             if stripped.startswith("import ") or stripped.startswith("from "):
                 existing_imports_list.append(stripped)
                 has_existing_imports = True
@@ -1322,8 +1346,18 @@ class Assembler:
         lines_content = content.split("\n")
         new_lines = []
         skip_blank_after_import = False
+        _in_main = False
         for i, line in enumerate(lines_content):
             stripped = line.strip()
+            if "if __name__" in line and "__main__" in line:
+                _in_main = True
+                new_lines.append(line)
+                continue
+            if _in_main:
+                # Keep lines inside __main__ intact, including their imports
+                new_lines.append(line)
+                skip_blank_after_import = False
+                continue
             if stripped.startswith("import ") or stripped.startswith("from "):
                 skip_blank_after_import = True
                 continue
@@ -1334,6 +1368,57 @@ class Assembler:
             new_lines.append(line)
         return "\n".join(new_lines), existing_imports_list
     
+    @staticmethod
+    def preprocess_coder_code(coder_code: str, script_name: str) -> dict:
+        """Preprocesa el código del Codificador: limpia headers, separa imports/main/__main__.
+        
+        Retorna dict con:
+            - imports_list: lista de imports globales (str)
+            - main_code_lines: líneas de código principal (sin imports, sin __main__)
+            - test_code_lines: líneas dentro de if __name__ == "__main__"
+            - cleaned_code: código limpio (sin headers de archivo)
+        """
+        # 1. Limpiar headers de archivo (# file.py)
+        script_name_only = Path(script_name).name
+        code_lines = coder_code.split("\n")
+        cleaned_lines = []
+        for line in code_lines:
+            stripped = line.strip()
+            if stripped == "#" + script_name or stripped == "# " + script_name:
+                continue
+            if stripped == "#" + script_name_only or stripped == "# " + script_name_only:
+                continue
+            if re.match(r"^#\s*\w+[/\\]?\w*\.py$", stripped):
+                continue
+            cleaned_lines.append(line)
+        cleaned_code = "\n".join(cleaned_lines).strip()
+        
+        # 2. Separar imports / código principal / bloque __main__
+        imports_list = []
+        main_code_lines = []
+        test_code_lines = []
+        in_main_block = False
+        
+        for line in cleaned_code.split("\n"):
+            stripped = line.strip()
+            # Bug 3.4 fix: check __main__ BEFORE imports
+            if "if __name__" in line and "__main__" in line:
+                in_main_block = True
+                continue
+            if in_main_block:
+                test_code_lines.append(line)
+                continue
+            if stripped.startswith("import ") or stripped.startswith("from "):
+                imports_list.append(stripped)
+                continue
+            main_code_lines.append(line)
+        
+        return {
+            "imports_list": imports_list,
+            "main_code_lines": main_code_lines,
+            "test_code_lines": test_code_lines,
+            "cleaned_code": cleaned_code,
+        }
     # ── Detección de duplicados ──────────────────────────────────────────────
     
     @staticmethod
@@ -1638,37 +1723,11 @@ class Assembler:
         coder_code = re.sub(r"^```python\s*\n?", "", coder_code, flags=re.IGNORECASE)
         coder_code = re.sub(r"\n?```\s*$", "", coder_code)
         
-        script_name_only = Path(script_name).name
-        code_lines = coder_code.split("\n")
-        cleaned_lines = []
-        for line in code_lines:
-            stripped = line.strip()
-            if stripped == "#" + script_name or stripped == "# " + script_name:
-                continue
-            if stripped == "#" + script_name_only or stripped == "# " + script_name_only:
-                continue
-            if re.match(r"^#\s*\w+[/\\]?\w*\.py$", stripped):
-                continue
-            cleaned_lines.append(line)
-        coder_code = "\n".join(cleaned_lines).strip()
-        
-        imports_list = []
-        main_code_lines = []
-        test_code_lines = []
-        in_main_block = False
-        
-        for line in coder_code.split("\n"):
-            stripped = line.strip()
-            if stripped.startswith("import ") or stripped.startswith("from "):
-                imports_list.append(stripped)
-                continue
-            if "if __name__" in line and "__main__" in line:
-                in_main_block = True
-                continue
-            if in_main_block:
-                test_code_lines.append(line)
-            else:
-                main_code_lines.append(line)
+        # Usar preprocess_coder_code para limpieza y separación (migración desde GUI)
+        preprocessed = self.preprocess_coder_code(coder_code, script_name)
+        imports_list = preprocessed["imports_list"]
+        main_code_lines = preprocessed["main_code_lines"]
+        test_code_lines = preprocessed["test_code_lines"]
         
         # 5. Detectar estructuras existentes
         existing_structures = self.detect_existing_structures(original_content)

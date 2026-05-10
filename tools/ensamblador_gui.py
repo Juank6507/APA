@@ -5,6 +5,7 @@ import json
 import re
 import os
 import shutil
+import threading
 import subprocess
 import tkinter as tk
 import difflib
@@ -18,6 +19,12 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from apa.core.assembler import Assembler, AssemblyResult, PlannerOutputParser
+
+try:
+    from apa.agents.semi_auto_agent import SemiAutoAgent
+    AUTO_AVAILABLE = True
+except ImportError:
+    AUTO_AVAILABLE = False
 
 try:
     from fpdf import FPDF
@@ -202,10 +209,17 @@ class App:
         nb.pack(fill="both", expand=True, padx=10, pady=10)
         self.notebook = nb
 
+        # Tab 1: Modo Autónomo (prioridad principal — AS3)
+        self.tab_autonomous = ttk.Frame(nb)
+        nb.add(self.tab_autonomous, text="🤖 Modo Autónomo")
+        self._setup_autonomous_tab()
+
+        # Tab 2: Ensamblador (trabajo manual/quirúrgico)
         self.tab_assembler = ttk.Frame(nb)
         nb.add(self.tab_assembler, text="🧩 Ensamblador")
         self._setup_assembler_tab()
 
+        # Tab 3: Plan de Mejoras (referencia)
         self.tab_plan = ttk.Frame(nb)
         nb.add(self.tab_plan, text="📋 Plan de Mejoras")
         self._setup_plan_tab()
@@ -726,33 +740,12 @@ class App:
             existing_structures = self.assembler.detect_existing_structures(original_content)
             
             # Asociar código del codificador para verificar duplicados
+            # Usar preprocess_coder_code del motor (migración: lógica centralizada en assembler.py)
             coder_code = raw_coder.strip() if raw_coder.strip() else ""
             coder_code = re.sub(r"^```python\s*\n?", "", coder_code, flags=re.IGNORECASE)
             coder_code = re.sub(r"\n?```\s*$", "", coder_code)
-            script_name_only = Path(script_name).name
-            code_lines = coder_code.split("\n")
-            cleaned_lines = []
-            for line in code_lines:
-                stripped = line.strip()
-                if stripped in ("#" + script_name, "# " + script_name, "#" + script_name_only, "# " + script_name_only):
-                    continue
-                if re.match(r"^#\s*\w+[/\\]?\w*\.py$", stripped):
-                    continue
-                cleaned_lines.append(line)
-            coder_code_clean = "\n".join(cleaned_lines).strip()
-            
-            # Separar main_code para detectar estructuras
-            main_code_for_check = []
-            in_main = False
-            for line in coder_code_clean.split("\n"):
-                stripped = line.strip()
-                if stripped.startswith("import ") or stripped.startswith("from "):
-                    continue
-                if "if __name__" in line and "__main__" in line:
-                    in_main = True
-                    continue
-                if not in_main:
-                    main_code_for_check.append(line)
+            preprocessed = self.assembler.preprocess_coder_code(coder_code, script_name)
+            main_code_for_check = preprocessed["main_code_lines"]
             
             # Verificar duplicados en cada bloque
             if blocks_data and existing_structures:
@@ -1151,9 +1144,6 @@ class App:
         self.asm_output.see(tk.END)
         self.asm_output.config(state="disabled")
 
-    def _get_existing_imports(self, content: str) -> list:
-        return [l.strip() for l in content.split('\n') if l.strip().startswith("import ") or l.strip().startswith("from ")]
-
     def _asm_toggle_edit(self):
         if self.asm_edit_toggle.get():
             self.asm_view.config(state="normal", bg="#2d2d2d", fg="#d4d4d4")
@@ -1539,7 +1529,581 @@ class App:
         except Exception as e:
             messagebox.showerror("Error PDF", str(e))
 
+    # ─────────────────────────────────────────────────────────────────────────
+    # Tab 3 — Modo Autónomo
+    # ─────────────────────────────────────────────────────────────────────────
+
+    def _setup_autonomous_tab(self):
+        tab = self.tab_autonomous
+        tab.columnconfigure(0, weight=1)
+        tab.rowconfigure(1, weight=1)
+
+        # ── Fila 0: Input del Director ──
+        input_frame = ttk.LabelFrame(tab, text="💬 Instrucción para APA (Modo 2)", padding=10)
+        input_frame.grid(row=0, column=0, padx=10, pady=(10,4), sticky="nsew")
+        input_frame.columnconfigure(0, weight=1)
+        input_frame.rowconfigure(1, weight=1)
+
+        ttk.Label(input_frame, text="Describe la tarea que quieres que APA implemente:").grid(row=0, column=0, sticky="w")
+
+        self.auto_prompt = scrolledtext.ScrolledText(
+            input_frame, height=3, wrap=tk.WORD, bg="#1a2332", fg="#93c5fd",
+            insertbackground="white", font=("Consolas", 11))
+        self.auto_prompt.grid(row=1, column=0, sticky="nsew", pady=4)
+        ToolTip(self.auto_prompt, "Escribe aquí la instrucción en lenguaje natural.\nEj: 'Crea funcion conectar() en apa/core/device.py que retorne bool'")
+
+        # Archivo objetivo (opcional)
+        target_frame = ttk.Frame(input_frame)
+        target_frame.grid(row=2, column=0, sticky="ew", pady=(4,0))
+        target_frame.columnconfigure(1, weight=1)
+        ttk.Label(target_frame, text="Archivo destino:").grid(row=0, column=0, padx=(0,5))
+        self.auto_target = ttk.Entry(target_frame)
+        self.auto_target.grid(row=0, column=1, sticky="ew", padx=5)
+        ToolTip(self.auto_target, "Ruta del archivo a modificar (opcional, APA lo determinara si lo dejas vacio)")
+
+        # Botones de acción
+        btn_frame = ttk.Frame(input_frame)
+        btn_frame.grid(row=3, column=0, sticky="ew", pady=(8,0))
+        btn_frame.columnconfigure(0, weight=2)
+        btn_frame.columnconfigure(1, weight=1)
+
+        self.auto_plan_btn = ttk.Button(
+            btn_frame,
+            text="📋  GENERAR PLAN",
+            style="Big.TButton",
+            command=self._auto_plan)
+        self.auto_plan_btn.grid(row=0, column=0, padx=(0,5), sticky="ew")
+        ToolTip(self.auto_plan_btn, "Genera el plan de ensamblaje (Planificador LLM) sin ejecutar nada aún")
+
+        self.auto_cancel_btn = ttk.Button(
+            btn_frame,
+            text="⏹ Cancelar",
+            style="Red.TButton",
+            command=self._auto_cancel,
+            state="disabled")
+        self.auto_cancel_btn.grid(row=0, column=1, sticky="ew")
+        ToolTip(self.auto_cancel_btn, "Cancela la ejecución actual")
+
+        # ── Fila 1: Panel principal (Plan + Log) ──
+        main_frame = ttk.Frame(tab)
+        main_frame.grid(row=1, column=0, padx=10, pady=4, sticky="nsew")
+        main_frame.columnconfigure(0, weight=2)
+        main_frame.columnconfigure(1, weight=3)
+        main_frame.rowconfigure(0, weight=1)
+
+        # Panel izquierdo: Plan de tareas
+        plan_frame = ttk.LabelFrame(main_frame, text="📋 Plan de Tareas", padding=5)
+        plan_frame.grid(row=0, column=0, sticky="nsew", padx=(0,4))
+        plan_frame.columnconfigure(0, weight=1)
+        plan_frame.rowconfigure(1, weight=1)
+
+        # Banner de estado
+        self.auto_status_lbl = ttk.Label(
+            plan_frame,
+            text="Escribe una instrucción y pulsa GENERAR PLAN",
+            foreground="#60a5fa", font=("Segoe UI", 10, "bold"), wraplength=300)
+        self.auto_status_lbl.grid(row=0, column=0, sticky="ew", pady=(0,4))
+
+        # Lista de tareas (Treeview)
+        columns = ("tarea_id", "script", "anchor", "estado", "intento")
+        self.auto_plan_tree = ttk.Treeview(
+            plan_frame, columns=columns, show="headings", height=8,
+            selectmode="browse")
+        self.auto_plan_tree.heading("tarea_id", text="ID")
+        self.auto_plan_tree.heading("script", text="Script")
+        self.auto_plan_tree.heading("anchor", text="Ancla")
+        self.auto_plan_tree.heading("estado", text="Estado")
+        self.auto_plan_tree.heading("intento", text="Intento")
+        self.auto_plan_tree.column("tarea_id", width=50, minwidth=40)
+        self.auto_plan_tree.column("script", width=120, minwidth=80)
+        self.auto_plan_tree.column("anchor", width=130, minwidth=80)
+        self.auto_plan_tree.column("estado", width=90, minwidth=60)
+        self.auto_plan_tree.column("intento", width=60, minwidth=40)
+        self.auto_plan_tree.grid(row=1, column=0, sticky="nsew")
+
+        # Scrollbar para treeview
+        plan_scroll = ttk.Scrollbar(plan_frame, orient="vertical", command=self.auto_plan_tree.yview)
+        self.auto_plan_tree.configure(yscrollcommand=plan_scroll.set)
+        plan_scroll.grid(row=1, column=1, sticky="ns")
+
+        # Botones de control de tareas
+        task_btn_frame = ttk.Frame(plan_frame)
+        task_btn_frame.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(8,0))
+        task_btn_frame.columnconfigure((0,1,2,3), weight=1)
+
+        self.auto_exec_btn = ttk.Button(
+            task_btn_frame, text="▶ Ejecutar siguiente",
+            command=self._auto_execute_next, state="disabled")
+        self.auto_exec_btn.grid(row=0, column=0, padx=2, sticky="ew")
+        ToolTip(self.auto_exec_btn, "Ejecuta la siguiente tarea pendiente del plan")
+
+        self.auto_approve_btn = ttk.Button(
+            task_btn_frame, text="✅ Aprobar",
+            style="BigGreen.TButton", command=self._auto_approve, state="disabled")
+        self.auto_approve_btn.grid(row=0, column=1, padx=2, sticky="ew")
+        ToolTip(self.auto_approve_btn, "Aprueba la tarea actual y guarda en disco")
+
+        self.auto_reject_btn = ttk.Button(
+            task_btn_frame, text="❌ Rechazar",
+            style="Red.TButton", command=self._auto_reject, state="disabled")
+        self.auto_reject_btn.grid(row=0, column=2, padx=2, sticky="ew")
+        ToolTip(self.auto_reject_btn, "Rechaza la tarea y permite reintento con correcciones")
+
+        self.auto_skip_btn = ttk.Button(
+            task_btn_frame, text="⏭ Saltar",
+            command=self._auto_skip, state="disabled")
+        self.auto_skip_btn.grid(row=0, column=3, padx=2, sticky="ew")
+        ToolTip(self.auto_skip_btn, "Salta esta tarea sin aprobarla")
+
+        # Panel derecho: Log y resultado
+        log_frame = ttk.LabelFrame(main_frame, text="📊 Log y Resultado", padding=5)
+        log_frame.grid(row=0, column=1, sticky="nsew")
+        log_frame.columnconfigure(0, weight=1)
+        log_frame.rowconfigure(0, weight=3)
+        log_frame.rowconfigure(2, weight=1)
+
+        # Log en tiempo real
+        self.auto_output = scrolledtext.ScrolledText(
+            log_frame, wrap=tk.NONE, bg="#0d1117", fg="#c9d1d9",
+            insertbackground="white", font=("Consolas", 9), state="disabled")
+        self.auto_output.grid(row=0, column=0, sticky="nsew")
+        self.auto_output.tag_configure("stage", foreground="#60a5fa", font=("Consolas", 10, "bold"))
+        self.auto_output.tag_configure("ok", foreground="#4ade80")
+        self.auto_output.tag_configure("error", foreground="#f87171")
+        self.auto_output.tag_configure("info", foreground="#a78bfa")
+        self.auto_output.tag_configure("warn", foreground="#fbbf24")
+
+        # Campo de feedback para correcciones
+        feedback_label = ttk.Label(log_frame, text="📝 Instrucciones de corrección (para reintento):")
+        feedback_label.grid(row=1, column=0, sticky="w", pady=(6,2))
+
+        self.auto_feedback = scrolledtext.ScrolledText(
+            log_frame, height=3, wrap=tk.WORD, bg="#1a1a2e", fg="#fbbf24",
+            insertbackground="white", font=("Consolas", 10), state="disabled")
+        self.auto_feedback.grid(row=2, column=0, sticky="nsew")
+        ToolTip(self.auto_feedback, "Cuando rechaces una tarea, escribe aquí las instrucciones de corrección\nantes de pulsar Rechazar")
+
+        # ── Fila 2: Botones de resultado ──
+        result_btn_frame = ttk.Frame(tab, padding=(10,4))
+        result_btn_frame.grid(row=2, column=0, sticky="ew", pady=(0,8))
+        result_btn_frame.columnconfigure(0, weight=1)
+
+        self.auto_to_assembler_btn = ttk.Button(
+            result_btn_frame, text="🧩 Ver en Ensamblador",
+            command=self._auto_send_to_assembler, state="disabled")
+        self.auto_to_assembler_btn.grid(row=0, column=0, padx=6, sticky="ew")
+        ToolTip(self.auto_to_assembler_btn, "Envia el output al tab Ensamblador para revision manual")
+
+        # Estado interno
+        self._auto_agent = None
+        self._auto_result = None
+        self._auto_thread = None
+
+    # ─── Flujo Modo 2 (AS3): Plan → Ejecutar → Aprobar/Rechazar ───
+
+    def _auto_plan(self):
+        """Genera el plan de ensamblaje llamando al Planificador."""
+        if not AUTO_AVAILABLE:
+            messagebox.showerror(
+                "Modo autónomo no disponible",
+                "No se pudo importar SemiAutoAgent.\n"
+                "Verifica que apa/agents/semi_auto_agent.py existe y las dependencias están instaladas."
+            )
+            return
+
+        prompt = self.auto_prompt.get("1.0", "end-1c").strip()
+        if not prompt:
+            messagebox.showwarning("Atención", "Escribe una instrucción antes de generar el plan.")
+            return
+
+        target = self.auto_target.get().strip()
+        project_root = self.project_root.get().strip()
+
+        # Limpiar estado anterior
+        self.auto_output.config(state="normal")
+        self.auto_output.delete("1.0", tk.END)
+        self.auto_output.config(state="disabled")
+        self._auto_clear_plan_tree()
+
+        # Deshabilitar botones durante planificación
+        self.auto_plan_btn.config(state="disabled")
+        self.auto_cancel_btn.config(state="normal")
+        self.auto_exec_btn.config(state="disabled")
+        self.auto_approve_btn.config(state="disabled")
+        self.auto_reject_btn.config(state="disabled")
+        self.auto_skip_btn.config(state="disabled")
+        self.auto_to_assembler_btn.config(state="disabled")
+
+        self._auto_status("Generando plan...")
+
+        # Crear agente
+        self._auto_agent = SemiAutoAgent(project_root=project_root)
+        self._auto_agent.root_after_safe = lambda ms, fn: self.root.after(ms, fn)
+
+        # Ejecutar planificación en hilo separado
+        def _plan_in_thread():
+            plan_result = self._auto_agent.plan(
+                user_prompt=prompt,
+                target_file=target,
+                on_progress=self._auto_on_progress,
+            )
+            self.root.after(0, self._auto_on_plan_complete, plan_result)
+
+        self._auto_thread = threading.Thread(target=_plan_in_thread, daemon=True)
+        self._auto_thread.start()
+
+    def _auto_on_plan_complete(self, plan_result):
+        """Callback cuando la planificación termina."""
+        self.auto_plan_btn.config(state="normal")
+        self.auto_cancel_btn.config(state="disabled")
+
+        if not plan_result.success:
+            self._auto_status(f"ERROR: {plan_result.error}", color="#f87171")
+            self._auto_log("error", f"Error en planificación: {plan_result.error}")
+            return
+
+        # Mostrar plan en el treeview
+        self._auto_populate_plan_tree(plan_result.tasks)
+
+        # Habilitar ejecución
+        self.auto_exec_btn.config(state="normal")
+        self._auto_status(
+            f"Plan generado: {len(plan_result.tasks)} tarea(s) — pulsa ▶ Ejecutar siguiente",
+            color="#4ade80"
+        )
+        self._auto_log("ok", f"Plan generado con {len(plan_result.tasks)} tarea(s)")
+
+    def _auto_execute_next(self):
+        """Ejecuta la siguiente tarea pendiente del plan."""
+        if not self._auto_agent:
+            return
+
+        # Deshabilitar botones durante ejecución
+        self.auto_exec_btn.config(state="disabled")
+        self.auto_plan_btn.config(state="disabled")
+        self.auto_approve_btn.config(state="disabled")
+        self.auto_reject_btn.config(state="disabled")
+        self.auto_skip_btn.config(state="disabled")
+        self.auto_cancel_btn.config(state="normal")
+
+        task = self._auto_agent.current_task
+        task_desc = f"{task.task_id} ({task.script})" if task else "?"
+        self._auto_status(f"Ejecutando {task_desc}...")
+        self._auto_log("stage", f"Ejecutando tarea {task_desc}")
+
+        # Ejecutar en hilo
+        def _exec_thread():
+            self._auto_agent.execute_next(
+                on_progress=self._auto_on_progress,
+                on_complete=self._auto_on_task_complete,
+            )
+
+        self._auto_thread = threading.Thread(target=_exec_thread, daemon=True)
+        self._auto_thread.start()
+
+    def _auto_on_task_complete(self, result):
+        """Callback cuando una tarea individual termina."""
+        # Actualizar treeview
+        self._auto_update_plan_tree()
+
+        agent = self._auto_agent
+        task = agent.current_task
+
+        if agent.state.value == "awaiting_approval":
+            # Tarea ejecutada — esperar decisión del Director
+            self._auto_status(
+                f"Tarea {task.task_id} ejecutada — APROBAR o RECHAZAR",
+                color="#fbbf24"
+            )
+            self.auto_approve_btn.config(state="normal")
+            self.auto_reject_btn.config(state="normal")
+            self.auto_skip_btn.config(state="normal")
+            self.auto_to_assembler_btn.config(state="normal")
+            self.auto_cancel_btn.config(state="disabled")
+            self._auto_result = result
+
+            # Habilitar campo de feedback
+            self.auto_feedback.config(state="normal")
+
+            # Mostrar resultado en log
+            if result.success:
+                self._auto_log("ok", f"Tarea {task.task_id}: ensamblaje exitoso")
+            else:
+                self._auto_log("warn", f"Tarea {task.task_id}: ensamblaje con errores — {result.error}")
+
+            # Mostrar validación
+            if result.validation_result:
+                val = result.validation_result
+                if val.get("returncode") == 0:
+                    self._auto_log("ok", f"Validación OK: {val.get('output', '')[:200]}")
+                else:
+                    self._auto_log("error", f"Validación FALLIDA: {val.get('output', '')[:300]}")
+
+        elif agent.state.value == "planned":
+            # Tarea fallida después de reintentos, pero hay más tareas
+            self._auto_log("error", f"Tarea {task.task_id if task else '?'} FALLIDA")
+            self._auto_update_plan_tree()
+            # Verificar si hay más tareas pendientes
+            pending = sum(1 for t in agent.plan if t.status.value == "pending")
+            if pending > 0:
+                self.auto_exec_btn.config(state="normal")
+                self._auto_status("Tarea fallida — hay más tareas pendientes", color="#f87171")
+            else:
+                self._auto_status("Plan completado con errores", color="#f87171")
+            self.auto_plan_btn.config(state="normal")
+            self.auto_cancel_btn.config(state="disabled")
+
+        elif agent.state.value == "completed":
+            self._auto_on_plan_finished()
+        elif agent.state.value == "cancelled":
+            self._auto_status("Cancelado por el usuario", color="#f87171")
+            self.auto_plan_btn.config(state="normal")
+            self.auto_cancel_btn.config(state="disabled")
+
+    def _auto_approve(self):
+        """Aprueba la tarea actual y guarda en disco."""
+        if not self._auto_agent:
+            return
+
+        agent = self._auto_agent
+        task = agent.current_task
+
+        # Crear backup
+        if task and task.script and self.project_root.get().strip():
+            root_dir = self.get_source_root()
+            try:
+                script_path = Path(self.find_file(root_dir, task.script))
+                if script_path.exists():
+                    backup_path = script_path.with_name(
+                        script_path.name + "_original_" + datetime.now().strftime("%H%M%S"))
+                    shutil.copy2(script_path, backup_path)
+            except Exception:
+                pass
+
+        success = agent.approve()
+        if success:
+            self._auto_log("ok", f"Tarea {task.task_id} APROBADA y guardada")
+            self._auto_update_plan_tree()
+            # Deshabilitar feedback
+            self.auto_feedback.config(state="disabled")
+            self.auto_feedback.delete("1.0", tk.END)
+
+            # Verificar si hay más tareas
+            if agent.state.value == "completed":
+                self._auto_on_plan_finished()
+            else:
+                self.auto_exec_btn.config(state="normal")
+                self._auto_status("Tarea aprobada — pulsa ▶ Ejecutar siguiente", color="#4ade80")
+        else:
+            self._auto_log("error", "No se pudo aprobar la tarea")
+
+        # Deshabilitar botones de decisión
+        self.auto_approve_btn.config(state="disabled")
+        self.auto_reject_btn.config(state="disabled")
+        self.auto_skip_btn.config(state="disabled")
+        self.auto_to_assembler_btn.config(state="disabled")
+
+    def _auto_reject(self):
+        """Rechaza la tarea actual y reintenta con correcciones."""
+        if not self._auto_agent:
+            return
+
+        agent = self._auto_agent
+        task = agent.current_task
+
+        # Obtener feedback del Director
+        feedback = self.auto_feedback.get("1.0", "end-1c").strip()
+        self.auto_feedback.config(state="disabled")
+        self.auto_feedback.delete("1.0", tk.END)
+
+        will_retry = agent.reject(feedback)
+        self._auto_update_plan_tree()
+
+        if will_retry:
+            self._auto_log("warn", f"Tarea {task.task_id} RECHAZADA — reintento con correcciones")
+            self._auto_status("Rechazada — reintento en curso...", color="#fbbf24")
+            # Ejecutar reintento automáticamente
+            self.root.after(500, self._auto_execute_next)
+        else:
+            self._auto_log("error", f"Tarea {task.task_id} FALLIDA — máximo de intentos alcanzado")
+            if agent.state.value == "completed":
+                self._auto_on_plan_finished()
+            else:
+                self.auto_exec_btn.config(state="normal")
+                self._auto_status("Tarea fallida — hay más tareas pendientes", color="#f87171")
+
+        # Deshabilitar botones de decisión
+        self.auto_approve_btn.config(state="disabled")
+        self.auto_reject_btn.config(state="disabled")
+        self.auto_skip_btn.config(state="disabled")
+        self.auto_to_assembler_btn.config(state="disabled")
+
+    def _auto_skip(self):
+        """Salta la tarea actual sin aprobarla."""
+        if not self._auto_agent:
+            return
+
+        agent = self._auto_agent
+        task = agent.current_task
+        agent.skip_task()
+        self._auto_update_plan_tree()
+
+        self._auto_log("warn", f"Tarea {task.task_id} SALTADA")
+        self.auto_feedback.config(state="disabled")
+        self.auto_feedback.delete("1.0", tk.END)
+
+        # Deshabilitar botones de decisión
+        self.auto_approve_btn.config(state="disabled")
+        self.auto_reject_btn.config(state="disabled")
+        self.auto_skip_btn.config(state="disabled")
+        self.auto_to_assembler_btn.config(state="disabled")
+
+        if agent.state.value == "completed":
+            self._auto_on_plan_finished()
+        else:
+            self.auto_exec_btn.config(state="normal")
+            self._auto_status("Tarea saltada — pulsa ▶ Ejecutar siguiente", color="#fbbf24")
+
+    def _auto_on_plan_finished(self):
+        """Todas las tareas del plan han sido procesadas."""
+        agent = self._auto_agent
+        summary = agent.get_progress_summary()
+        approved = summary["approved"]
+        total = summary["total_tasks"]
+        failed = summary["failed"]
+
+        self._auto_log("stage", "="*50)
+        self._auto_log("ok" if failed == 0 else "warn",
+                       f"PLAN COMPLETADO: {approved}/{total} aprobadas, {failed} fallidas")
+
+        self._auto_status(
+            f"Plan completado: {approved}/{total} aprobadas",
+            color="#4ade80" if failed == 0 else "#fbbf24"
+        )
+
+        # Habilitar solo el botón de plan para nueva ejecución
+        self.auto_plan_btn.config(state="normal")
+        self.auto_exec_btn.config(state="disabled")
+        self.auto_approve_btn.config(state="disabled")
+        self.auto_reject_btn.config(state="disabled")
+        self.auto_skip_btn.config(state="disabled")
+        self.auto_cancel_btn.config(state="disabled")
+
+    # ─── Helpers del plan ───
+
+    def _auto_clear_plan_tree(self):
+        """Limpia el treeview del plan."""
+        for item in self.auto_plan_tree.get_children():
+            self.auto_plan_tree.delete(item)
+
+    def _auto_populate_plan_tree(self, tasks):
+        """Llena el treeview con las tareas del plan."""
+        self._auto_clear_plan_tree()
+        for task in tasks:
+            status_text = self._auto_status_text(task.status.value)
+            self.auto_plan_tree.insert("", "end", iid=task.task_id, values=(
+                task.task_id,
+                task.script,
+                task.anchor,
+                status_text,
+                f"{task.attempt}/{task.max_attempts}",
+            ))
+
+    def _auto_update_plan_tree(self):
+        """Actualiza el treeview con el estado actual de las tareas."""
+        if not self._auto_agent:
+            return
+        for task in self._auto_agent.plan:
+            status_text = self._auto_status_text(task.status.value)
+            try:
+                self.auto_plan_tree.item(task.task_id, values=(
+                    task.task_id,
+                    task.script,
+                    task.anchor,
+                    status_text,
+                    f"{task.attempt}/{task.max_attempts}",
+                ))
+            except tk.TclError:
+                pass  # Item no existe en treeview
+
+    @staticmethod
+    def _auto_status_text(status_value: str) -> str:
+        """Convierte el valor del estado a texto legible."""
+        mapping = {
+            "pending": "⏳ Pendiente",
+            "executing": "🔄 Ejecutando",
+            "awaiting_approval": "⏸ Esperando",
+            "approved": "✅ Aprobada",
+            "rejected": "❌ Rechazada",
+            "failed": "💥 Fallida",
+            "skipped": "⏭ Saltada",
+        }
+        return mapping.get(status_value, status_value)
+
+    # ─── Callbacks compartidos ───
+
+    def _auto_cancel(self):
+        """Cancela la ejecución del agente autónomo."""
+        if self._auto_agent:
+            self._auto_agent.cancel()
+        self._auto_status("Cancelando...", color="#f87171")
+        self.auto_cancel_btn.config(state="disabled")
+
+    def _auto_on_progress(self, stage, message):
+        """Callback de progreso desde el agente."""
+        def _update():
+            self._auto_log(stage, message)
+        self.root.after(0, _update)
+
+    def _auto_send_to_assembler(self):
+        """Envia los outputs del agente al tab Ensamblador para revision manual."""
+        if not self._auto_agent or not self._auto_agent.current_task:
+            return
+
+        task = self._auto_agent.current_task
+
+        # Llenar paneles del Ensamblador
+        self.asm_input.delete("1.0", tk.END)
+        self.asm_input.insert("1.0", task.planner_output)
+
+        self.asm_coder_input.delete("1.0", tk.END)
+        self.asm_coder_input.insert("1.0", task.coder_output or "")
+
+        # Cargar contenido ensamblado
+        if task.assembled_content:
+            self.asm_original_content = task.assembled_content
+            self.asm_baseline_content = task.assembled_content
+            self._asm_set_view(task.assembled_content)
+
+        # Cambiar al tab Ensamblador
+        self.notebook.select(self.tab_assembler)
+        self._auto_status("Output enviado al Ensamblador para revisión manual.")
+
+    def _auto_log(self, tag, message):
+        """Añade un mensaje al log en tiempo real."""
+        self.auto_output.config(state="normal")
+        tag_map = {
+            "stage": "stage",
+            "planificador": "stage",
+            "codificador": "info",
+            "ensamblador": "info",
+            "ok": "ok",
+            "error": "error",
+            "warn": "warn",
+        }
+        display_tag = tag_map.get(tag, "info")
+        prefix = f"[{tag.upper()}] " if tag in ("planificador", "codificador", "ensamblador") else ""
+        self.auto_output.insert(tk.END, f"{prefix}{message}\n", display_tag)
+        self.auto_output.see(tk.END)
+        self.auto_output.config(state="disabled")
+
+    def _auto_status(self, text, color="#60a5fa"):
+        """Actualiza la etiqueta de estado del modo autónomo."""
+        self.auto_status_lbl.config(text=text, foreground=color)
+
+
 if __name__ == "__main__":
     root = tk.Tk()
     app = App(root)
     root.mainloop()
+    
