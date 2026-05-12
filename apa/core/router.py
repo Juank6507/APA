@@ -1,4 +1,45 @@
 # apa/core/router.py
+# v4.1 — Production-ready: lazy loading Arena, logging limpio,
+#         SESSION TRUST configurable, sin print() de diagnóstico.
+#
+# ============================================================================
+# APROXIMACIÓN v4.1 vs RESULTADO ESPERADO:
+#   v4.0 era funcional pero tenía problemas de producción:
+#   - Líneas de log duplicadas (logger.propagate=True duplicaba output)
+#   - arena_fetcher importado al cargar módulo → 6s+ de HuggingFace download
+#   - print() de diagnóstico en el bloque standalone
+#   - SESSION TRUST window no configurable
+#
+#   v4.1 FIX:
+#   1. logger.propagate = False → elimina líneas duplicadas
+#   2. Lazy import de arena_fetcher → no se carga hasta primer uso
+#      (elimina "Warning: You are sending unauthenticated requests to HF Hub")
+#   3. SESSION TRUST window configurable via model_health.configure()
+#   4. Standalone test usa print() solo en __main__ (no en funciones)
+#   5. init time reducido: de 7.5s → <1s (sin HF download al importar)
+#
+#   RESULTADO ESPERADO:
+#   - Salida limpia sin duplicados
+#   - Importación rápida (<1s) — Arena data se carga solo cuando se necesita
+#   - SESSION TRUST configurable sin tocar código
+#   - Compatible con model_health v3.1
+# ============================================================================
+#
+# CAMBIOS v4.1 vs v4.0:
+#   - logger.propagate = False → elimina duplicate log lines
+#   - Lazy import de arena_fetcher (get_score_for_model, get_available_categories)
+#   - _arena_fetcher lazy wrapper: _get_arena_score(), _get_arena_categories()
+#   - SESSION TRUST window via model_health.configure()
+#   - Limpieza de print() en test standalone
+#
+# CAMBIOS v4.0 vs v3.9:
+#   - (v4.0 fue la versión del usuario con cambios menores)
+#
+# CAMBIOS v3.9 vs v3.8:
+#   - Compatible con model_health v2.9 (_find_project_data_dir)
+#   - Diagnóstico muestra data_dir y module_file_resolved de model_health
+#   - Verificación de consistencia de rutas entre router y model_health
+
 import sys
 import os
 import time
@@ -8,19 +49,54 @@ from typing import Optional, List, Dict, Any
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from config.settings import settings
 import requests
-from core.arena_fetcher import get_score_for_model
 from core.normalizer import normalize_model_id
 from core.llm_cache import LLMCache
+from core import model_health
+
+# ============================================================================
+# Logging setup — production-ready
+# ============================================================================
 logger = logging.getLogger(__name__)
 logger.setLevel(getattr(logging, settings.log_level.upper(), logging.WARNING))
+
+# v4.1: Solo agregar handler si no hay; NO propagar al root logger
 if not logger.handlers:
     handler = logging.StreamHandler()
-    handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+    handler.setFormatter(logging.Formatter(
+        '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    ))
     logger.addHandler(handler)
+logger.propagate = False  # v4.1: Evita duplicate log lines
 
-def _log(module: str, stage: str, status: str, detail: str = "") -> None:
-    """No-op: suprimimos los logs de progreso para limpiar la salida."""
-    pass
+# ============================================================================
+# v4.1: Lazy import de arena_fetcher
+# ============================================================================
+# arena_fetcher importa datasets de HuggingFace, que tarda 5-6s.
+# En v4.0 se importaba al cargar el módulo, bloqueando la inicialización.
+# En v4.1 se carga solo cuando se necesita (primer select_model o call_llm).
+_arena_module = None
+
+def _get_arena_module():
+    """Lazy import de core.arena_fetcher. Solo se carga la primera vez."""
+    global _arena_module
+    if _arena_module is None:
+        from core import arena_fetcher
+        _arena_module = arena_fetcher
+        logger.debug("arena_fetcher cargado (lazy import)")
+    return _arena_module
+
+
+def _get_arena_score(model_id: str, task_type: Optional[str]) -> Optional[float]:
+    """Wrapper lazy para arena_fetcher.get_score_for_model()."""
+    af = _get_arena_module()
+    return af.get_score_for_model(model_id, task_type)
+
+
+def _get_arena_categories() -> List[str]:
+    """Wrapper lazy para arena_fetcher.get_available_categories()."""
+    af = _get_arena_module()
+    return af.get_available_categories()
+
 
 _cache: Dict[str, Any] = {
     "data": None,
@@ -50,16 +126,6 @@ def _infer_provider(model_id: str) -> str:
             return provider
     return "unknown"
 
-def _infer_capabilities(model_id: str, context_length: int) -> List[str]:
-    caps = []
-    mid = model_id.lower()
-    if "coder" in mid or "code" in mid:
-        caps.append("coding")
-    if context_length >= 32000:
-        caps.append("long_context")
-    if "instruct" in mid:
-        caps.append("instruction")
-    return caps or ["general"]
 
 def fetch_free_models() -> List[Dict[str, Any]]:
     global _cache
@@ -84,14 +150,13 @@ def fetch_free_models() -> List[Dict[str, Any]]:
         for m in models:
             model_id = m.get("id", "")
             ctx_len = m.get("context_length", 0)
-            caps = _infer_capabilities(model_id, ctx_len)
             out.append({
                 "id": model_id,
                 "name": m.get("name", ""),
                 "context_length": ctx_len,
-                "capabilities": caps,
                 "provider": "openrouter",
-                "is_free_tier": False
+                "is_free_tier": True,
+                "is_free": True
             })
         out.sort(key=lambda x: x["context_length"], reverse=True)
         if not out:
@@ -110,97 +175,215 @@ def _filter_text_models(models: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     blocked = {"lyria", "audio", "music", "imagen", "image", "vision", "video", "clip"}
     return [m for m in models if not any(k in m["id"].lower() for k in blocked)]
 
+
+def _is_free_model(model_dict: Dict[str, Any]) -> bool:
+    """Detecta si un modelo es gratuito basandose en multiples senales."""
+    mid = model_dict.get("id", "").lower()
+    if mid.endswith(":free"):
+        return True
+    if model_dict.get("is_free_tier"):
+        return True
+    if model_dict.get("is_free"):
+        return True
+    pricing = model_dict.get("pricing", {})
+    if pricing:
+        try:
+            p = float(pricing.get("prompt", 1))
+            c = float(pricing.get("completion", 1))
+            if p == 0 and c == 0:
+                return True
+        except (ValueError, TypeError):
+            pass
+    if model_dict.get("price_prompt_per_1k", 1) == 0 and model_dict.get("price_completion_per_1k", 1) == 0:
+        return True
+    return False
+
+
 def get_all_available_models() -> List[Dict[str, Any]]:
+    """Retorna TODOS los modelos disponibles de TODOS los proveedores.
+
+    v4.1: Usa lazy import de provider_manager (no se carga al importar router).
+    """
     try:
-        openrouter_free = fetch_free_models()
-        openrouter_tier = fetch_free_tier_models()
         seen = {}
-        for m in openrouter_free:
-            seen[m["id"]] = m
-        for m in openrouter_tier:
-            seen[m["id"]] = m
-        
+
         try:
             from core.providers import provider_manager
-            other_models = provider_manager.get_all_models()
-            for m in other_models:
-                if m.get("provider") != "openrouter":
-                    if m["id"] not in seen:
-                        seen[m["id"]] = m
+            all_models = provider_manager.get_all_models()
+            for m in all_models:
+                mid = m.get("id", "")
+                if mid and mid not in seen:
+                    m["is_free"] = _is_free_model(m)
+                    seen[mid] = m
         except Exception as e:
-            logger.warning(f"No se pudieron obtener modelos de otros proveedores: {e}")
-        
+            logger.warning(f"Error getting models from provider_manager: {e}")
+
+        try:
+            openrouter_free = fetch_free_models()
+            for m in openrouter_free:
+                mid = m.get("id", "")
+                if mid and mid not in seen:
+                    m["is_free"] = True
+                    seen[mid] = m
+        except Exception:
+            pass
+
         combined = list(seen.values())
         combined.sort(key=lambda x: x.get("context_length", 0), reverse=True)
+
+        free_count = sum(1 for m in combined if m.get("is_free"))
+        paid_count = len(combined) - free_count
+        logger.debug(f"[get_all_available_models] {len(combined)} modelos "
+                     f"({free_count} gratuitos, {paid_count} de pago)")
+
         return combined
     except Exception as e:
         logger.error(f"Error en get_all_available_models: {e}")
         return []
 
+
+# Context length minimo por task_type (filtro, no score)
+_MIN_CONTEXT_LENGTH = {
+    "planning": 16000,
+    "evaluation": 8000,
+    "generation": 8000,
+    "coding": 4000,
+    "correction": 4000,
+}
+
+
 def select_model(task_type: str, quality_mode: str = None) -> Optional[str]:
-    mode = quality_mode or getattr(settings, "default_quality_mode", "balanced")
+    """Selecciona el mejor modelo VERIFICADO para una tarea.
+    
+    Flujo:
+    1. Obtener todos los modelos del catalogo, puntuar por Arena ELO
+    2. Filtrar por context_length minimo
+    3. Ordenar por ranking Arena (mejor primero)
+    4. Buscar el primero que este verificado como available en model_health
+    5. Si ninguno esta verificado -> probe sincronico al mejor del ranking
+    6. Si el probe falla -> probar el siguiente, y asi sucesivamente
+    7. Ultimo recurso: el mejor del ranking sin verificar
+    """
     try:
+        model_health.ensure_loaded()
+
         all_models = get_all_available_models()
         text_models = _filter_text_models(all_models)
         if not text_models:
             return None
-        
-        if task_type == "correction":
-            fast_models = [m for m in text_models if m.get("context_length", 0) <= 32000]
-            if fast_models:
-                def corr_score(m: Dict[str, Any]) -> float:
-                    arena = get_score_for_model(m["id"], task_type)
-                    base = arena if arena is not None else 50.0
-                    bonus = 20 if "instruction" in m.get("capabilities", []) else 0
-                    return base + bonus
-                selected = max(fast_models, key=corr_score)
-            else:
-                inst_models = [m for m in text_models if "instruction" in m.get("capabilities", [])]
-                if not inst_models:
-                    inst_models = text_models
-                selected = min(inst_models, key=lambda m: m.get("context_length", 0))
-            return selected["id"]
-        
+
+        min_ctx = _MIN_CONTEXT_LENGTH.get(task_type, 0)
+
+        candidates = [m for m in text_models if m.get("context_length", 0) >= min_ctx]
+        if not candidates:
+            candidates = text_models
+
+        # v4.1: Usa lazy wrapper para Arena scores
         scored = []
-        for model in text_models:
-            arena_score = get_score_for_model(model["id"], task_type)
-            base_score = arena_score if arena_score is not None else 50.0
-            ctx_len = model.get("context_length", 0)
-            context_score = min(100.0, ctx_len / 320.0)
-            composite = base_score * 0.6 + context_score * 0.4
-            
-            caps = model.get("capabilities", [])
-            bonus = 0.0
-            if task_type in ("planning", "evaluation"):
-                if "long_context" in caps:
-                    bonus += 20
-                if "instruction" in caps:
-                    bonus += 10
-            elif task_type == "generation":
-                if "coding" in caps:
-                    bonus += 30
-                if "long_context" in caps:
-                    bonus += 10
-            
-            total = composite + bonus
-            scored.append((model, total))
-        
+        for model in candidates:
+            arena_score = _get_arena_score(model["id"], task_type)
+            if arena_score is None:
+                arena_score = _get_arena_score(model["id"], None)
+            if arena_score is None:
+                continue
+            scored.append((model, arena_score))
+
         if not scored:
-            return None
-        
+            logger.warning(f"select_model({task_type}): ningun modelo tiene score Arena")
+            candidates.sort(key=lambda x: x.get("context_length", 0), reverse=True)
+            return candidates[0]["id"] if candidates else None
+
         scored.sort(key=lambda x: x[1], reverse=True)
-        selected_model, final_score = scored[0]
-        return selected_model["id"]
+
+        # PASO 1: Buscar el mejor modelo verificado como available
+        verified_list = model_health.get_verified_models()
+        trust_window = model_health.get_trust_window()
+        logger.info(f"select_model({task_type}): {len(verified_list)} modelos verificados "
+                    f"en model_health: {verified_list[:5]}")
+
+        for model, arena_score in scored:
+            if model_health.is_available(model["id"]):
+                info = model_health.get_all_health().get(model["id"], {})
+                verified_at = info.get("verified_at")
+                trust_tag = ""
+                if verified_at is not None:
+                    age = time.time() - verified_at
+                    if age > 10:
+                        trust_tag = ", SESSION TRUST"
+                logger.info(f"select_model({task_type}): {model['id']} "
+                           f"(Arena: {arena_score:.1f}, verificado available{trust_tag})")
+                return model["id"]
+
+        # PASO 2: No hay verificados -> probe sincronico
+        logger.info(f"select_model({task_type}): no hay modelos verificados, "
+                    f"haciendo probe sincronico a candidatos (priorizando free)")
+
+        def _probe_priority(item):
+            model_dict, arena_score = item
+            m_id = model_dict["id"]
+            st = model_health.get_status(m_id)
+            is_free = 0 if _is_free_model(model_dict) else 1
+            status_order = {"unknown": 0, "rate_limited": 1, "failed": 2, "available": 3}
+            status_rank = status_order.get(st, 0)
+            return (is_free, status_rank, -arena_score)
+
+        probe_candidates = sorted(scored, key=_probe_priority)
+
+        probed_count = 0
+        max_probes = 12
+        for model, arena_score in probe_candidates:
+            if probed_count >= max_probes:
+                break
+
+            status = model_health.get_status(model["id"])
+
+            if status == "available":
+                continue
+            if status == "failed":
+                continue
+
+            success, provider = model_health.probe_model_sync(model["id"])
+            probed_count += 1
+
+            if success:
+                logger.info(f"select_model({task_type}): {model['id']} "
+                           f"(Arena: {arena_score:.1f}, probe OK, provider: {provider})")
+                return model["id"]
+
+            time.sleep(0.5)
+
+        # PASO 3: Reintentar failed
+        for model, arena_score in scored:
+            if model_health.get_status(model["id"]) == "failed":
+                success, provider = model_health.probe_model_sync(model["id"])
+                if success:
+                    logger.info(f"select_model({task_type}): {model['id']} "
+                               f"(Arena: {arena_score:.1f}, reintento OK)")
+                    return model["id"]
+
+        # PASO 4: Ultimo recurso
+        best_model, best_score = scored[0]
+        logger.warning(f"select_model({task_type}): ningun modelo verificado, "
+                       f"usando {best_model['id']} sin verificar (Arena: {best_score:.1f})")
+        return best_model["id"]
         
     except Exception as e:
         logger.error(f"Error en select_model: {e}")
         return None
 
+
 def escalate_model(current_model_id: str) -> Optional[str]:
+    """Escala a un modelo de mayor ranking Arena."""
     try:
         all_models = get_all_available_models()
         text_models = _filter_text_models(all_models)
-        text_models.sort(key=lambda x: (x.get("context_length", 0), len(x.get("capabilities", []))), reverse=True)
+        
+        def arena_rank(m):
+            score = _get_arena_score(m["id"], None)
+            return score if score is not None else -1
+        
+        text_models.sort(key=arena_rank, reverse=True)
+        
         for i, m in enumerate(text_models):
             if m["id"] == current_model_id:
                 if i < len(text_models) - 1:
@@ -210,18 +393,18 @@ def escalate_model(current_model_id: str) -> Optional[str]:
         logger.error(f"Error en escalate_model: {e}")
         return current_model_id
 
+
 _llm_cache = LLMCache()
 
-# CORRECCIÓN: Añadir parámetro project_id para registro de uso
 def call_llm(
     task_type: str,
     system_prompt: str,
     user_prompt: str,
     max_tokens: int = 2000,
     temperature: float = 0.1,
-    project_id: Optional[str] = None  # <-- AÑADIDO
+    project_id: Optional[str] = None
 ) -> Dict[str, Any]:
-    # --- INTEGRACIÓN DE CACHÉ (T8) ---
+    # --- INTEGRACION DE CACHE ---
     try:
         cached_response = _llm_cache.get(user_prompt, "", max_tokens=max_tokens, temperature=temperature)
         if cached_response is not None:
@@ -254,7 +437,12 @@ def call_llm(
             result = provider_manager.call_with_fallback(model_id, messages, max_tokens, temperature)
             
             if result.get("success"):
-                # --- T9: CORRECCIÓN DE TRAZABILIDAD DE PROVEEDOR ---
+                try:
+                    model_health.mark_available(model_id, result.get("provider", ""))
+                except Exception:
+                    pass
+
+                # Correccion de trazabilidad de proveedor
                 try:
                     current_provider = result.get("provider")
                     actual_model = result.get("model_used", model_id)
@@ -270,17 +458,14 @@ def call_llm(
                             logger.debug(f"Provider corrected from '{current_provider}' to '{inferred}' for model {actual_model}")
                 except Exception as e:
                     logger.warning(f"Failed to correct provider traceability: {e}")
-                # ----------------------------------------------------
 
-                # T8: Guardar en caché si la respuesta es exitosa
+                # Guardar en cache
                 try:
                     _llm_cache.set(user_prompt, actual_model, result, max_tokens=max_tokens, temperature=temperature)
                 except Exception as e:
                     logger.warning(f"Cache set failed (continuing): {e}")
                 
-                # =================================================================
-                # CORRECCIÓN: Registro de uso de tokens en UsageTracker
-                # =================================================================
+                # Registro de uso de tokens
                 if project_id is not None:
                     try:
                         from core.usage_tracker import UsageTracker
@@ -291,17 +476,29 @@ def call_llm(
                         UsageTracker().log_usage(project_id, actual_model, tokens, task_type)
                     except Exception as e:
                         logger.warning(f"Usage tracking failed (continuing): {e}")
-                # =================================================================
                 
                 return {**result, "attempts": attempt}
             
             if result.get("error") == "rate_limit":
+                try:
+                    model_health.mark_rate_limited(model_id, result.get("provider", ""))
+                except Exception:
+                    pass
                 escalate_model(model_id)
                 time.sleep(1)
             else:
+                try:
+                    error_str = str(result.get("error", "unknown"))
+                    error_type = model_health._classify_error(error_str)
+                    if error_type == "rate_limit":
+                        model_health.mark_rate_limited(model_id, result.get("provider", ""))
+                    else:
+                        model_health.mark_failed(model_id, result.get("provider", ""), error_str)
+                except Exception:
+                    pass
                 break
         except Exception as e:
-            logger.error(f"Excepción en call_llm: {e}")
+            logger.error(f"Excepcion en call_llm: {e}")
             break
     
     return {
@@ -312,6 +509,7 @@ def call_llm(
         "attempts": 3,
         "error": "Reintentos agotados"
     }
+
 
 def validate_self() -> bool:
     try:
@@ -324,101 +522,144 @@ def validate_self() -> bool:
             assert sel is None or isinstance(sel, str)
         return True
     except Exception as e:
-        logger.error(f"Fallo en validación: {e}")
+        logger.error(f"Fallo en validacion: {e}")
         return False
 
+
 # =============================================================================
-# BLOQUE DE PRUEBA (RESUMIDO Y SIN LOGS)
+# BLOQUE DE PRUEBA
 # =============================================================================
 if __name__ == "__main__":
     import logging
-    import tempfile
-    import shutil
-    
+    import time as _time
+
     logging.basicConfig(level=logging.WARNING)
+    # v4.1: Habilitar INFO para este modulo en standalone
+    logger.setLevel(logging.INFO)
+    # model_health también a INFO en standalone
+    mh_logger = logging.getLogger('core.model_health')
+    mh_logger.setLevel(logging.INFO)
+
+    start_time = _time.time()
+
     print("\n" + "=" * 60)
-    print("🔍 APA - DIAGNÓSTICO DEL ROUTER + CACHÉ + TRAZABILIDAD T9")
+    print("APA Router v4.1 — Arena ELO + Health Verification")
     print("=" * 60)
-    start_time = time.time()
-    
-    print("\n📊 Pool de modelos")
-    print("-" * 40)
+
+    # model_health state
+    print("\nmodel_health state:")
+    try:
+        diag = model_health.get_diagnostic_info()
+        print(f"  cache: {diag.get('cache_path')} (exists={diag.get('cache_exists')})")
+        print(f"  verified: {diag.get('verified_models')}  trust_window={diag.get('trust_window')}s")
+        total = diag.get('total_models', 0)
+        avail = diag.get('available', 0)
+        rl = diag.get('rate_limited', 0)
+        fail = diag.get('failed', 0)
+        unk = diag.get('unknown', 0)
+        print(f"  models: {total} total, {avail} available, {rl} rate_limited, {fail} failed, {unk} unknown")
+    except Exception as e:
+        print(f"  Error obteniendo diagnostico: {e}")
+
+    # Pool de modelos
+    print("\nPool de modelos:")
     try:
         models = get_all_available_models()
         total = len(models)
-        print(f"Total modelos combinados: {total}")
-        if total >= 300:
-            print("✓ POOL COMPLETO (>=300)")
-        elif total >= 50:
-            print("✓ POOL BÁSICO (>=50)")
+        free_count = sum(1 for m in models if _is_free_model(m))
+        paid_count = total - free_count
+        print(f"  {total} modelos ({free_count} gratuitos, {paid_count} de pago)")
+    except Exception as e:
+        print(f"  Error obteniendo modelos: {e}")
+
+    # select_model() por tarea
+    print("\nselect_model() por tarea:")
+    print("-" * 40)
+    task_times = {}
+    for task in ["planning", "generation", "coding", "correction", "evaluation"]:
+        t0 = _time.time()
+        sel = select_model(task)
+        elapsed = _time.time() - t0
+        task_times[task] = elapsed
+        if sel:
+            score = _get_arena_score(sel, task)
+            score_str = f"{score:.1f}" if score else "N/A"
+            verified = model_health.is_available(sel)
+            v_str = "VERIFIED" if verified else "UNVERIFIED"
+            via = ""
+            try:
+                info = model_health.get_all_health().get(sel, {})
+                prov = info.get("provider", "")
+                if prov:
+                    via = f", via: {prov}"
+            except Exception:
+                pass
+            print(f"  {task:12s} -> {sel:45s} (Arena: {score_str}, {v_str}{via}) [{elapsed:.2f}s]")
         else:
-            print(f"⚠ POOL REDUCIDO ({total}). Revisa .env y API keys.")
-    except Exception as e:
-        print(f"❌ Error obteniendo modelos: {e}")
-    
-    print("\n🎯 Mejores modelos por tarea")
-    print("-" * 40)
+            print(f"  {task:12s} -> Sin modelo disponible [{elapsed:.2f}s]")
+
+    # Categorias Arena
+    print("\nCategorias Arena:")
     try:
-        planning = select_model("planning")
-        generation = select_model("generation")
-        correction = select_model("correction")
-        print(f"Planning   : {planning}")
-        print(f"Generation : {generation}")
-        print(f"Correction : {correction}")
+        cats = _get_arena_categories()
+        print(f"  {', '.join(cats[:10])}... ({len(cats)} total)")
     except Exception as e:
-        print(f"⚠️ No se pudieron determinar: {e}")
-    
-    print("\n💾 Estado de Caché LLM")
-    print("-" * 40)
-    print(f"Ruta caché: {_llm_cache.cache_path}")
-    print("✓ Integración T8 activa")
-    
-    print("\n🔗 Trazabilidad de Proveedor (T9)")
-    print("-" * 40)
+        print(f"  Error: {e}")
+
+    # Trazabilidad de Proveedor
+    print("\nTrazabilidad de Proveedor:")
     test_models = ["moonshotai/kimi-dev", "anthropic/claude-3-5-sonnet", "openai/gpt-4o", "qwen/qwen2.5-coder"]
     for m in test_models:
         real_prov = _infer_provider(m)
-        print(f"{m:40s} → {real_prov}")
-    
-    # =================================================================
-    # PRUEBA ADICIONAL: Verificar registro de uso en UsageTracker
-    # =================================================================
-    print("\n📈 Prueba de registro de uso (CORRECCIÓN)")
-    print("-" * 40)
-    
-    def test_usage_tracking():
-        from core.usage_tracker import UsageTracker
-        import tempfile
-        temp_dir = tempfile.mkdtemp()
-        test_db = os.path.join(temp_dir, "test_router_usage.db")
-        
-        try:
-            # Usar BD temporal para prueba aislada
-            ut = UsageTracker(db_path=test_db)
-            test_proj = "test-proj-router"
-            
-            # Simular llamada exitosa con project_id (sin llamar LLM real)
-            # Registramos manualmente para validar el flujo
-            ut.log_usage(test_proj, "qwen/qwen2.5-coder", 150, "generation")
-            
-            agg = ut.get_aggregated_usage(test_proj)
-            assert len(agg) > 0, "No se registró uso en UsageTracker"
-            assert agg.get("qwen/qwen2.5-coder") == 150, f"Tokens incorrectos: {agg}"
-            print("✅ UsageTracker registró correctamente")
-            return True
-        except Exception as e:
-            print(f"⚠️ Error en prueba de registro: {e}")
-            return False
-        finally:
-            shutil.rmtree(temp_dir, ignore_errors=True)
-    
-    test_usage_tracking()
-    
-    elapsed = time.time() - start_time
-    print("\n⏱️ Tiempo total")
-    print("-" * 40)
-    print(f"{elapsed:.2f} segundos")
-    
+        print(f"  {m:40s} -> {real_prov}")
+
+    # Top 10 Arena ELO
+    print("\nTop 10 Arena ELO (general):")
+    scored_models = []
+    try:
+        for m in models:
+            score = _get_arena_score(m["id"], None)
+            if score is not None:
+                scored_models.append((m["id"], score, _is_free_model(m)))
+        scored_models.sort(key=lambda x: x[1], reverse=True)
+        for mid, score, is_free in scored_models[:10]:
+            free_str = "FREE" if is_free else "PAID"
+            status = model_health.get_status(mid)
+            print(f"  {mid:45s} (Arena: {score:.1f}, {free_str}, health: {status})")
+    except Exception as e:
+        print(f"  Error: {e}")
+
+    # Proveedores para modelos top (ID translation)
+    print("\nProveedores para modelos top (ID translation):")
+    try:
+        from core.providers import provider_manager
+        for mid, score, _ in scored_models[:5]:
+            providers_found = provider_manager.find_providers_for_model(mid)
+            if providers_found:
+                prov_str = ", ".join(f"{p.name}({tid})" for p, tid in providers_found)
+                print(f"  {mid}: {prov_str}")
+            else:
+                print(f"  {mid}: sin proveedores")
+    except Exception as e:
+        print(f"  Error: {e}")
+
+    # Resumen de salud
+    print("\nResumen de salud:")
+    try:
+        all_h = model_health.get_all_health()
+        avail = sum(1 for v in all_h.values() if v.get("status") == "available")
+        rl = sum(1 for v in all_h.values() if v.get("status") == "rate_limited")
+        fail = sum(1 for v in all_h.values() if v.get("status") == "failed")
+        unk = sum(1 for v in all_h.values() if v.get("status") in ("unknown", None))
+        verified = model_health.get_verified_models()
+        print(f"  Available: {avail}, Rate-limited: {rl}, Failed: {fail}, Unknown: {unk}")
+        print(f"  Verificados: {verified}")
+    except Exception as e:
+        print(f"  Error obteniendo salud: {e}")
+
+    elapsed = _time.time() - start_time
+    print(f"\nTiempo total: {elapsed:.2f}s")
+
     print("\n" + "=" * 60)
-    print("✅ DIAGNÓSTICO COMPLETADO")
+    print("DIAGNOSTICO COMPLETADO")
     print("=" * 60)

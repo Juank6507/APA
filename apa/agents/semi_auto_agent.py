@@ -334,6 +334,9 @@ class SemiAutoAgent:
                 user_prompt, target_file, existing_content
             )
 
+            self._report(on_progress, "planificador", f"Consultando Planificador (modelo: seleccionando...)...")
+            self._log.append(f"[PLANIFICADOR] Enviando consulta al LLM...")
+
             planner_response = call_llm(
                 task_type="planning",
                 system_prompt=PLANIFICADOR_SYSTEM_PROMPT,
@@ -343,8 +346,12 @@ class SemiAutoAgent:
             )
 
             if not planner_response.get("success"):
-                result.error = f"Error del Planificador: {planner_response.get('error', 'sin respuesta')}"
-                self._log.append(f"ERROR Planificador: {result.error}")
+                detail = planner_response.get('error', 'sin respuesta')
+                model = planner_response.get('model_used', 'desconocido')
+                attempts = planner_response.get('attempts', '?')
+                result.error = f"Error del Planificador (modelo: {model}, intentos: {attempts}): {detail}"
+                self._log.append(f"[PLANIFICADOR] ERROR: {result.error}")
+                self._report(on_progress, "planificador", f"Error: {detail}")
                 self._state = AgentState.FAILED
                 return result
 
@@ -354,7 +361,8 @@ class SemiAutoAgent:
             self._model_used_planner = result.model_used
             self._raw_planner_output = planner_output
             result.log = self._log.copy()
-            self._log.append(f"Planificador OK (modelo: {result.model_used})")
+            self._log.append(f"[PLANIFICADOR] OK — modelo: {result.model_used}, intentos: {planner_response.get('attempts', '?')}")
+            self._report(on_progress, "planificador", f"Planificador respondió (modelo: {result.model_used})")
 
             if self._cancelled:
                 self._state = AgentState.CANCELLED
@@ -362,14 +370,17 @@ class SemiAutoAgent:
                 return result
 
             # Parsear output del Planificador en tareas
+            self._log.append(f"[PLANIFICADOR] Parseando output ({len(planner_output)} chars)...")
+            self._report(on_progress, "planificador", "Parseando plan...")
             blocks_data = PlannerOutputParser._parse_blocks(planner_output)
             
             if not blocks_data:
                 # Intentar parseo simple (tarea única sin formato de bloques)
+                self._log.append("[PLANIFICADOR] Sin bloques multi-tarea — intentando parseo simple...")
                 parsed = PlannerOutputParser.parse(planner_output)
                 if parsed.get("errores"):
                     result.error = f"Error de parseo: {'; '.join(parsed['errores'])}"
-                    self._log.append(f"ERROR parseo: {result.error}")
+                    self._log.append(f"[PLANIFICADOR] ERROR parseo: {result.error}")
                     self._state = AgentState.FAILED
                     return result
                 blocks_data = [{
@@ -388,7 +399,7 @@ class SemiAutoAgent:
                     status=TaskStatus.PENDING,
                 )
                 self._plan.append(task)
-                self._log.append(f"Tarea planificada: {task.task_id} → {task.script} @ {task.anchor}")
+                self._log.append(f"[PLANIFICADOR] Tarea planificada: {task.task_id} → {task.script} @ {task.anchor}")
             
             result.tasks = self._plan
             result.success = True
@@ -627,6 +638,7 @@ class SemiAutoAgent:
             # ─── ETAPA 2: Llamar al Codificador ───
             self._report(on_progress, "codificador", 
                          f"Consultando Codificador para {task.task_id}...")
+            self._log.append(f"[CODIFICADOR] {task.task_id} — Enviando consulta al LLM...")
             
             # Obtener contenido actual del archivo
             original_content = self._original_contents.get(task.script, "")
@@ -651,14 +663,16 @@ class SemiAutoAgent:
             )
 
             if not coder_response.get("success"):
-                result.error = f"Error del Codificador: {coder_response.get('error', 'sin respuesta')}"
-                self._log.append(f"ERROR Codificador: {result.error}")
+                result.error = f"Error del Codificador (modelo: {coder_response.get('model_used','?')}, intentos: {coder_response.get('attempts','?')}): {coder_response.get('error', 'sin respuesta')}"
+                self._log.append(f"[CODIFICADOR] ERROR: {result.error}")
+                self._report(on_progress, "codificador", f"Error: {coder_response.get('error', 'sin respuesta')}")
                 return result
 
             coder_output = coder_response["content"]
             result.coder_output = coder_output
             result.model_used_coder = coder_response.get("model_used", "")
-            self._log.append(f"Codificador OK (modelo: {result.model_used_coder})")
+            self._log.append(f"[CODIFICADOR] OK — modelo: {result.model_used_coder}, intentos: {coder_response.get('attempts', '?')}")
+            self._report(on_progress, "codificador", f"Código generado (modelo: {result.model_used_coder})")
 
             if self._cancelled:
                 result.error = "Cancelado por el usuario"
@@ -669,6 +683,7 @@ class SemiAutoAgent:
             # ─── ETAPA 3: Ensamblar ───
             self._report(on_progress, "ensamblador", 
                          f"Ensamblando {task.task_id}...")
+            self._log.append(f"[ENSAMBLADOR] {task.task_id} — Ensamblando código en {task.script}...")
 
             assembly_result = self.assembler.run_full(
                 planner_text=task.planner_output,
@@ -683,7 +698,16 @@ class SemiAutoAgent:
             result.validation_result = assembly_result.validation_result
             result.success = assembly_result.success
             result.planner_output = task.planner_output
-            self._log.append(f"Ensamblaje {'OK' if assembly_result.success else 'CON ERRORES'}")
+            self._log.append(f"[ENSAMBLADOR] {task.task_id} — {'OK' if assembly_result.success else 'CON ERRORES'}")
+            
+            # Log de validación
+            val = result.validation_result or {}
+            val_rc = val.get("returncode", -1)
+            if val_rc == 0:
+                self._log.append(f"[ENSAMBLADOR] Validación OK (sin errores de sintaxis)")
+            else:
+                val_out = val.get("output", "")[:200]
+                self._log.append(f"[ENSAMBLADOR] Validación: returncode={val_rc}, output: {val_out}")
 
             if hasattr(assembly_result, 'log') and assembly_result.log:
                 result.log = assembly_result.log
@@ -789,7 +813,7 @@ class SemiAutoAgent:
             )
 
             if not coder_response.get("success"):
-                result.error = f"Error del Codificador: {coder_response.get('error', 'sin respuesta')}"
+                result.error = f"Error del Codificador (modelo: {coder_response.get('model_used','?')}, intentos: {coder_response.get('attempts','?')}): {coder_response.get('error', 'sin respuesta')}"
                 result.log.append(f"ERROR Codificador: {result.error}")
                 return result
 

@@ -232,6 +232,21 @@ class App:
         self.project_root.trace_add("write", lambda *_: self.on_project_root_change())
         self.refresh_plan_view()
 
+        # Lanzar background probing de modelos al abrir
+        self._start_model_probing()
+
+    def _start_model_probing(self):
+        """Lanza el probing de modelos en segundo plano al abrir la aplicación."""
+        try:
+            from apa.core import model_health
+            from apa.core.router import get_all_available_models
+            models = get_all_available_models()
+            if models:
+                model_health.start_background_probing(models)
+        except Exception as e:
+            # No bloquear la apertura si falla el probing
+            pass
+
     # ─────────────────────────────────────────────────────────────────────────
     # Shortcuts & Setup Básico
     # ─────────────────────────────────────────────────────────────────────────
@@ -279,7 +294,7 @@ class App:
             self.refresh_plan_view()
  
     def _on_close(self):
-        """Limpia archivos temporales al cerrar la aplicación."""
+        """Limpia archivos temporales al cerrar la aplicación y guarda health."""
         try:
             root_dir = self.get_source_root()
             # Buscar y eliminar archivos *_original*
@@ -290,6 +305,13 @@ class App:
                     except:
                         pass
         except:
+            pass
+        
+        # Flush de model_health antes de cerrar
+        try:
+            from apa.core import model_health
+            model_health.on_session_close()
+        except Exception:
             pass
         
         self.root.destroy()

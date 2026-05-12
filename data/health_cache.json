@@ -1,0 +1,93 @@
+{
+  "version": 1,
+  "updated_at": "2026-05-12T01:46:22.092014",
+  "models": {
+    "google/gemma-4-26b-a4b-it:free": {
+      "status": "rate_limited",
+      "verified_at": 1778546765.7022932,
+      "provider": "openrouter",
+      "error": "HTTP 429 (rate limit)",
+      "rate_limited_count": 6,
+      "rate_limited_at": 1778546765.7022932,
+      "probe_errors": {
+        "openrouter": "HTTP 429 (rate limit)"
+      }
+    },
+    "openai/gpt-4o-mini": {
+      "status": "rate_limited",
+      "verified_at": 1778546781.1449447,
+      "provider": "openai",
+      "error": "HTTP 429 (rate limit)",
+      "rate_limited_count": 8,
+      "rate_limited_at": 1778546781.1449447,
+      "probe_errors": {
+        "openai": "HTTP 429 (rate limit)",
+        "openrouter": "HTTP 402"
+      }
+    },
+    "qwen/qwen3-coder:free": {
+      "status": "rate_limited",
+      "verified_at": 1778546767.4576943,
+      "provider": "openrouter",
+      "error": "HTTP 429 (rate limit)",
+      "rate_limited_count": 8,
+      "rate_limited_at": 1778546767.4576943,
+      "probe_errors": {
+        "openrouter": "HTTP 429 (rate limit)"
+      }
+    },
+    "openai/gpt-oss-120b:free": {
+      "status": "available",
+      "verified_at": 1778546778.4250965,
+      "provider": "openrouter",
+      "error": null,
+      "rate_limited_count": 0,
+      "rate_limited_at": null,
+      "probe_errors": {}
+    },
+    "deepseek/deepseek-r1:free": {
+      "status": "failed",
+      "verified_at": 1778546766.6381745,
+      "provider": "",
+      "error": "HTTP 404",
+      "rate_limited_count": 0,
+      "rate_limited_at": null,
+      "probe_errors": {
+        "openrouter": "HTTP 404"
+      }
+    },
+    "meta-llama/llama-4-maverick:free": {
+      "status": "failed",
+      "verified_at": 1778546768.271783,
+      "provider": "",
+      "error": "HTTP 404",
+      "rate_limited_count": 0,
+      "rate_limited_at": null,
+      "probe_errors": {
+        "openrouter": "HTTP 404"
+      }
+    },
+    "anthropic/claude-opus-4-6": {
+      "status": "failed",
+      "verified_at": 1778546779.3392186,
+      "provider": "",
+      "error": "HTTP 400",
+      "rate_limited_count": 0,
+      "rate_limited_at": null,
+      "probe_errors": {
+        "openrouter": "HTTP 402"
+      }
+    },
+    "claude-sonnet-4-6": {
+      "status": "failed",
+      "verified_at": 1778546782.0875056,
+      "provider": "",
+      "error": "HTTP 400",
+      "rate_limited_count": 0,
+      "rate_limited_at": null,
+      "probe_errors": {
+        "openrouter": "HTTP 402"
+      }
+    }
+  }
+}

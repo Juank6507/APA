@@ -36,11 +36,14 @@ class Settings(BaseSettings):
     arena_cache_ttl_hours: int = 24
     arena_api_timeout_sec: float = 1.5
     arena_elite_threshold: int = 1250
+    # Mapeo de task_type de APA → categorías reales del dataset Arena (lmarena-ai/leaderboard-dataset)
+    # Categorías disponibles: overall, coding, hard_prompts, math, instruction_following,
+    # creative_writing, multi_turn, webdev, webdev-html, webdev-react, + idiomas
     arena_task_mapping: dict = {
-        "planning": "hard-prompts",
-        "generation": "coding",
-        "correction": "reasoning",
-        "evaluation": "math"
+        "planning": "hard_prompts",       # Tareas de planificación → hard_prompts (razonamiento difícil)
+        "generation": "coding",           # Generación de código → coding
+        "correction": "coding",           # Corrección de código → coding
+        "evaluation": "math"              # Evaluación → math (razonamiento cuantitativo)
     }
     
     # Ollama (local)

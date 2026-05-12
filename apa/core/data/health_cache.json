@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "updated_at": "2026-05-12T00:24:48.932681",
+  "models": {
+    "google/gemma-4-31b-it:free": {
+      "status": "rate_limited",
+      "verified_at": 1778541888.9326818,
+      "provider": "openrouter",
+      "error": "HTTP 429 (rate limit)",
+      "rate_limited_count": 3,
+      "rate_limited_at": 1778541888.9326818,
+      "probe_errors": {
+        "openrouter": "HTTP 429 (rate limit)"
+      }
+    }
+  }
+}
