@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2026-05-14T01:36:03.066032",
+  "updated_at": "2026-05-14T16:58:19.514067",
   "models": {
     "pr-test": {
       "status": "unknown",
@@ -32,15 +32,92 @@
       "probe_errors": {}
     },
     "qwen2.5-coder:1.5b": {
-      "status": "failed",
+      "status": "unknown",
       "verified_at": 1778718963.066033,
       "provider": "ollama",
-      "error": "All providers failed",
+      "error": null,
       "rate_limited_count": 0,
       "rate_limited_at": null,
       "probe_errors": {
         "unknown": "All providers failed",
         "ollama": "All providers failed"
+      }
+    },
+    "anthropic/claude-opus-4.7-fast": {
+      "status": "unknown",
+      "verified_at": 1778769166.02026,
+      "provider": "openrouter",
+      "error": null,
+      "rate_limited_count": 0,
+      "rate_limited_at": null,
+      "probe_errors": {
+        "openrouter": "All providers failed"
+      }
+    },
+    "test-payment-model": {
+      "status": "unknown",
+      "verified_at": 1778769118.0296264,
+      "provider": "openrouter",
+      "error": null,
+      "rate_limited_count": 0,
+      "rate_limited_at": null,
+      "probe_errors": {
+        "openrouter": "HTTP 402 (payment required)"
+      }
+    },
+    "http-test-402": {
+      "status": "unknown",
+      "verified_at": 1778769118.0355327,
+      "provider": "openrouter",
+      "error": null,
+      "rate_limited_count": 0,
+      "rate_limited_at": null,
+      "probe_errors": {
+        "openrouter": "HTTP 402 (payment required)"
+      }
+    },
+    "http-test-429": {
+      "status": "unknown",
+      "verified_at": 1778769118.0355327,
+      "provider": "openrouter",
+      "error": null,
+      "rate_limited_count": 1,
+      "rate_limited_at": 1778769118.0355327,
+      "probe_errors": {
+        "openrouter": "HTTP 429 (rate limit)"
+      }
+    },
+    "http-test-500": {
+      "status": "unknown",
+      "verified_at": 1778769118.0355327,
+      "provider": "openrouter",
+      "error": null,
+      "rate_limited_count": 0,
+      "rate_limited_at": null,
+      "probe_errors": {
+        "openrouter": "HTTP 503 (server error, retryable)"
+      }
+    },
+    "avail-pr-test": {
+      "status": "unknown",
+      "verified_at": 1778769118.0355327,
+      "provider": "",
+      "error": null,
+      "rate_limited_count": 0,
+      "rate_limited_at": null,
+      "probe_errors": {
+        "openrouter": "HTTP 402 (payment required)"
+      }
+    },
+    "claude-opus-4-6": {
+      "status": "payment_required",
+      "verified_at": 1778774299.5140676,
+      "provider": "anthropic",
+      "error": "HTTP 402 (payment required)",
+      "rate_limited_count": 0,
+      "rate_limited_at": null,
+      "probe_errors": {
+        "anthropic": "HTTP 402 (payment required)"
       }
     }
   }

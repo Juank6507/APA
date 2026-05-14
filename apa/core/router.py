@@ -140,26 +140,19 @@ def _estimate_tokens(text: str) -> int:
 
 
 def _classify_error_type(error_str: str) -> str:
-    """Clasifica el tipo de error a partir del string de error.
+    """P8c: Clasifica el tipo de error usando model_health._classify_error().
 
-    Returns: rate_limit, timeout, payment, auth, server, unknown
+    ANTES: Tenía su propia lógica con nombres distintos (model_not_found, server).
+    AHORA: Delega a model_health._classify_error() para garantizar consistencia.
+    Los nombres de categoría ahora son los mismos en todo APA:
+        rate_limit | not_found | auth | payment | server_error |
+        timeout | connection | temporarily_unavailable | unknown
+
+    Returns: una de las categorías anteriores, o "" si error_str está vacío.
     """
     if not error_str:
         return ""
-    err = str(error_str).lower()
-    if "429" in err or "rate" in err or "limit" in err or "throttl" in err:
-        return "rate_limit"
-    if "timeout" in err or "timed out" in err:
-        return "timeout"
-    if "402" in err or "payment" in err or "billing" in err or "quota" in err:
-        return "payment"
-    if "401" in err or "403" in err or "auth" in err or "permission" in err:
-        return "auth"
-    if "404" in err or "not found" in err or "model" in err:
-        return "model_not_found"
-    if "5" in err[:1] or "server" in err or "internal" in err:
-        return "server"
-    return "unknown"
+    return model_health._classify_error(error_str)
 
 
 def _estimate_cost_usd(
@@ -253,20 +246,27 @@ def populate_pool(force: bool = False) -> int:
 
         count = 0
         for m in all_models:
-            model_id = m.get("id", "")
+            # F6: Usar prefixed_id como identificador principal del modelo
+            # prefixed_id = "OPR:anthropic/claude-opus-4-6" o "ANT:claude-opus-4-6"
+            prefixed_id = m.get("prefixed_id", "")
+            base_id = m.get("base_id", m.get("id", ""))
             provider_name = m.get("provider", "")
-            if not model_id or not provider_name:
-                continue
+            if not prefixed_id or not provider_name:
+                # Fallback: si no hay prefixed_id, usar el id original
+                if not base_id:
+                    continue
+                prefixed_id = provider_manager.make_prefixed_id(provider_name, base_id)
 
             # Verificar si ya existe esta composite key
-            existing = _global_pool.get_entry(provider_name, model_id)
+            existing = _global_pool.get_entry(provider_name, prefixed_id)
             if existing and not force:
                 continue  # Ya existe, no sobreescribir
 
             # Crear PoolEntry con composite key (P-1)
+            # F6: model_id ahora es el prefixed_id (PROVEEDOR:modelo)
             entry = PoolEntry(
                 provider=provider_name,
-                model_id=model_id,
+                model_id=prefixed_id,
                 context_length=m.get("context_length", 8192) or 8192,
                 is_free=bool(m.get("is_free", False) or m.get("is_free_tier", False)),
                 provider_confidence=m.get("provider_confidence", 50.0),
@@ -274,14 +274,27 @@ def populate_pool(force: bool = False) -> int:
                 pricing=m.get("pricing", {}),
             )
 
-            # P-3: Arena score (Capa 2)
-            arena_score = _get_arena_score(model_id, None)
+            # P-3: Arena score (Capa 2) — buscar usando base_id
+            # F6: El Arena score se busca con el nombre original (sin prefijo)
+            # porque Arena no conoce nuestros prefijos de proveedor
+            arena_score = _get_arena_score(base_id, None)
             if arena_score is not None:
                 entry.arena_score = arena_score
                 entry.apa_score = arena_score  # APA placeholder (DEFERRED)
 
-            # Sync health from model_health
-            entry.health_status = model_health.get_status(model_id)
+            # v1.1: Obtener TODOS los scores por categoría del modelo
+            # Esto permite que get_ranked_entries() use task_score() con
+            # puntuaciones diferentes según el tipo de tarea.
+            try:
+                af = _get_arena_module()
+                all_scores = af.get_model_all_scores(base_id)
+                if all_scores:
+                    entry.arena_scores = all_scores
+            except Exception:
+                pass  # No crítico — fallback a composite_score
+
+            # Sync health from model_health — usar base_id para lookup
+            entry.health_status = model_health.get_status(base_id)
 
             _global_pool.add_entry(entry)
             count += 1
@@ -315,8 +328,13 @@ def _sync_health_to_pool() -> int:
     """
     updated = 0
     try:
+        from core.providers import provider_manager as _pm
         for entry in _global_pool.get_all_entries():
-            mh_status = model_health.get_status(entry.model_id)
+            # F6: model_health usa base_id, pool usa prefixed_id
+            _, base_id = _pm.parse_prefixed_id(entry.model_id)
+            if base_id is None or base_id == entry.model_id:
+                base_id = entry.model_id
+            mh_status = model_health.get_status(base_id)
             if mh_status != entry.health_status:
                 if mh_status == "available":
                     _global_pool.mark_available(entry.provider, entry.model_id)
@@ -563,10 +581,11 @@ def select_model_entry(task_type: str, quality_mode: str = None) -> Optional[Poo
             return best
 
         # PASO 2: Sin verified -> buscar unknown/rate_limited
-        # (excluir payment_required y failed)
+        # F10: También excluir temporarily_unavailable (cooldown 60s)
+        # Estos modelos están en timeout temporal — no intentar de inmediato
         ranked = _global_pool.get_ranked_entries(
             task_type=task_type,
-            exclude_statuses=["payment_required", "failed"],
+            exclude_statuses=["payment_required", "failed", "temporarily_unavailable"],
         )
 
         if ranked:
@@ -791,22 +810,47 @@ def _sync_health_after_call(model_id: str, provider: str, success: bool,
     """Sincroniza el resultado de una llamada LLM al Pool y model_health.
 
     D-3/D-4/D-5: Response-Code-Driven Scheduling.
+
+    F6: model_id puede ser un prefixed_id (ej: "OPR:anthropic/claude-opus-4-6").
+    - Para el Pool: se usa el prefixed_id (es la clave composite).
+    - Para model_health: se extrae el base_id (model_health no conoce prefijos).
     """
     try:
+        # F6: Extraer base_id para model_health
+        try:
+            from core.providers import provider_manager
+            _, base_id = provider_manager.parse_prefixed_id(model_id)
+            if base_id is None or base_id == model_id:
+                base_id = model_id  # Sin prefijo, usar tal cual
+        except Exception:
+            base_id = model_id  # Fallback
+
         if success:
-            model_health.mark_available(model_id, provider)
+            model_health.mark_available(base_id, provider)
             _global_pool.mark_available(provider, model_id)
         else:
             error_type = model_health._classify_error(error)
             if error_type == "rate_limit":
-                model_health.mark_rate_limited(model_id, provider)
+                model_health.mark_rate_limited(base_id, provider)
                 _global_pool.mark_rate_limited(provider, model_id)
             elif error_type == "payment":
-                model_health.mark_payment_required(model_id, provider)
+                model_health.mark_payment_required(base_id, provider)
                 _global_pool.mark_payment_required(provider, model_id)
-            else:
-                model_health.mark_failed(model_id, provider, error)
+            elif error_type in ("auth", "not_found"):
+                # Errores permanentes: marca como failed
+                model_health.mark_failed(base_id, provider, error)
                 _global_pool.mark_failed(provider, model_id)
+            elif error_type in ("timeout", "connection", "server_error", "temporarily_unavailable"):
+                # F10: Errores TRANSITORIOS → temporarily_unavailable (cooldown 60s)
+                # NO marcar como 'failed' permanente — estos errores son reintentables
+                model_health.mark_temporarily_unavailable(base_id, provider, error)
+                _global_pool.mark_temporarily_unavailable(provider, model_id)
+            else:
+                # F10: 'unknown' → temporarily_unavailable en vez de failed
+                # Cualquier error desconocido se trata como transitorio
+                # (antes era failed permanente → cascada de fallos)
+                model_health.mark_temporarily_unavailable(base_id, provider, error)
+                _global_pool.mark_temporarily_unavailable(provider, model_id)
     except Exception as e:
         logger.debug(f"_sync_health_after_call error: {e}")
 
@@ -881,12 +925,21 @@ def call_llm(
                     "cost_usd": 0.0,
                     "arena_score": None,
                     "provider": "",
+                    "http_status": None,  # P8b
                 }
 
-            model_id = entry.model_id
+            model_id = entry.model_id  # F6: Esto es ahora un prefixed_id (ej: "OPR:anthropic/claude-opus-4-6")
             provider_name = entry.provider
             # v5.3: Arena score del modelo seleccionado
             arena_score_val = entry.arena_score
+
+            # F6: Extraer base_id del prefixed_id para la llamada real al provider
+            # El prefixed_id es para identificar internamente; el base_id es lo que
+            # el provider API realmente entiende.
+            _, base_id = provider_manager.parse_prefixed_id(model_id)
+            if base_id is None or base_id == model_id:
+                # No tiene prefijo reconocido — usar tal cual (compatibilidad)
+                base_id = model_id
 
             messages = [
                 {"role": "system", "content": system_prompt},
@@ -894,10 +947,11 @@ def call_llm(
             ]
 
             # v5.1: Intentar provider directo del PoolEntry primero
+            # F6: Usar base_id para la traducción y llamada al provider
             result = None
             if provider_name in provider_manager.providers:
                 provider = provider_manager.providers[provider_name]
-                translated_id = provider_manager.translate_model_id(model_id, provider_name)
+                translated_id = provider_manager.translate_model_id(base_id, provider_name)
                 try:
                     result = provider.call(translated_id, messages, max_tokens, temperature)
                     if result.get("success"):
@@ -907,8 +961,9 @@ def call_llm(
                     result = None
 
             # Fallback: call_with_fallback si provider directo falló
+            # F6: Usar base_id para el fallback (los providers no conocen nuestros prefijos)
             if result is None or not result.get("success"):
-                result = provider_manager.call_with_fallback(model_id, messages, max_tokens, temperature)
+                result = provider_manager.call_with_fallback(base_id, messages, max_tokens, temperature)
 
             # v5.3: Calcular latencia de este intento
             attempt_elapsed_ms = int((time.time() - attempt_start_time) * 1000)
@@ -919,6 +974,20 @@ def call_llm(
 
                 # Sincronizar health al Pool y model_health
                 _sync_health_after_call(model_id, actual_provider, True)
+
+                # F12: Si el modelo que respondió es DIFERENTE del seleccionado (fallback),
+                # actualizar arena_score_val y model_id para reflejar la realidad.
+                # Antes: se logueaba el score del modelo seleccionado (93.4) aunque
+                # respondió un modelo distinto (71.0) → discrepancia Arena.
+                if actual_model != base_id and actual_model != model_id:
+                    # El fallback usó un modelo distinto — obtener su Arena score real
+                    fallback_arena = _get_arena_score(actual_model, task_type)
+                    if fallback_arena is not None:
+                        arena_score_val = fallback_arena
+                        logger.info(f"call_llm: fallback de {base_id} a {actual_model}, "
+                                   f"Arena actualizado: {fallback_arena:.1f}")
+                    # Sincronizar health del modelo que realmente respondió
+                    _sync_health_after_call(actual_model, actual_provider, True)
 
                 # Correccion de trazabilidad de proveedor
                 try:
@@ -1026,6 +1095,25 @@ def call_llm(
                 # así que select_model_entry() en el siguiente intento escogerá otro.
                 logger.info(f"call_llm: intento {attempt} falló ({error_type_classified}), "
                            f"rotando modelo...")
+                # F15: Si es el último intento, retornar con error_type en el resultado
+                if attempt == 3:
+                    total_elapsed_ms = int((time.time() - call_start_time) * 1000)
+                    return {
+                        "content": "",
+                        "model_used": model_id,
+                        "provider_used": log_provider,
+                        "success": False,
+                        "attempts": attempt,
+                        "error": error_str,
+                        "error_type": error_type_classified,  # F15: Clasificación del error
+                        "tokens_input": _estimate_tokens(system_prompt + user_prompt),
+                        "tokens_output": 0,
+                        "latency_ms": attempt_elapsed_ms,
+                        "cost_usd": 0.0,
+                        "arena_score": arena_score_val,
+                        "provider": log_provider,
+                        "http_status": result.get("http_status"),  # P8b: Propagar HTTP status
+                    }
                 continue
         except Exception as e:
             attempt_elapsed_ms = int((time.time() - attempt_start_time) * 1000)
@@ -1072,12 +1160,14 @@ def call_llm(
         "success": False,
         "attempts": 3,
         "error": "Reintentos agotados",
+        "error_type": "retries_exhausted",  # F15
         "tokens_input": 0,
         "tokens_output": 0,
         "latency_ms": total_elapsed_ms,
         "cost_usd": 0.0,
         "arena_score": None,
         "provider": "",
+        "http_status": None,  # P8b
     }
 
 

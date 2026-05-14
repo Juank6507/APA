@@ -395,6 +395,13 @@ def _cleanup_expired_rate_limits() -> None:
                     info["error"] = None
                     info["rate_limited_at"] = None
                     logger.debug(f"{model_id}: rate_limited expirado (cooldown {cooldown}s, #{count}) -> unknown")
+            # F10: Limpiar temporarily_unavailable expirados
+            elif info.get("status") == "temporarily_unavailable":
+                tu_at = info.get("verified_at") or 0
+                if now - tu_at >= _TEMPORARILY_UNAVAILABLE_COOLDOWN:
+                    info["status"] = "unknown"
+                    info["error"] = None
+                    logger.debug(f"{model_id}: temporarily_unavailable expirado (cooldown {_TEMPORARILY_UNAVAILABLE_COOLDOWN}s) -> unknown")
 
 
 # ============================================================================
@@ -497,6 +504,49 @@ def mark_failed(model_id: str, provider: str = "", error: str = "") -> None:
     maybe_flush()
 
 
+_TEMPORARILY_UNAVAILABLE_COOLDOWN = 60  # F10: Cooldown para temporarily_unavailable
+
+
+def mark_temporarily_unavailable(model_id: str, provider: str = "", error: str = "") -> None:
+    """F10: Marca un modelo como temporarily_unavailable (error transitorio).
+
+    A diferencia de mark_failed(), este estado tiene cooldown corto (60s).
+    Tras expirar, el modelo vuelve a 'unknown' y puede ser re-seleccionado.
+
+    Errores transitorios: timeout, connection, DNS, "Not available", etc.
+    NO sobreescribe status 'available'.
+    """
+    if not model_id:
+        return
+    now = _now_epoch()
+    with _health_lock:
+        existing = _health_data.get(model_id)
+        if existing and existing.get("status") == "available":
+            logger.debug(f"{model_id}: ignoro temporarily_unavailable (ya estaba available)")
+            if provider and error:
+                probe_errors = existing.get("probe_errors", {})
+                probe_errors[provider] = error
+                existing["probe_errors"] = probe_errors
+            return
+
+        prev_errors = existing.get("probe_errors", {}) if existing else {}
+        if provider and error:
+            prev_errors[provider] = error
+
+        _health_data[model_id] = {
+            "status": "temporarily_unavailable",
+            "verified_at": now,
+            "provider": provider,
+            "error": error,
+            "rate_limited_at": None,
+            "rate_limited_count": 0,
+            "probe_errors": prev_errors,
+        }
+    logger.info(f"{model_id} -> temporarily_unavailable (provider: {provider}, "
+                f"error: {error}, cooldown: {_TEMPORARILY_UNAVAILABLE_COOLDOWN}s)")
+    maybe_flush()
+
+
 def mark_rate_limited(model_id: str, provider: str = "") -> None:
     """D-3: Marca un modelo como rate_limited (HTTP 429 → cooldown)."""
     if not model_id:
@@ -593,17 +643,76 @@ def report_http_status(model_id: str, http_status: int, provider: str = "", erro
 # ============================================================================
 
 def _classify_error(error_str: str) -> str:
+    """F9: Clasificador de errores comprehensivo.
+
+    Reconoce patrones de error de todos los providers conocidos
+    (OpenRouter, Anthropic, OpenAI, Groq, GitHub, Together, Fireworks, Ollama)
+    y clasifica de forma precisa para evitar falsos 'unknown'.
+
+    Nuevas categorías vs v4.0:
+    - 'timeout': errores de timeout (antes caían a 'unknown')
+    - 'connection': errores de red/conexión (antes caían a 'unknown')
+    - 'temporarily_unavailable': errores transitorios (antes caían a 'unknown' → failed permanente)
+
+    Returns: rate_limit | not_found | auth | payment | server_error |
+             timeout | connection | temporarily_unavailable | unknown
+    """
+    if not error_str:
+        return "unknown"
     err = str(error_str).lower()
-    if "429" in err or "rate" in err:
+
+    # --- Rate limiting (prioridad máxima) ---
+    if any(kw in err for kw in ("429", "rate", "limit", "throttl", "too many", "quota exceeded", "capacity")):
         return "rate_limit"
-    if "404" in err or "not found" in err:
-        return "not_found"
-    if "401" in err or "403" in err or "auth" in err or "permission" in err:
-        return "auth"
-    if "402" in err or "payment" in err:
+
+    # --- Autenticación / Autorización ---
+    if any(kw in err for kw in ("401", "403", "invalid api key", "invalid x-api-key",
+                                 "authentication", "unauthorized", "forbidden",
+                                 "permission denied", "access denied")):
+        # Distinguir 'auth' de 'rate_limit' que también puede tener 'permission'
+        if "rate" not in err and "limit" not in err and "429" not in err:
+            return "auth"
+
+    # --- Pago requerido ---
+    if any(kw in err for kw in ("402", "payment", "billing", "insufficient", "credit")):
         return "payment"
-    if "500" in err or "502" in err or "503" in err or "server" in err:
+
+    # --- Modelo no encontrado ---
+    # F9 FIX: ya no usamos "model" como patrón (demasiado amplio)
+    # Solo match patterns específicos de modelo no encontrado
+    if any(kw in err for kw in ("404", "not found", "model_not_found", "does not exist",
+                                 "no such model", "model not found")):
+        return "not_found"
+
+    # --- Timeout ---
+    # F9: Nuevo — antes caía a 'unknown'
+    if any(kw in err for kw in ("timeout", "timed out", "deadline exceeded", "read timeout",
+                                 "connection timeout", "socket timeout")):
+        return "timeout"
+
+    # --- Errores de conexión / red ---
+    # F9: Nuevo — antes caía a 'unknown'
+    if any(kw in err for kw in ("connection", "connect", "network", "dns",
+                                 "resolve", "name or service not known",
+                                 "connectionerror", "connectionrefused",
+                                 "connectionreset", "broken pipe",
+                                 "ssl", "certificate", "proxy")):
+        return "connection"
+
+    # --- Errores de servidor (5xx) ---
+    if any(kw in err for kw in ("500", "502", "503", "504", "529",
+                                 "server", "internal", "upstream",
+                                 "overloaded", "bad gateway", "service unavailable",
+                                 "gateway timeout")):
         return "server_error"
+
+    # --- Temporalmente no disponible ---
+    # F9: Nuevo — errores transitorios que NO deberían marcar como 'failed' permanente
+    if any(kw in err for kw in ("not available", "unavailable", "temporarily",
+                                 "try again", "retry", "busy",
+                                 "overloaded", "maintenance")):
+        return "temporarily_unavailable"
+
     return "unknown"
 
 

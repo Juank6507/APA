@@ -1,4 +1,6 @@
 # apa/core/pool.py
+# v1.1 — Fix rankings: arena_scores por categoría, scoring por task_type,
+#         penalización de payment_required en composite_score.
 # v1.0 — Sprint 1: Pool con composite key (provider, model_id),
 #         3-layer ranking (APA > Arena > Provider Confidence),
 #         operaciones de salud, integración con model_health.
@@ -48,11 +50,13 @@ class HealthStatus(enum.Enum):
     D-3: rate_limited   — HTTP 429 → cooldown
     D-4: failed         — HTTP 5xx / error permanente
     D-5: payment_required — HTTP 402 → necesita pago
+    F10: temporarily_unavailable — error transitorio → cooldown corto
     """
     AVAILABLE = "available"
     RATE_LIMITED = "rate_limited"
     FAILED = "failed"
     PAYMENT_REQUIRED = "payment_required"
+    TEMPORARILY_UNAVAILABLE = "temporarily_unavailable"
     UNKNOWN = "unknown"
 
 
@@ -85,9 +89,13 @@ class PoolEntry:
     is_free: bool = False
 
     # --- 3-Layer Ranking (P-3) ---
-    arena_score: Optional[float] = None   # Capa 2: Arena ELO normalizado 0-100
+    arena_score: Optional[float] = None   # Capa 2: Arena ELO normalizado 0-100 (general)
     provider_confidence: float = 50.0     # Capa 3: Provider Confidence (P-2)
     apa_score: Optional[float] = None     # Capa 1: APA ranking (DEFERRED = arena_score)
+
+    # v1.1: Scores por categoría Arena (para ranking por task_type)
+    # Ej: {"coding": 85.3, "hard_prompts": 82.1, "general": 80.0}
+    arena_scores: Dict[str, float] = field(default_factory=dict)
 
     # --- Health status ---
     health_status: str = "unknown"  # available | rate_limited | failed | payment_required | unknown
@@ -123,23 +131,66 @@ class PoolEntry:
         Mientras tanto, se usa un esquema simple:
           - Si APA score existe: se usa directamente
           - Si no: weighted = 0.6 * arena + 0.4 * confidence
+          - v1.1: payment_required → score = 0 (no se selecciona)
         """
+        # v1.1: Modelos sin crédito no deben aparecer en el ranking
+        if self.health_status == "payment_required":
+            return 0.0
         if self.apa_score is not None:
             return self.apa_score
         arena = self.arena_score if self.arena_score is not None else 0.0
         conf = self.provider_confidence
         return 0.6 * arena + 0.4 * conf
 
+    def task_score(self, task_type: Optional[str] = None) -> float:
+        """v1.1: Score para un tipo de tarea específico.
+
+        Usa arena_scores[category] si está disponible y task_type coincide.
+        Si no, cae a composite_score.
+
+        Mapeo de task_type → categorías Arena (por prioridad):
+          planning    → hard_prompts, expert, general
+          evaluation  → math, hard_prompts, expert, general
+          generation  → creative_writing, coding, instruction_following, general
+          coding      → coding, hard_prompts, webdev, general
+          correction  → coding, instruction_following, general
+        """
+        # payment_required siempre devuelve 0
+        if self.health_status == "payment_required":
+            return 0.0
+
+        if not task_type or not self.arena_scores:
+            return self.composite_score
+
+        # Mapeo de task_type → categorías Arena (actualizado al dataset 2026)
+        category_map = {
+            "planning":    ["hard_prompts", "expert", "general"],
+            "evaluation":  ["math", "hard_prompts", "expert", "general"],
+            "generation":  ["creative_writing", "coding", "instruction_following", "general"],
+            "coding":      ["coding", "hard_prompts", "webdev", "general"],
+            "correction":  ["coding", "instruction_following", "general"],
+        }
+        categories = category_map.get(task_type, ["general"])
+
+        # Buscar la primera categoría disponible en arena_scores
+        for cat in categories:
+            if cat in self.arena_scores:
+                return 0.6 * self.arena_scores[cat] + 0.4 * self.provider_confidence
+
+        # Fallback a composite_score
+        return self.composite_score
+
 
 # ============================================================================
 # VALID_HEALTH_STATUSES — D-3/D-4/D-5
 # ============================================================================
 VALID_HEALTH_STATUSES = {
-    "available",          # Probe OK — listo para usar
-    "rate_limited",       # HTTP 429 — cooldown (D-3)
-    "failed",             # HTTP 404/401/403 — error permanente
-    "payment_required",   # HTTP 402 — necesita pago (D-5)
-    "unknown",            # Sin verificar aún
+    "available",                # Probe OK — listo para usar
+    "rate_limited",             # HTTP 429 — cooldown (D-3)
+    "failed",                   # HTTP 404/401/403 — error permanente
+    "payment_required",         # HTTP 402 — necesita pago (D-5)
+    "temporarily_unavailable",  # F10: Error transitorio — cooldown corto (timeout, connection, etc.)
+    "unknown",                  # Sin verificar aún
 }
 
 
@@ -220,6 +271,19 @@ class Pool:
                 entry.health_status = "payment_required"
                 entry.verified_at = time.time()
 
+    def mark_temporarily_unavailable(self, provider: str, model_id: str) -> None:
+        """F10: Marca como temporarily_unavailable (error transitorio con cooldown).
+
+        A diferencia de 'failed' que es permanente, este estado tiene cooldown
+        corto (60s) y el modelo puede ser re-seleccionado tras expirar.
+        No sobreescribe 'available'.
+        """
+        with self._lock:
+            entry = self._entries.get((provider, model_id))
+            if entry and entry.health_status != "available":
+                entry.health_status = "temporarily_unavailable"
+                entry.verified_at = time.time()
+
     # --- Operaciones de ranking (P-3) ---
 
     def set_arena_score(self, provider: str, model_id: str, score: float) -> None:
@@ -278,7 +342,17 @@ class Pool:
 
         exclude = set(exclude_statuses or [])
         if only_available:
-            exclude.update({"rate_limited", "failed", "payment_required", "unknown"})
+            # F10: temporarily_unavailable también se excluye de "only_available"
+            # pero NO de la selección general (PASO 2 de select_model_entry)
+            exclude.update({"rate_limited", "failed", "payment_required", "unknown", "temporarily_unavailable"})
+
+        # F10: Limpiar estados temporarily_unavailable expirados (cooldown 60s)
+        now = time.time()
+        with self._lock:
+            for entry in self._entries.values():
+                if entry.health_status == "temporarily_unavailable" and entry.verified_at:
+                    if now - entry.verified_at >= 60:  # 60s cooldown
+                        entry.health_status = "unknown"  # Vuelve a ser seleccionable
 
         with self._lock:
             candidates = []
@@ -291,8 +365,11 @@ class Pool:
                     continue
                 candidates.append(entry)
 
-        # D-1/D-2: Ordenar SOLO por composite_score, sin free_first bias
-        candidates.sort(key=lambda e: e.composite_score, reverse=True)
+        # D-1/D-2: Ordenar por score (task_score si hay task_type, sino composite_score)
+        # v1.1: task_score usa arena_scores por categoría cuando está disponible,
+        #       dando rankings diferentes según el tipo de tarea.
+        #       payment_required → score=0 → cae al final automáticamente.
+        candidates.sort(key=lambda e: e.task_score(task_type), reverse=True)
         return candidates
 
     def get_entries_for_model(self, model_id: str) -> List[PoolEntry]:
@@ -483,6 +560,33 @@ def _run_validation() -> None:
         test_results.append(("health_summary aggregation", True))
     except AssertionError:
         test_results.append(("health_summary aggregation", False))
+
+    # --- Test 9: task_score with arena_scores (v1.1) ---
+    try:
+        e = PoolEntry(provider="openrouter", model_id="test-coder",
+                      arena_score=70.0, provider_confidence=70.0,
+                      arena_scores={"coding": 85.0, "general": 70.0, "hard_prompts": 75.0})
+        # coding task → uses "coding" score: 0.6*85 + 0.4*70 = 51+28 = 79.0
+        assert e.task_score("coding") == 79.0
+        # planning task → uses "hard_prompts" score: 0.6*75 + 0.4*70 = 45+28 = 73.0
+        assert e.task_score("planning") == 73.0
+        # No task_type → falls back to composite_score: 0.6*70 + 0.4*70 = 70.0
+        assert e.task_score(None) == 70.0
+        test_results.append(("v1.1: task_score por categoría", True))
+    except AssertionError:
+        test_results.append(("v1.1: task_score por categoría", False))
+
+    # --- Test 10: payment_required score = 0 (v1.1) ---
+    try:
+        e = PoolEntry(provider="openrouter", model_id="paid-model",
+                      arena_score=95.0, provider_confidence=90.0)
+        assert e.composite_score > 0  # Normal: paid pero no marcado
+        e.health_status = "payment_required"
+        assert e.composite_score == 0.0  # Marcado: score = 0
+        assert e.task_score("coding") == 0.0  # task_score también
+        test_results.append(("v1.1: payment_required → score=0", True))
+    except AssertionError:
+        test_results.append(("v1.1: payment_required → score=0", False))
 
     # --- Reporte ---
     passed = sum(1 for _, ok in test_results if ok)

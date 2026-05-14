@@ -49,7 +49,7 @@ else:
     sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from config.settings import settings
-from core.normalizer import normalize_model_id
+from core.normalizer import normalize_model_id, canonical_name
 
 logger = logging.getLogger(__name__)
 if not logger.handlers:
@@ -69,7 +69,8 @@ def _log(module: str, stage: str, status: str, detail: str = "") -> None:
 _CACHE_PATH = Path(__file__).parent.parent.parent / "data" / "arena_cache.json"
 _SNAPSHOT_PATH = Path(__file__).parent.parent.parent / "data" / "arena_snapshot.json"
 LOCAL_RANKINGS_PATH = Path(__file__).parent / "data" / "arena_rankings.json"
-_CACHE_DURATION_SECONDS = 86400  # 24 horas para caché local
+_CACHE_DURATION_SECONDS = 86400  # Ya no se usa para expirar, solo como referencia de antigüedad
+_BACKGROUND_REFRESH_INTERVAL = 21600  # 6 horas entre actualizaciones automáticas en background
 _CACHE_VALIDITY_DAYS = 30  # Validez del ranking para is_arena_ranking_available
 _CACHE_VERSION = 3  # Versión del formato de caché (v3 = multi-categoría + last_session_health)
 
@@ -237,9 +238,14 @@ def _load_snapshot() -> Optional[Dict[str, Dict[str, float]]]:
 
 
 def _load_cache() -> Dict[str, Dict[str, float]]:
-    """Carga el caché persistente si es válido y tiene formato v2.
+    """Carga el caché persistente si tiene formato compatible.
+
     Retorna fast_index (formato {name: {category: score}}).
     Cachés v1 (sin version o version=1) se consideran obsoletos y se regeneran.
+
+    P7 FIX: El caché NUNCA expira. Es fuente permanente de datos para carga rápida.
+    La actualización se hace en background, sin afectar el flujo principal.
+    Solo se descarta si el formato es incompatible (versión antigua).
     """
     if not _CACHE_PATH.exists():
         _log("arena_fetcher", "CACHE_LOAD", "NO_EXISTE", str(_CACHE_PATH))
@@ -248,28 +254,28 @@ def _load_cache() -> Dict[str, Dict[str, float]]:
         with open(_CACHE_PATH, "r", encoding="utf-8") as f:
             data = json.load(f)
 
-        # Verificar versión del caché — solo v2 es compatible
+        # Verificar versión del caché — solo v3+ es compatible
         cache_version = data.get("version", 1)
         if cache_version < _CACHE_VERSION:
             _log("arena_fetcher", "CACHE_LOAD", "OBSOLETO",
                  f"Versión caché={cache_version}, requiere>={_CACHE_VERSION}. Se regenerará.")
             return {}
 
+        # P7: Ya NO se descarta el caché por antigüedad.
+        # El caché es permanente. Se actualiza en background cuando hay datos frescos,
+        # pero nunca se pierde por expiración.
         updated_str = data.get("updated_at")
-        if not updated_str:
-            _log("arena_fetcher", "CACHE_LOAD", "INVALIDO", "Falta updated_at")
-            return {}
-        updated = datetime.fromisoformat(updated_str)
-        now = datetime.now(updated.tzinfo) if updated.tzinfo else datetime.now()
-        cache_age = (now - updated).total_seconds()
-        if updated.date() != date.today() and cache_age > _CACHE_DURATION_SECONDS:
-            # FIX: Usar caché expirado como fallback en vez de descartarlo.
-            # Es mejor tener datos de hace días que no tener nada.
-            # Se marca como expirado para que el background thread intente refrescar,
-            # pero se retorna el contenido del caché igualmente.
-            _log("arena_fetcher", "CACHE_LOAD", "EXPIRADO_PERO_UTIL",
-                 f"Antigüedad: {cache_age/3600:.1f}h, fecha: {updated.date()}. "
-                 f"Se usa como fallback — el background thread refrescará.")
+        if updated_str:
+            try:
+                updated = datetime.fromisoformat(updated_str)
+                now = datetime.now(updated.tzinfo) if updated.tzinfo else datetime.now()
+                cache_age = (now - updated).total_seconds()
+                _log("arena_fetcher", "CACHE_LOAD", "CARGADO",
+                     f"{cache_age/3600:.1f}h de antigüedad. Caché permanente — se actualizará en background.")
+            except Exception:
+                pass
+        else:
+            _log("arena_fetcher", "CACHE_LOAD", "CARGADO", "Sin fecha de actualización")
 
         # Formato v2: {name: {category: {"elo": N, "votes": N}, ...}}
         models_raw = data.get("models", {})
@@ -738,6 +744,10 @@ def _background_refresh() -> None:
                  "Se mantienen datos existentes")
     except Exception as e:
         _log("arena_fetcher", "BACKGROUND", "ERROR", str(e))
+    finally:
+        # P7: Permitir que el hilo se pueda ejecutar de nuevo
+        with _refresh_lock:
+            _refresh_thread_started = False
 
 
 def _start_background_refresh_if_needed() -> None:
@@ -752,6 +762,40 @@ def _start_background_refresh_if_needed() -> None:
         thread.start()
         _refresh_thread_started = True
     _log("arena_fetcher", "STARTUP", "HILO_INICIADO")
+
+
+# P7: Hilo de actualización periódica en background.
+# Cada _BACKGROUND_REFRESH_INTERVAL segundos, lanza un refresh si no hay uno en curso.
+# Esto mantiene el caché actualizado permanentemente sin afectar el flujo principal.
+_bg_periodic_started = False
+
+def _background_periodic_refresh() -> None:
+    """P7: Bucle periódico que actualiza el caché Arena en background."""
+    global _bg_periodic_started
+    _log("arena_fetcher", "PERIODIC", "INICIADO",
+         f"Intervalo: {_BACKGROUND_REFRESH_INTERVAL/3600:.1f}h")
+    while True:
+        time.sleep(_BACKGROUND_REFRESH_INTERVAL)
+        try:
+            if not _refresh_thread_started:
+                _log("arena_fetcher", "PERIODIC", "REFRESH", "Iniciando actualización periódica")
+                _start_background_refresh_if_needed()
+            else:
+                _log("arena_fetcher", "PERIODIC", "SKIP", "Refresh ya en curso")
+        except Exception as e:
+            _log("arena_fetcher", "PERIODIC", "ERROR", str(e))
+
+
+def _start_periodic_refresh() -> None:
+    """P7: Inicia el hilo de actualización periódica (daemon, no bloquea)."""
+    global _bg_periodic_started
+    if _bg_periodic_started:
+        return
+    _bg_periodic_started = True
+    thread = threading.Thread(target=_background_periodic_refresh, daemon=True,
+                              name="arena-periodic-refresh")
+    thread.start()
+    _log("arena_fetcher", "PERIODIC", "HILO_INICIADO")
 
 
 # -----------------------------------------------------------------------------
@@ -807,12 +851,15 @@ with _refresh_lock:
 # Phase 1: Iniciar fetch en background para rankings frescos
 _start_background_refresh_if_needed()
 
+# P7: Iniciar actualización periódica permanente (cada 6h)
+_start_periodic_refresh()
+
 if _initial_cache:
     cats_in_index = set()
     for scores in _initial_cache.values():
         cats_in_index.update(scores.keys())
     _log("arena_fetcher", "INIT", "LISTO",
-         f"Phase 0 OK: {len(_initial_cache)} modelos. Phase 1 en background.")
+         f"Phase 0 OK: {len(_initial_cache)} modelos. Phase 1 en background. Actualización periódica activa.")
 else:
     _log("arena_fetcher", "INIT", "ESPERANDO_BG",
          "Phase 0 sin datos. Esperando background fetch...")
@@ -850,16 +897,27 @@ def get_score_for_model(model_id: str, task_type: str = None) -> Optional[float]
     if not search_name:
         return None
 
+    # F7: También obtener el nombre canónico para búsqueda alternativa
+    canonical = canonical_name(model_id)
+    # Normalizar el nombre canónico para búsqueda en _arena_data
+    # (los datos de Arena pueden estar normalizados)
+    canonical_norm = normalize_model_id(canonical) if canonical else ""
+
     # Mapeo de task_type de APA → categorías reales del dataset Arena
     # Ordenadas por prioridad: la primera categoría encontrada se retorna
+    # FIX: Categorías actualizadas a las que realmente existen en el dataset Arena 2026.
+    # El dataset ya no usa "overall" como nombre en el fast index (se renombró a "general").
+    # Categorías disponibles: coding, hard_prompts, instruction_following, math,
+    # creative_writing, expert, webdev, webdev-react, image_to_webdev,
+    # hard_prompts_english, longer_query, multi_turn, general, + idiomas.
     category_map = {
-        "planning":    ["hard_prompts", "overall", "general"],
-        "evaluation":  ["math", "hard_prompts", "overall", "general"],
-        "generation":  ["coding", "webdev", "webdev-react", "overall", "general"],
-        "coding":      ["coding", "webdev", "webdev-react", "overall", "general"],
-        "correction":  ["coding", "instruction_following", "overall", "general"],
+        "planning":    ["hard_prompts", "expert", "general"],
+        "evaluation":  ["math", "hard_prompts", "expert", "general"],
+        "generation":  ["creative_writing", "coding", "instruction_following", "general"],
+        "coding":      ["coding", "hard_prompts", "webdev", "general"],
+        "correction":  ["coding", "instruction_following", "general"],
     }
-    categories = category_map.get(task_type, ["overall", "general"]) if task_type else ["overall", "general"]
+    categories = category_map.get(task_type, ["general"]) if task_type else ["general"]
 
     with _refresh_lock:
         data_snapshot = _arena_data
@@ -875,6 +933,15 @@ def get_score_for_model(model_id: str, task_type: str = None) -> Optional[float]
                 return model_scores[cat]
         return model_scores.get("general")
 
+    # F7: Búsqueda por nombre canónico (permite emparejar modelos
+    # de distintos proveedores que comparten el mismo LLM)
+    if canonical_norm and canonical_norm != search_name and canonical_norm in data_snapshot:
+        model_scores = data_snapshot[canonical_norm]
+        for cat in categories:
+            if cat in model_scores:
+                return model_scores[cat]
+        return model_scores.get("general")
+
     # Búsqueda por subcadena (fallback para nombres no exactos)
     search_lower = search_name.lower()
     for name, scores in data_snapshot.items():
@@ -884,6 +951,17 @@ def get_score_for_model(model_id: str, task_type: str = None) -> Optional[float]
                 if cat in scores:
                     return scores[cat]
             return scores.get("general")
+
+    # F7: Búsqueda por subcadena usando nombre canónico
+    if canonical_norm and canonical_norm != search_name:
+        canonical_lower = canonical_norm.lower()
+        for name, scores in data_snapshot.items():
+            name_lower = name.lower()
+            if canonical_lower in name_lower or name_lower in canonical_lower:
+                for cat in categories:
+                    if cat in scores:
+                        return scores[cat]
+                return scores.get("general")
 
     return None
 

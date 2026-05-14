@@ -159,6 +159,11 @@ class ModelProvider(ABC):
                 data = json.loads(cache_file.read_text())
                 if time.time() - data.get("timestamp", 0) < self.CACHE_TTL:
                     return data.get("models")
+                # F14: Cache expirado pero existe — retornar como fallback
+                # solo si el proveedor no está disponible (no se puede refrescar)
+                # El llamador (get_models) decidirá si lo usa o no
+                logger.debug(f"{self.name}: cache expirado ({self.CACHE_TTL}s), disponible como stale fallback")
+                return data.get("models")  # F14: Return stale cache instead of None
             except Exception:
                 pass
         return None
@@ -171,6 +176,48 @@ class ModelProvider(ABC):
             cache_file.write_text(json.dumps(data))
         except Exception:
             pass
+
+    @staticmethod
+    def _extract_http_error(resp, model_id: str, provider_name: str) -> Dict[str, Any]:
+        """F11: Extrae información detallada del error HTTP.
+
+        Parsea el cuerpo de la respuesta para obtener el código de error
+        y mensaje específico del provider, en vez de solo "HTTP {status}".
+        """
+        status_code = resp.status_code
+        error_detail = f"HTTP {status_code}"
+
+        try:
+            body = resp.json()
+            # OpenRouter/OpenAI: {"error": {"code": 429, "message": "Rate limit..."}}
+            if isinstance(body, dict):
+                err_obj = body.get("error")
+                if isinstance(err_obj, dict):
+                    code = err_obj.get("code", "")
+                    message = err_obj.get("message", "")
+                    if code and message:
+                        error_detail = f"HTTP {status_code} (code={code}): {message}"
+                    elif message:
+                        error_detail = f"HTTP {status_code}: {message}"
+                elif isinstance(err_obj, str):
+                    error_detail = f"HTTP {status_code}: {err_obj}"
+                # FastAPI style: {"detail": "..."}
+                detail = body.get("detail", "")
+                if detail and not err_obj:
+                    error_detail = f"HTTP {status_code}: {detail}"
+                message = body.get("message", "")
+                if message and not err_obj and not detail:
+                    error_detail = f"HTTP {status_code}: {message}"
+        except Exception:
+            try:
+                text = resp.text[:200]
+                if text and text.strip():
+                    error_detail = f"HTTP {status_code}: {text}"
+            except Exception:
+                pass
+
+        return {"content": "", "model_used": model_id, "provider": provider_name,
+                "success": False, "error": error_detail, "http_status": status_code}
 
 class OpenRouterProvider(ModelProvider):
     _DEFAULT_CONFIDENCE_SCORE = 70.0  # Aggregator
@@ -238,11 +285,13 @@ class OpenRouterProvider(ModelProvider):
 
     def call(self, model_id: str, messages: List[Dict], max_tokens: int = 2000, temperature: float = 0.1) -> Dict[str, Any]:
         try:
-            if not self.is_available(): return {"content": "", "model_used": model_id, "provider": self.name, "success": False, "error": "Not available"}
+            # F13: Eliminado is_available() check — intentar directamente.
+            # Si is_available() falla por timeout, la llamada real puede funcionar.
             resp = requests.post(f"{self._base_url}/chat/completions", headers={"Authorization": f"Bearer {self._api_key}", "Content-Type": "application/json"}, json={"model": model_id, "messages": messages, "max_tokens": max_tokens, "temperature": temperature}, timeout=30)
-            if resp.status_code != 200: return {"content": "", "model_used": model_id, "provider": self.name, "success": False, "error": f"HTTP {resp.status_code}"}
-            return {"content": resp.json().get("choices", [{}])[0].get("message", {}).get("content", ""), "model_used": model_id, "provider": self.name, "success": True, "error": None}
-        except Exception as e: return {"content": "", "model_used": model_id, "provider": self.name, "success": False, "error": str(e)}
+            if resp.status_code != 200:
+                return self._extract_http_error(resp, model_id, self.name)  # F11: Parsear cuerpo del error
+            return {"content": resp.json().get("choices", [{}])[0].get("message", {}).get("content", ""), "model_used": model_id, "provider": self.name, "success": True, "error": None, "http_status": 200}
+        except Exception as e: return {"content": "", "model_used": model_id, "provider": self.name, "success": False, "error": str(e), "http_status": None}
 
 class GroqProvider(ModelProvider):
     _DEFAULT_CONFIDENCE_SCORE = 70.0  # Aggregator
@@ -281,10 +330,12 @@ class GroqProvider(ModelProvider):
 
     def call(self, model_id: str, messages: List[Dict], max_tokens: int = 2000, temperature: float = 0.1) -> Dict[str, Any]:
         try:
-            if not self.is_available(): return {"content": "", "model_used": model_id, "provider": self.name, "success": False, "error": "Not available"}
+            # F13: Eliminado is_available() check — intentar directamente.
             resp = requests.post(f"{self._base_url}/chat/completions", headers={"Authorization": f"Bearer {self._api_key}", "Content-Type": "application/json"}, json={"model": model_id, "messages": messages, "max_tokens": max_tokens, "temperature": temperature}, timeout=30)
-            return {"content": resp.json().get("choices", [{}])[0].get("message", {}).get("content", ""), "model_used": model_id, "provider": self.name, "success": True, "error": None} if resp.status_code == 200 else {"content": "", "model_used": model_id, "provider": self.name, "success": False, "error": f"HTTP {resp.status_code}"}
-        except Exception as e: return {"content": "", "model_used": model_id, "provider": self.name, "success": False, "error": str(e)}
+            if resp.status_code != 200:
+                return self._extract_http_error(resp, model_id, self.name)  # F11: Parsear cuerpo del error
+            return {"content": resp.json().get("choices", [{}])[0].get("message", {}).get("content", ""), "model_used": model_id, "provider": self.name, "success": True, "error": None, "http_status": 200}
+        except Exception as e: return {"content": "", "model_used": model_id, "provider": self.name, "success": False, "error": str(e), "http_status": None}
 
 class GitHubModelsProvider(ModelProvider):
     _DEFAULT_CONFIDENCE_SCORE = 70.0  # Aggregator
@@ -323,10 +374,12 @@ class GitHubModelsProvider(ModelProvider):
 
     def call(self, model_id: str, messages: List[Dict], max_tokens: int = 2000, temperature: float = 0.1) -> Dict[str, Any]:
         try:
-            if not self.is_available(): return {"content": "", "model_used": model_id, "provider": self.name, "success": False, "error": "Not available"}
+            # F13: Eliminado is_available() check — intentar directamente.
             resp = requests.post(f"{self._base_url}/chat/completions", headers={"Authorization": f"Bearer {self._token}", "Content-Type": "application/json"}, json={"model": model_id, "messages": messages, "max_tokens": max_tokens, "temperature": temperature}, timeout=30)
-            return {"content": resp.json().get("choices", [{}])[0].get("message", {}).get("content", ""), "model_used": model_id, "provider": self.name, "success": True, "error": None} if resp.status_code == 200 else {"content": "", "model_used": model_id, "provider": self.name, "success": False, "error": f"HTTP {resp.status_code}"}
-        except Exception as e: return {"content": "", "model_used": model_id, "provider": self.name, "success": False, "error": str(e)}
+            if resp.status_code != 200:
+                return self._extract_http_error(resp, model_id, self.name)  # F11: Parsear cuerpo del error
+            return {"content": resp.json().get("choices", [{}])[0].get("message", {}).get("content", ""), "model_used": model_id, "provider": self.name, "success": True, "error": None, "http_status": 200}
+        except Exception as e: return {"content": "", "model_used": model_id, "provider": self.name, "success": False, "error": str(e), "http_status": None}
 
 class TogetherProvider(ModelProvider):
     _DEFAULT_CONFIDENCE_SCORE = 70.0  # Aggregator
@@ -365,10 +418,12 @@ class TogetherProvider(ModelProvider):
 
     def call(self, model_id: str, messages: List[Dict], max_tokens: int = 2000, temperature: float = 0.1) -> Dict[str, Any]:
         try:
-            if not self.is_available(): return {"content": "", "model_used": model_id, "provider": self.name, "success": False, "error": "Not available"}
+            # F13: Eliminado is_available() check — intentar directamente.
             resp = requests.post(f"{self._base_url}/chat/completions", headers={"Authorization": f"Bearer {self._api_key}", "Content-Type": "application/json"}, json={"model": model_id, "messages": messages, "max_tokens": max_tokens, "temperature": temperature}, timeout=30)
-            return {"content": resp.json().get("choices", [{}])[0].get("message", {}).get("content", ""), "model_used": model_id, "provider": self.name, "success": True, "error": None} if resp.status_code == 200 else {"content": "", "model_used": model_id, "provider": self.name, "success": False, "error": f"HTTP {resp.status_code}"}
-        except Exception as e: return {"content": "", "model_used": model_id, "provider": self.name, "success": False, "error": str(e)}
+            if resp.status_code != 200:
+                return self._extract_http_error(resp, model_id, self.name)  # F11: Parsear cuerpo del error
+            return {"content": resp.json().get("choices", [{}])[0].get("message", {}).get("content", ""), "model_used": model_id, "provider": self.name, "success": True, "error": None, "http_status": 200}
+        except Exception as e: return {"content": "", "model_used": model_id, "provider": self.name, "success": False, "error": str(e), "http_status": None}
 
 class FireworksProvider(ModelProvider):
     _DEFAULT_CONFIDENCE_SCORE = 70.0  # Aggregator
@@ -407,13 +462,23 @@ class FireworksProvider(ModelProvider):
 
     def call(self, model_id: str, messages: List[Dict], max_tokens: int = 2000, temperature: float = 0.1) -> Dict[str, Any]:
         try:
-            if not self.is_available(): return {"content": "", "model_used": model_id, "provider": self.name, "success": False, "error": "Not available"}
+            # F13: Eliminado is_available() check — intentar directamente.
             resp = requests.post(f"{self._base_url}/chat/completions", headers={"Authorization": f"Bearer {self._api_key}", "Content-Type": "application/json"}, json={"model": model_id, "messages": messages, "max_tokens": max_tokens, "temperature": temperature}, timeout=30)
-            return {"content": resp.json().get("choices", [{}])[0].get("message", {}).get("content", ""), "model_used": model_id, "provider": self.name, "success": True, "error": None} if resp.status_code == 200 else {"content": "", "model_used": model_id, "provider": self.name, "success": False, "error": f"HTTP {resp.status_code}"}
-        except Exception as e: return {"content": "", "model_used": model_id, "provider": self.name, "success": False, "error": str(e)}
+            if resp.status_code != 200:
+                return self._extract_http_error(resp, model_id, self.name)  # F11: Parsear cuerpo del error
+            return {"content": resp.json().get("choices", [{}])[0].get("message", {}).get("content", ""), "model_used": model_id, "provider": self.name, "success": True, "error": None, "http_status": 200}
+        except Exception as e: return {"content": "", "model_used": model_id, "provider": self.name, "success": False, "error": str(e), "http_status": None}
 
 class OllamaProvider(ModelProvider):
+    """Proveedor local Ollama — no requiere API key, solo URL.
+
+    F8 FIX: Ollama se detecta porque la URL por defecto está configurada,
+    pero si el servidor no está corriendo, las llamadas fallan con timeout.
+    Ahora usa timeouts cortos y logging claro para no bloquear el flujo.
+    """
     _DEFAULT_CONFIDENCE_SCORE = 60.0  # Local
+    _PING_TIMEOUT = 2  # F8: Timeout corto para no bloquear si no está corriendo
+
     def __init__(self):
         self._base_url = settings.ollama_base_url.rstrip("/")
         self._avail_cache, self._avail_ts = None, None
@@ -422,14 +487,37 @@ class OllamaProvider(ModelProvider):
     def name(self) -> str: return "ollama"
 
     def is_available(self) -> bool:
+        """F8: Verifica si el servidor Ollama está realmente corriendo.
+
+        Usa timeout corto (2s) para no bloquear si no responde.
+        Cachea el resultado 5 min para no saturar con pings.
+        """
         if not self._base_url: return False
         now = time.time()
-        if self._avail_cache and self._avail_ts and now - self._avail_ts < 300: return self._avail_cache
-        try:
-            resp = requests.get(f"{self._base_url}/api/tags", timeout=3)
-            self._avail_cache, self._avail_ts = resp.status_code == 200, now
+        if self._avail_cache is not None and self._avail_ts is not None and now - self._avail_ts < 300:
             return self._avail_cache
-        except: return False
+        try:
+            resp = requests.get(f"{self._base_url}/api/tags", timeout=self._PING_TIMEOUT)
+            is_up = resp.status_code == 200
+            self._avail_cache, self._avail_ts = is_up, now
+            if is_up:
+                logger.info(f"Ollama disponible en {self._base_url}")
+            else:
+                logger.info(f"Ollama respondió pero con status {resp.status_code} en {self._base_url}")
+            return is_up
+        except requests.exceptions.ConnectionError:
+            # F8: Servidor no está corriendo — no es un error, es una condición esperada
+            logger.info(f"Ollama no responde en {self._base_url} — el servidor no está corriendo")
+            self._avail_cache, self._avail_ts = False, now
+            return False
+        except requests.exceptions.Timeout:
+            logger.info(f"Ollama timeout en {self._base_url} — el servidor no está corriendo o está saturado")
+            self._avail_cache, self._avail_ts = False, now
+            return False
+        except Exception as e:
+            logger.debug(f"Ollama no disponible ({type(e).__name__}: {e})")
+            self._avail_cache, self._avail_ts = False, now
+            return False
 
     def get_models(self) -> List[Dict[str, Any]]:
         cached = self._get_cached_models()
@@ -448,10 +536,14 @@ class OllamaProvider(ModelProvider):
 
     def call(self, model_id: str, messages: List[Dict], max_tokens: int = 2000, temperature: float = 0.1) -> Dict[str, Any]:
         try:
-            if not self.is_available(): return {"content": "", "model_used": model_id, "provider": self.name, "success": False, "error": "Not available"}
+            # F13: Eliminado is_available() check — intentar directamente.
             resp = requests.post(f"{self._base_url}/api/chat", json={"model": model_id, "messages": messages, "options": {"num_predict": max_tokens, "temperature": temperature}}, timeout=30)
-            return {"content": resp.json().get("message", {}).get("content", ""), "model_used": model_id, "provider": self.name, "success": True, "error": None} if resp.status_code == 200 else {"content": "", "model_used": model_id, "provider": self.name, "success": False, "error": f"HTTP {resp.status_code}"}
-        except Exception as e: return {"content": "", "model_used": model_id, "provider": self.name, "success": False, "error": str(e)}
+            if resp.status_code != 200:
+                return self._extract_http_error(resp, model_id, self.name)  # F11: Parsear cuerpo del error
+            return {"content": resp.json().get("message", {}).get("content", ""), "model_used": model_id, "provider": self.name, "success": True, "error": None, "http_status": 200}
+        except requests.exceptions.ConnectionError:
+            return {"content": "", "model_used": model_id, "provider": self.name, "success": False, "error": "Ollama no disponible — el servidor no está corriendo", "http_status": None}
+        except Exception as e: return {"content": "", "model_used": model_id, "provider": self.name, "success": False, "error": str(e), "http_status": None}
 
 class AnthropicProvider(ModelProvider):
     _DEFAULT_CONFIDENCE_SCORE = 90.0  # Native
@@ -493,12 +585,14 @@ class AnthropicProvider(ModelProvider):
 
     def call(self, model_id: str, messages: List[Dict], max_tokens: int = 2000, temperature: float = 0.1) -> Dict[str, Any]:
         try:
-            if not self.is_available(): return {"content": "", "model_used": model_id, "provider": self.name, "success": False, "error": "Not available"}
+            # F13: Eliminado is_available() check — intentar directamente.
             sys_msg = next((m["content"] for m in messages if m["role"] == "system"), "")
             msgs = [{"role": m["role"], "content": m["content"]} for m in messages if m["role"] != "system"]
             resp = requests.post(f"{self._base_url}/messages", headers={"x-api-key": self._api_key, "anthropic-version": "2023-06-01", "Content-Type": "application/json"}, json={"model": model_id, "messages": msgs, "system": sys_msg, "max_tokens": max_tokens, "temperature": temperature}, timeout=30)
-            return {"content": resp.json().get("content", [{}])[0].get("text", ""), "model_used": model_id, "provider": self.name, "success": True, "error": None} if resp.status_code == 200 else {"content": "", "model_used": model_id, "provider": self.name, "success": False, "error": f"HTTP {resp.status_code}"}
-        except Exception as e: return {"content": "", "model_used": model_id, "provider": self.name, "success": False, "error": str(e)}
+            if resp.status_code != 200:
+                return self._extract_http_error(resp, model_id, self.name)  # F11: Parsear cuerpo del error
+            return {"content": resp.json().get("content", [{}])[0].get("text", ""), "model_used": model_id, "provider": self.name, "success": True, "error": None, "http_status": 200}
+        except Exception as e: return {"content": "", "model_used": model_id, "provider": self.name, "success": False, "error": str(e), "http_status": None}
 
 class OpenAIProvider(ModelProvider):
     _DEFAULT_CONFIDENCE_SCORE = 90.0  # Native
@@ -540,12 +634,31 @@ class OpenAIProvider(ModelProvider):
 
     def call(self, model_id: str, messages: List[Dict], max_tokens: int = 2000, temperature: float = 0.1) -> Dict[str, Any]:
         try:
-            if not self.is_available(): return {"content": "", "model_used": model_id, "provider": self.name, "success": False, "error": "Not available"}
+            # F13: Eliminado is_available() check — intentar directamente.
             resp = requests.post(f"{self._base_url}/chat/completions", headers={"Authorization": f"Bearer {self._api_key}", "Content-Type": "application/json"}, json={"model": model_id, "messages": messages, "max_tokens": max_tokens, "temperature": temperature}, timeout=30)
-            return {"content": resp.json().get("choices", [{}])[0].get("message", {}).get("content", ""), "model_used": model_id, "provider": self.name, "success": True, "error": None} if resp.status_code == 200 else {"content": "", "model_used": model_id, "provider": self.name, "success": False, "error": f"HTTP {resp.status_code}"}
-        except Exception as e: return {"content": "", "model_used": model_id, "provider": self.name, "success": False, "error": str(e)}
+            if resp.status_code != 200:
+                return self._extract_http_error(resp, model_id, self.name)  # F11: Parsear cuerpo del error
+            return {"content": resp.json().get("choices", [{}])[0].get("message", {}).get("content", ""), "model_used": model_id, "provider": self.name, "success": True, "error": None, "http_status": 200}
+        except Exception as e: return {"content": "", "model_used": model_id, "provider": self.name, "success": False, "error": str(e), "http_status": None}
 
 class ProviderManager:
+    # F6: Prefijos de proveedor para nomenclatura PROVEEDOR:modelo
+    # Ej: OPR:opus-4-6 = OpenRouter entregando Opus 4.6
+    #     ANT:opus_4.6 = Anthropic entregando Opus 4.6
+    PROVIDER_PREFIXES = {
+        "openrouter": "OPR",
+        "anthropic":  "ANT",
+        "openai":     "OAI",
+        "groq":       "GRQ",
+        "github":     "GTH",
+        "together":   "TGT",
+        "fireworks":  "FWR",
+        "ollama":     "OLL",
+    }
+
+    # Reverse map: prefix -> provider name
+    PREFIX_TO_PROVIDER = {v: k for k, v in PROVIDER_PREFIXES.items()}
+
     def __init__(self):
         self.providers: Dict[str, ModelProvider] = {}
         self._health_cache, self._health_timestamp = {}, None
@@ -554,10 +667,52 @@ class ProviderManager:
         self._instantiate_providers()
 
     def _instantiate_providers(self) -> None:
+        """Instancia los proveedores que tengan credenciales configuradas.
+
+        F8 FIX: Ollama siempre tiene URL por defecto, pero eso no significa
+        que esté disponible. Se instancia siempre (para que aparezca en el
+        health check con estado claro) pero is_available() verificara
+        realmente si el servidor responde antes de usarlo.
+
+        F14 EXTEND: Si un provider tiene cache stale (expirado pero existente),
+        se instancia incluso sin API key para que el pool pueda poblarse
+        con modelos del cache. El provider fallará en llamadas reales pero
+        los modelos estarán disponibles para selección y fallback.
+        """
+        # F14: Mapa de clase → nombre de provider (para check de cache sin instanciar)
+        _PROVIDER_CLASS_NAMES = {
+            OpenRouterProvider: "openrouter",
+            AnthropicProvider: "anthropic",
+            OpenAIProvider: "openai",
+            GroqProvider: "groq",
+            GitHubModelsProvider: "github",
+            TogetherProvider: "together",
+            FireworksProvider: "fireworks",
+            OllamaProvider: "ollama",
+        }
+
         for key, cls in [(settings.openrouter_api_key, OpenRouterProvider), (settings.anthropic_api_key, AnthropicProvider), (settings.openai_api_key, OpenAIProvider), (settings.groq_api_key, GroqProvider), (settings.github_token, GitHubModelsProvider), (settings.together_api_key, TogetherProvider), (settings.fireworks_api_key, FireworksProvider), (settings.ollama_base_url, OllamaProvider)]:
+            should_instantiate = False
             if key and key.strip():
-                try: self.providers[cls().name] = cls()
-                except: pass
+                should_instantiate = True
+            else:
+                # F14: Instanciar si tiene cache stale disponible
+                try:
+                    provider_name = _PROVIDER_CLASS_NAMES.get(cls, "")
+                    if provider_name:
+                        cache_path = ModelProvider.CACHE_DIR / f"{provider_name}.json"
+                        if cache_path.exists():
+                            should_instantiate = True
+                            logger.info(f"F14: Instanciando {cls.__name__} con cache stale ({provider_name})")
+                except Exception:
+                    pass
+
+            if should_instantiate:
+                try:
+                    instance = cls()
+                    self.providers[instance.name] = instance
+                except Exception as e:
+                    logger.debug(f"No se pudo instanciar {cls.__name__}: {e}")
 
     def _fetch_provider_info(self, name: str, provider: ModelProvider) -> Dict[str, Any]:
         try:
@@ -586,18 +741,66 @@ class ProviderManager:
         este método retorna una entrada por cada (provider, model_id),
         permitiendo que el Pool tenga composite keys distintas para
         el mismo modelo en distintos providers.
+
+        F6: Cada modelo incluye un 'prefixed_id' con formato PROVEEDOR:modelo
+        (ej: OPR:anthropic/claude-opus-4-6, ANT:claude-opus-4-6).
+        El 'id' original se mantiene en 'base_id' para compatibilidad.
+
+        F14: Usa get_models() que ahora retorna stale cache si el provider
+        no está disponible. Ya no requiere is_available() == True.
         """
         all_models = []
         for p in self.providers.values():
             try:
-                if p.is_available():
-                    for m in p.get_models():
-                        m_copy = dict(m)
-                        m_copy["provider"] = p.name
-                        m_copy["provider_confidence"] = p.confidence_score
-                        all_models.append(m_copy)
+                # F14: No requerir is_available() — get_models() maneja stale cache
+                models = p.get_models()
+                for m in models:
+                    m_copy = dict(m)
+                    m_copy["provider"] = p.name
+                    m_copy["provider_confidence"] = p.confidence_score
+                    # F6: Generar prefixed_id
+                    base_id = m.get("id", "")
+                    prefix = self.PROVIDER_PREFIXES.get(p.name, "UNK")
+                    m_copy["prefixed_id"] = f"{prefix}:{base_id}"
+                    m_copy["base_id"] = base_id
+                    all_models.append(m_copy)
             except: pass
         return all_models
+
+    # =====================================================================
+    # F6: Funciones de codificación/decodificación de prefijos
+    # =====================================================================
+
+    def make_prefixed_id(self, provider_name: str, model_id: str) -> str:
+        """Crea un ID con prefijo de proveedor: PROVEEDOR:modelo.
+
+        Ej: make_prefixed_id("openrouter", "anthropic/claude-opus-4-6")
+            -> "OPR:anthropic/claude-opus-4-6"
+        """
+        prefix = self.PROVIDER_PREFIXES.get(provider_name, "UNK")
+        return f"{prefix}:{model_id}"
+
+    def parse_prefixed_id(self, prefixed_id: str) -> tuple:
+        """Extrae proveedor y modelo base de un ID con prefijo.
+
+        Ej: parse_prefixed_id("OPR:anthropic/claude-opus-4-6")
+            -> ("openrouter", "anthropic/claude-opus-4-6")
+
+        Si el ID no tiene prefijo reconocido, retorna (None, prefixed_id).
+        """
+        if not prefixed_id or ":" not in prefixed_id:
+            return None, prefixed_id
+        prefix_str, base_id = prefixed_id.split(":", 1)
+        provider_name = self.PREFIX_TO_PROVIDER.get(prefix_str.upper())
+        return provider_name, base_id
+
+    def get_provider_for_prefixed_id(self, prefixed_id: str) -> Optional[str]:
+        """Retorna el nombre del proveedor a partir de un ID con prefijo.
+
+        Si no tiene prefijo reconocido, retorna None.
+        """
+        provider_name, _ = self.parse_prefixed_id(prefixed_id)
+        return provider_name
 
     def get_available_models(self) -> List[str]:
         """Retorna una lista con los IDs de todos los modelos disponibles."""
@@ -844,26 +1047,53 @@ class ProviderManager:
         return results
 
     def call_with_fallback(self, model_id: str, messages: List[Dict], max_tokens: int = 2000, temperature: float = 0.1) -> Dict[str, Any]:
-        """Llama al modelo con fallback entre proveedores."""
+        """Llama al modelo con fallback entre proveedores.
+
+        P8b fix: Retorna http_status y error detallado del ultimo intento,
+        en vez de un generico "All providers failed" sin informacion.
+        """
+        last_error = ""
+        last_http_status = None
+        last_provider = "unknown"
+        providers_tried = 0
+
         providers_to_try = self.find_providers_for_model(model_id)
 
         for provider, translated_id in providers_to_try:
+            providers_tried += 1
             result = provider.call(translated_id, messages, max_tokens, temperature)
             if result.get("success"):
                 result["provider"] = provider.name
                 return self._sanitize_response(result)
+            else:
+                last_error = result.get("error", "Unknown error")
+                last_http_status = result.get("http_status")
+                last_provider = provider.name
 
         # Fallback: inferir proveedor
         inferred = self._infer_provider_for_model(model_id)
         if inferred and inferred in self.providers:
             p = self.providers[inferred]
             translated = self.translate_model_id(model_id, inferred)
+            providers_tried += 1
             result = p.call(translated, messages, max_tokens, temperature)
             if result.get("success"):
                 result["provider"] = p.name
                 return self._sanitize_response(result)
+            else:
+                last_error = result.get("error", "Unknown error")
+                last_http_status = result.get("http_status")
+                last_provider = p.name
 
-        return {"content": "", "model_used": model_id, "provider": "unknown", "success": False, "error": "All providers failed"}
+        # Retornar error detallado del ultimo intento (no generico)
+        detail = f"All providers failed ({providers_tried} tried)" if providers_tried > 0 else "No providers found"
+        if last_error:
+            detail += f" — last: [{last_provider}] {last_error}"
+
+        return {
+            "content": "", "model_used": model_id, "provider": last_provider,
+            "success": False, "error": detail, "http_status": last_http_status,
+        }
 
 
 # Instancia global
@@ -995,4 +1225,76 @@ if __name__ == "__main__":
     elapsed = time.time() - (time.time() - 0)  # placeholder
     print(f"\nTiempo total: 0.00s")  # placeholder
     print(f"Pruebas: {passed} pasadas, {failed} fallidas")
+
+    # =================================================================
+    # F6 + F8: Validación de nomenclatura con prefijo y Ollama suave
+    # =================================================================
+    f6_passed, f6_failed = 0, 0
+    print("\n[F6] Nomenclatura con prefijo de proveedor")
+    try:
+        # F6: Tabla de prefijos
+        assert len(ProviderManager.PROVIDER_PREFIXES) == 8, "Debe haber 8 prefijos"
+        assert ProviderManager.PROVIDER_PREFIXES["openrouter"] == "OPR"
+        assert ProviderManager.PROVIDER_PREFIXES["anthropic"] == "ANT"
+        assert ProviderManager.PROVIDER_PREFIXES["ollama"] == "OLL"
+        assert len(ProviderManager.PREFIX_TO_PROVIDER) == 8
+        f6_passed += 1; print("  OK - Tabla de prefijos completa (8 proveedores)")
+    except AssertionError as e:
+        f6_failed += 1; print(f"  FALLA: {e}")
+
+    try:
+        # F6: make_prefixed_id
+        pid = provider_manager.make_prefixed_id("openrouter", "anthropic/claude-opus-4-6")
+        assert pid == "OPR:anthropic/claude-opus-4-6", f"prefixed_id incorrecto: {pid}"
+        f6_passed += 1; print("  OK - make_prefixed_id('openrouter', ...) = OPR:...")
+    except AssertionError as e:
+        f6_failed += 1; print(f"  FALLA: {e}")
+
+    try:
+        # F6: parse_prefixed_id
+        prov, base = provider_manager.parse_prefixed_id("OPR:anthropic/claude-opus-4-6")
+        assert prov == "openrouter", f"provider incorrecto: {prov}"
+        assert base == "anthropic/claude-opus-4-6", f"base incorrecto: {base}"
+        prov2, base2 = provider_manager.parse_prefixed_id("gpt-4o")
+        assert prov2 is None, "Sin prefijo debe retornar None"
+        f6_passed += 1; print("  OK - parse_prefixed_id extrae proveedor y base correctamente")
+    except AssertionError as e:
+        f6_failed += 1; print(f"  FALLA: {e}")
+
+    print(f"[F6] Pruebas F6: {f6_passed} pasadas, {f6_failed} fallidas")
+
+    # F8: Ollama suave
+    f8_passed, f8_failed = 0, 0
+    print("\n[F8] Verificacion suave de Ollama")
+    try:
+        ollama = provider_manager.providers.get("ollama")
+        assert ollama is not None, "OllamaProvider debe estar instanciado"
+        avail = ollama.is_available()
+        assert isinstance(avail, bool), "is_available debe retornar bool"
+        f8_passed += 1; print(f"  OK - Ollama instanciado, is_available={avail} (no bloquea)")
+    except AssertionError as e:
+        f8_failed += 1; print(f"  FALLA: {e}")
+
+    try:
+        # F8: call() retorna error claro cuando servidor no corre
+        result = ollama.call("test-model", [{"role": "user", "content": "hi"}])
+        assert result["success"] == False, "call() deberia fallar"
+        err_lower = result.get("error", "").lower()
+        assert "no disponible" in err_lower or "no está corriendo" in err_lower, \
+            f"Mensaje de error no claro: {result['error']}"
+        f8_passed += 1; print(f"  OK - call() error claro: \"{result['error']}\"")
+    except AssertionError as e:
+        f8_failed += 1; print(f"  FALLA: {e}")
+    except Exception as e:
+        f8_failed += 1; print(f"  ERROR: {e}")
+
+    try:
+        # F8: Timeout corto
+        assert OllamaProvider._PING_TIMEOUT == 2, "Ping timeout debe ser 2s"
+        f8_passed += 1; print("  OK - _PING_TIMEOUT=2s (no bloquea)")
+    except AssertionError as e:
+        f8_failed += 1; print(f"  FALLA: {e}")
+
+    print(f"[F8] Pruebas F8: {f8_passed} pasadas, {f8_failed} fallidas")
+    print(f"\nTOTAL: originales={passed}/{passed+failed}, F6={f6_passed}/{f6_passed+f6_failed}, F8={f8_passed}/{f8_passed+f8_failed}")
     print("=" * 60)
