@@ -1,92 +1,46 @@
 {
   "version": 1,
-  "updated_at": "2026-05-12T01:46:22.092014",
+  "updated_at": "2026-05-14T01:36:03.066032",
   "models": {
-    "google/gemma-4-26b-a4b-it:free": {
-      "status": "rate_limited",
-      "verified_at": 1778546765.7022932,
+    "pr-test": {
+      "status": "unknown",
+      "verified_at": 1778684996.817778,
       "provider": "openrouter",
-      "error": "HTTP 429 (rate limit)",
-      "rate_limited_count": 6,
-      "rate_limited_at": 1778546765.7022932,
+      "error": null,
+      "rate_limited_count": 0,
+      "rate_limited_at": null,
       "probe_errors": {
-        "openrouter": "HTTP 429 (rate limit)"
+        "openrouter": "HTTP 402 (payment required)"
       }
     },
-    "openai/gpt-4o-mini": {
-      "status": "rate_limited",
-      "verified_at": 1778546781.1449447,
-      "provider": "openai",
-      "error": "HTTP 429 (rate limit)",
-      "rate_limited_count": 8,
-      "rate_limited_at": 1778546781.1449447,
-      "probe_errors": {
-        "openai": "HTTP 429 (rate limit)",
-        "openrouter": "HTTP 402"
-      }
-    },
-    "qwen/qwen3-coder:free": {
-      "status": "rate_limited",
-      "verified_at": 1778546767.4576943,
-      "provider": "openrouter",
-      "error": "HTTP 429 (rate limit)",
-      "rate_limited_count": 8,
-      "rate_limited_at": 1778546767.4576943,
-      "probe_errors": {
-        "openrouter": "HTTP 429 (rate limit)"
-      }
-    },
-    "openai/gpt-oss-120b:free": {
-      "status": "available",
-      "verified_at": 1778546778.4250965,
-      "provider": "openrouter",
+    "google/gemma-4-31b-it:free": {
+      "status": "unknown",
+      "verified_at": 1778718931.413738,
+      "provider": "",
       "error": null,
       "rate_limited_count": 0,
       "rate_limited_at": null,
       "probe_errors": {}
     },
-    "deepseek/deepseek-r1:free": {
-      "status": "failed",
-      "verified_at": 1778546766.6381745,
-      "provider": "",
-      "error": "HTTP 404",
+    "claude-opus-4-7": {
+      "status": "unknown",
+      "verified_at": 1778715666.0078225,
+      "provider": null,
+      "error": null,
       "rate_limited_count": 0,
       "rate_limited_at": null,
-      "probe_errors": {
-        "openrouter": "HTTP 404"
-      }
+      "probe_errors": {}
     },
-    "meta-llama/llama-4-maverick:free": {
+    "qwen2.5-coder:1.5b": {
       "status": "failed",
-      "verified_at": 1778546768.271783,
-      "provider": "",
-      "error": "HTTP 404",
+      "verified_at": 1778718963.066033,
+      "provider": "ollama",
+      "error": "All providers failed",
       "rate_limited_count": 0,
       "rate_limited_at": null,
       "probe_errors": {
-        "openrouter": "HTTP 404"
-      }
-    },
-    "anthropic/claude-opus-4-6": {
-      "status": "failed",
-      "verified_at": 1778546779.3392186,
-      "provider": "",
-      "error": "HTTP 400",
-      "rate_limited_count": 0,
-      "rate_limited_at": null,
-      "probe_errors": {
-        "openrouter": "HTTP 402"
-      }
-    },
-    "claude-sonnet-4-6": {
-      "status": "failed",
-      "verified_at": 1778546782.0875056,
-      "provider": "",
-      "error": "HTTP 400",
-      "rate_limited_count": 0,
-      "rate_limited_at": null,
-      "probe_errors": {
-        "openrouter": "HTTP 402"
+        "unknown": "All providers failed",
+        "ollama": "All providers failed"
       }
     }
   }

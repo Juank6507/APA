@@ -1,0 +1,79 @@
+{
+  "timestamp": "2026-05-14T01:36:11.123066",
+  "pool_data": {
+    "total_entries": 1,
+    "arena_scored": 0,
+    "health_summary": {
+      "unknown": 1
+    },
+    "elapsed_s": 2.1111714839935303
+  },
+  "stress_data": {
+    "total_calls": 4,
+    "total_success": 0,
+    "total_cost": 0.0,
+    "success_rate": 0.0,
+    "results": [
+      {
+        "ranking": "coding",
+        "model_id": "qwen2.5-coder:1.5b",
+        "pool_provider": "ollama",
+        "result_provider": "",
+        "arena_score": null,
+        "result_arena": null,
+        "success": false,
+        "tokens_output": 0,
+        "latency_ms": 15961,
+        "cost_usd": 0.0,
+        "error_type": "",
+        "attempts": 3,
+        "elapsed_s": 15.976611137390137
+      },
+      {
+        "ranking": "evaluation",
+        "model_id": "qwen2.5-coder:1.5b",
+        "pool_provider": "ollama",
+        "result_provider": "",
+        "arena_score": null,
+        "result_arena": null,
+        "success": false,
+        "tokens_output": 0,
+        "latency_ms": 39,
+        "cost_usd": 0.0,
+        "error_type": "",
+        "attempts": 3,
+        "elapsed_s": 0.044733524322509766
+      },
+      {
+        "ranking": "generation",
+        "model_id": "qwen2.5-coder:1.5b",
+        "pool_provider": "ollama",
+        "result_provider": "",
+        "arena_score": null,
+        "result_arena": null,
+        "success": false,
+        "tokens_output": 0,
+        "latency_ms": 38,
+        "cost_usd": 0.0,
+        "error_type": "",
+        "attempts": 3,
+        "elapsed_s": 0.04077768325805664
+      },
+      {
+        "ranking": "correction",
+        "model_id": "qwen2.5-coder:1.5b",
+        "pool_provider": "ollama",
+        "result_provider": "",
+        "arena_score": null,
+        "result_arena": null,
+        "success": false,
+        "tokens_output": 0,
+        "latency_ms": 36,
+        "cost_usd": 0.0,
+        "error_type": "",
+        "attempts": 3,
+        "elapsed_s": 0.04174947738647461
+      }
+    ]
+  }
+}

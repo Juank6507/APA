@@ -36,6 +36,61 @@ from core.assembler import Assembler, PlannerOutputParser
 
 logger = logging.getLogger(__name__)
 
+# ─── Helpers de métricas v2.0 ───
+
+def _extract_llm_metadata(response: dict, prefix: str) -> dict:
+    """Extrae métricas de una respuesta de call_llm() con un prefijo dado.
+    
+    call_llm() ahora retorna: tokens_input, tokens_output, latency_ms,
+    cost_usd, arena_score, provider, model_used, success.
+    
+    El assembler._log_assembly_usage() espera claves como:
+    planning_model, planning_provider, planning_tokens_input, etc.
+    
+    Args:
+        response: Dict retornado por call_llm()
+        prefix: "planning" o "coding"
+    
+    Returns:
+        Dict con claves prefijadas: {prefix}_model, {prefix}_provider, etc.
+    """
+    return {
+        f"{prefix}_model": response.get("model_used", ""),
+        f"{prefix}_provider": response.get("provider", ""),
+        f"{prefix}_tokens": (response.get("tokens_input", 0) + response.get("tokens_output", 0)),
+        f"{prefix}_tokens_input": response.get("tokens_input", 0),
+        f"{prefix}_tokens_output": response.get("tokens_output", 0),
+        f"{prefix}_latency_ms": response.get("latency_ms", 0),
+        f"{prefix}_cost_usd": response.get("cost_usd", 0.0),
+        f"{prefix}_arena_score": response.get("arena_score"),
+    }
+
+
+def _build_llm_metadata(planner_metadata: dict, coder_response: dict) -> dict:
+    """Construye el dict llm_metadata completo para assembler.run_full().
+    
+    Combina la metadata del planificador (ya extraída) con la metadata
+    del codificador (recién recibida) en un solo dict que el ensamblador
+    usa para registrar 3 entradas en UsageTracker:
+    1. assembly (proceso local)
+    2. planning (LLM planificador)
+    3. coding (LLM codificador)
+    
+    Args:
+        planner_metadata: Dict de _extract_llm_metadata(planner_response, "planning")
+        coder_response: Dict retornado por call_llm() para el codificador
+    
+    Returns:
+        Dict combinado con claves planning_* y coding_*
+    """
+    coder_metadata = _extract_llm_metadata(coder_response, "coding")
+    metadata = {}
+    metadata.update(planner_metadata)
+    metadata.update(coder_metadata)
+    # Arena score global (del modelo de planning, que es el que seleccionó el router)
+    metadata["arena_score"] = planner_metadata.get("planning_arena_score")
+    return metadata
+
 # ─── Estados del agente ───
 
 class AgentState(Enum):
@@ -80,7 +135,10 @@ class TaskInfo:
 
 @dataclass
 class SemiAutoResult:
-    """Resultado del pipeline semi-autónomo (tarea única)."""
+    """Resultado del pipeline semi-autónomo (tarea única).
+
+    v2.0: Incluye métricas completas de las llamadas LLM.
+    """
     success: bool = False
     planner_output: str = ""
     coder_output: str = ""
@@ -92,6 +150,19 @@ class SemiAutoResult:
     model_used_planner: str = ""
     model_used_coder: str = ""
     log: list = field(default_factory=list)
+    # v2.0: Métricas completas de las llamadas LLM
+    planning_provider: str = ""
+    planning_tokens_input: int = 0
+    planning_tokens_output: int = 0
+    planning_latency_ms: int = 0
+    planning_cost_usd: float = 0.0
+    planning_arena_score: Optional[float] = None
+    coding_provider: str = ""
+    coding_tokens_input: int = 0
+    coding_tokens_output: int = 0
+    coding_latency_ms: int = 0
+    coding_cost_usd: float = 0.0
+    coding_arena_score: Optional[float] = None
 
 
 @dataclass
@@ -213,14 +284,16 @@ class SemiAutoAgent:
     Nivel 2 (AS3): Ejecución multi-tarea con retroalimentación paso a paso.
     """
 
-    def __init__(self, project_root: str = ""):
+    def __init__(self, project_root: str = "", project_id: Optional[str] = None):
         """
         Inicializa el agente semi-autónomo.
 
         Args:
             project_root: Ruta raíz del proyecto para resolver archivos.
+            project_id: ID del proyecto para tracking de métricas en UsageTracker.
         """
         self.project_root = project_root
+        self._project_id = project_id  # v2.0: Para tracking de métricas
         self.assembler = Assembler()
         self._cancelled = False
         
@@ -232,6 +305,8 @@ class SemiAutoAgent:
         self._original_contents: Dict[str, str] = {}  # script → contenido original
         self._log: List[str] = []
         self._model_used_planner = ""
+        # v2.0: Metadata de la última llamada al planificador (para pasar al ensamblador)
+        self._planner_llm_metadata: Dict[str, Any] = {}
 
     # ─── Propiedades ───
 
@@ -343,6 +418,7 @@ class SemiAutoAgent:
                 user_prompt=planner_user_prompt,
                 max_tokens=3000,
                 temperature=0.1,
+                project_id=self._project_id,
             )
 
             if not planner_response.get("success"):
@@ -360,6 +436,8 @@ class SemiAutoAgent:
             result.model_used = planner_response.get("model_used", "")
             self._model_used_planner = result.model_used
             self._raw_planner_output = planner_output
+            # v2.0: Guardar metadata del planificador para pasar al ensamblador
+            self._planner_llm_metadata = _extract_llm_metadata(planner_response, "planning")
             result.log = self._log.copy()
             self._log.append(f"[PLANIFICADOR] OK — modelo: {result.model_used}, intentos: {planner_response.get('attempts', '?')}")
             self._report(on_progress, "planificador", f"Planificador respondió (modelo: {result.model_used})")
@@ -660,6 +738,7 @@ class SemiAutoAgent:
                 user_prompt=coder_user_prompt,
                 max_tokens=4000,
                 temperature=0.1,
+                project_id=self._project_id,
             )
 
             if not coder_response.get("success"):
@@ -671,6 +750,13 @@ class SemiAutoAgent:
             coder_output = coder_response["content"]
             result.coder_output = coder_output
             result.model_used_coder = coder_response.get("model_used", "")
+            # v2.0: Métricas del codificador
+            result.coding_provider = coder_response.get("provider", "")
+            result.coding_tokens_input = coder_response.get("tokens_input", 0)
+            result.coding_tokens_output = coder_response.get("tokens_output", 0)
+            result.coding_latency_ms = coder_response.get("latency_ms", 0)
+            result.coding_cost_usd = coder_response.get("cost_usd", 0.0)
+            result.coding_arena_score = coder_response.get("arena_score")
             self._log.append(f"[CODIFICADOR] OK — modelo: {result.model_used_coder}, intentos: {coder_response.get('attempts', '?')}")
             self._report(on_progress, "codificador", f"Código generado (modelo: {result.model_used_coder})")
 
@@ -685,6 +771,12 @@ class SemiAutoAgent:
                          f"Ensamblando {task.task_id}...")
             self._log.append(f"[ENSAMBLADOR] {task.task_id} — Ensamblando código en {task.script}...")
 
+            # v2.0: Construir llm_metadata con métricas de planning + coding
+            coder_llm_metadata = _build_llm_metadata(
+                planner_metadata=self._planner_llm_metadata,
+                coder_response=coder_response,
+            )
+
             assembly_result = self.assembler.run_full(
                 planner_text=task.planner_output,
                 coder_text=coder_output,
@@ -692,6 +784,8 @@ class SemiAutoAgent:
                 script_name=task.script,
                 duplicate_action="replace",
                 validation_override="new",
+                project_id=self._project_id,
+                llm_metadata=coder_llm_metadata,
             )
 
             result.assembled_content = assembly_result.assembled_content
@@ -759,6 +853,7 @@ class SemiAutoAgent:
                 user_prompt=planner_user_prompt,
                 max_tokens=3000,
                 temperature=0.1,
+                project_id=self._project_id,
             )
 
             if not planner_response.get("success"):
@@ -769,6 +864,15 @@ class SemiAutoAgent:
             planner_output = planner_response["content"]
             result.planner_output = planner_output
             result.model_used_planner = planner_response.get("model_used", "")
+            # v2.0: Métricas del planificador
+            result.planning_provider = planner_response.get("provider", "")
+            result.planning_tokens_input = planner_response.get("tokens_input", 0)
+            result.planning_tokens_output = planner_response.get("tokens_output", 0)
+            result.planning_latency_ms = planner_response.get("latency_ms", 0)
+            result.planning_cost_usd = planner_response.get("cost_usd", 0.0)
+            result.planning_arena_score = planner_response.get("arena_score")
+            # v2.0: Guardar metadata del planificador para pasar al ensamblador
+            planner_llm_metadata = _extract_llm_metadata(planner_response, "planning")
             result.log.append(f"Planificador OK (modelo: {result.model_used_planner})")
 
             if self._cancelled:
@@ -810,6 +914,7 @@ class SemiAutoAgent:
                 user_prompt=coder_user_prompt,
                 max_tokens=4000,
                 temperature=0.1,
+                project_id=self._project_id,
             )
 
             if not coder_response.get("success"):
@@ -820,6 +925,13 @@ class SemiAutoAgent:
             coder_output = coder_response["content"]
             result.coder_output = coder_output
             result.model_used_coder = coder_response.get("model_used", "")
+            # v2.0: Métricas del codificador
+            result.coding_provider = coder_response.get("provider", "")
+            result.coding_tokens_input = coder_response.get("tokens_input", 0)
+            result.coding_tokens_output = coder_response.get("tokens_output", 0)
+            result.coding_latency_ms = coder_response.get("latency_ms", 0)
+            result.coding_cost_usd = coder_response.get("cost_usd", 0.0)
+            result.coding_arena_score = coder_response.get("arena_score")
             result.log.append(f"Codificador OK (modelo: {result.model_used_coder})")
 
             if self._cancelled:
@@ -831,6 +943,12 @@ class SemiAutoAgent:
             # ─── ETAPA 3: Ensamblar ───
             self._report(on_progress, "ensamblador", "Ensamblando código...")
 
+            # v2.0: Construir llm_metadata con métricas de planning + coding
+            run_llm_metadata = _build_llm_metadata(
+                planner_metadata=planner_llm_metadata,
+                coder_response=coder_response,
+            )
+
             assembly_result = self.assembler.run_full(
                 planner_text=planner_output,
                 coder_text=coder_output,
@@ -838,6 +956,8 @@ class SemiAutoAgent:
                 script_name=target_file,
                 duplicate_action="replace",
                 validation_override="new",
+                project_id=self._project_id,
+                llm_metadata=run_llm_metadata,
             )
 
             result.assembled_content = assembly_result.assembled_content

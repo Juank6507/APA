@@ -1,4 +1,4 @@
-# apa/core/assembler.py — Motor de Ensamblaje Atómico APA (v4.0)
+# apa/core/assembler.py — Motor de Ensamblaje Atómico APA (v4.1)
 #
 # Motor completo de ensamblaje: parseo, resolución de anclas, normalización
 # de imports, detección de duplicados, merge inteligente, ensamblaje y validación.
@@ -32,12 +32,18 @@
 #       print(result.output)  # código ensamblado
 
 import ast
+import logging
+import os
 import re
 import subprocess
 import sys
+import time
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Dict, Optional
 from pathlib import Path
+
+# v4.1: Logging y UsageTracker para métricas de ensamblaje
+logger = logging.getLogger(__name__)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -80,6 +86,7 @@ class FullAssemblyResult:
     validation_mode: str = "new"
     log: list = field(default_factory=list)
     duplicate_decisions: list = field(default_factory=list)
+    rolled_back: bool = False  # v4.2: True si se restauró el original por validación fallida
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1653,11 +1660,113 @@ class Assembler:
     
     # ── Flujo completo de ensamblaje ─────────────────────────────────────────
     
+    def _log_assembly_usage(
+        self,
+        success: bool,
+        script_name: str,
+        assembled_content: str,
+        planner_text: str,
+        coder_text: str,
+        project_id: Optional[str],
+        llm_metadata: Optional[Dict],
+        latency_ms: int,
+        error_type: str = "",
+        blocks_count: int = 0,
+    ) -> None:
+        """v4.1: Registra métricas del ensamblaje en UsageTracker.
+        
+        No falla nunca — errores de logging no deben interrumpir el flujo.
+        Registra DOS entradas si llm_metadata tiene datos de planning/coding:
+        1. Entrada "assembly" con métricas del ensamblaje
+        2. Entrada "planning" con métricas del LLM planificador (si disponible)
+        3. Entrada "coding" con métricas del LLM codificador (si disponible)
+        """
+        if project_id is None:
+            return
+        
+        try:
+            from core.usage_tracker import UsageTracker
+            tracker = UsageTracker()
+            
+            # 1. Log del ensamblaje (proceso local, no LLM)
+            tokens_input = max(1, (len(planner_text) + len(coder_text)) // 4)
+            tokens_output = max(1, len(assembled_content) // 4)
+            
+            # Determinar modelo y provider desde metadata
+            model_used = "assembly_engine"
+            provider_used = "local"
+            arena_score_val = None
+            
+            if llm_metadata:
+                model_used = llm_metadata.get("planning_model", "assembly_engine")
+                provider_used = llm_metadata.get("planning_provider", "local")
+                arena_score_val = llm_metadata.get("arena_score")
+            
+            tracker.log_usage(
+                project_id=project_id,
+                model=model_used,
+                tokens=tokens_input + tokens_output,
+                request_type="assembly",
+                provider=provider_used,
+                tokens_input=tokens_input,
+                tokens_output=tokens_output,
+                latency_ms=latency_ms,
+                cost_usd=0.0,  # El ensamblaje es local, sin coste API
+                arena_score=arena_score_val,
+                success=success,
+                error_type=error_type,
+            )
+            logger.info(
+                f"Assembly logged: project={project_id} script={script_name} "
+                f"blocks={blocks_count} tokens_in={tokens_input} tokens_out={tokens_output} "
+                f"latency={latency_ms}ms success={success}"
+            )
+            
+            # 2. Log de la llamada planning (si hay metadata)
+            if llm_metadata and llm_metadata.get("planning_model"):
+                tracker.log_usage(
+                    project_id=project_id,
+                    model=llm_metadata["planning_model"],
+                    tokens=llm_metadata.get("planning_tokens", 0),
+                    request_type="planning",
+                    provider=llm_metadata.get("planning_provider", ""),
+                    tokens_input=llm_metadata.get("planning_tokens_input", 0),
+                    tokens_output=llm_metadata.get("planning_tokens_output", 0),
+                    latency_ms=llm_metadata.get("planning_latency_ms", 0),
+                    cost_usd=llm_metadata.get("planning_cost_usd", 0.0),
+                    arena_score=llm_metadata.get("planning_arena_score"),
+                    success=True,
+                    error_type="",
+                )
+            
+            # 3. Log de la llamada coding (si hay metadata)
+            if llm_metadata and llm_metadata.get("coding_model"):
+                tracker.log_usage(
+                    project_id=project_id,
+                    model=llm_metadata["coding_model"],
+                    tokens=llm_metadata.get("coding_tokens", 0),
+                    request_type="coding",
+                    provider=llm_metadata.get("coding_provider", ""),
+                    tokens_input=llm_metadata.get("coding_tokens_input", 0),
+                    tokens_output=llm_metadata.get("coding_tokens_output", 0),
+                    latency_ms=llm_metadata.get("coding_latency_ms", 0),
+                    cost_usd=llm_metadata.get("coding_cost_usd", 0.0),
+                    arena_score=llm_metadata.get("coding_arena_score"),
+                    success=True,
+                    error_type="",
+                )
+        except Exception as e:
+            logger.warning(f"Assembly usage logging failed (continuing): {e}")
+    
     def run_full(self, planner_text: str, coder_text: str, original_content: str,
                  script_name: str, duplicate_action: str = "replace",
                  duplicate_decisions: dict = None,
-                 validation_override: str = "new") -> FullAssemblyResult:
+                 validation_override: str = "new",
+                 project_id: Optional[str] = None,
+                 llm_metadata: Optional[Dict] = None) -> FullAssemblyResult:
         """Ejecuta el flujo completo de ensamblaje sin GUI.
+        
+        v4.1: Añadidos project_id y llm_metadata para métricas completas.
         
         Args:
             planner_text: Output del Planificador
@@ -1668,10 +1777,26 @@ class Assembler:
             duplicate_decisions: Dict opcional con decisiones por bloque {(type, name): action}
                                 Si se proporciona, tiene prioridad sobre duplicate_action
             validation_override: Modo de validación existente ("new", "overwrite", "implement")
+            project_id: ID del proyecto para registro de métricas (UsageTracker)
+            llm_metadata: Dict con metadatos de las llamadas LLM que generaron
+                          planner_text y coder_text. Ejemplo:
+                          {
+                              "planning_model": "openai/gpt-4o",
+                              "planning_provider": "openai",
+                              "planning_tokens": 700,
+                              "planning_latency_ms": 1500,
+                              "coding_model": "anthropic/claude-3-5-sonnet",
+                              "coding_provider": "anthropic",
+                              "coding_tokens": 1200,
+                              "coding_latency_ms": 2500,
+                          }
         
         Returns:
             FullAssemblyResult con todo el estado del ensamblaje
         """
+        # v4.1: Timing del ensamblaje
+        _assembly_start = time.time()
+        
         log = []
         dup_decisions_log = []
         per_block_decisions = duplicate_decisions or {}
@@ -1679,6 +1804,14 @@ class Assembler:
         # 1. Parseo del Planificador
         parsed = PlannerOutputParser.parse(planner_text)
         if parsed.get("errores"):
+            _latency_ms = int((time.time() - _assembly_start) * 1000)
+            self._log_assembly_usage(
+                success=False, script_name=script_name,
+                assembled_content=original_content, planner_text=planner_text,
+                coder_text=coder_text, project_id=project_id,
+                llm_metadata=llm_metadata, latency_ms=_latency_ms,
+                error_type="parse_error", blocks_count=0,
+            )
             return FullAssemblyResult(
                 success=False, assembled_content=original_content,
                 validation_result={"success": False, "output": "\n".join(parsed["errores"]), "returncode": 1},
@@ -1690,6 +1823,14 @@ class Assembler:
         
         if not blocks_data:
             if not coder_text.strip() and not parsed.get("imports_nuevos"):
+                _latency_ms = int((time.time() - _assembly_start) * 1000)
+                self._log_assembly_usage(
+                    success=False, script_name=script_name,
+                    assembled_content=original_content, planner_text=planner_text,
+                    coder_text=coder_text, project_id=project_id,
+                    llm_metadata=llm_metadata, latency_ms=_latency_ms,
+                    error_type="no_blocks", blocks_count=0,
+                )
                 return FullAssemblyResult(
                     success=False, assembled_content=original_content,
                     validation_result={"success": False, "output": "No hay bloques ni código para insertar", "returncode": 1},
@@ -1968,11 +2109,51 @@ class Assembler:
                     assembled_content, pending_validation_code, task_id_val, validation_mode
                 )
             
-            # 14. Validar
+            # 14. Validar (siempre sintaxis como mínimo)
             validation_result = self.validate(assembled_content, script_name, validation_mode="auto")
             
+            # v4.2: Validación obligatoria de sintaxis — si falla, hacer rollback
+            _rolled_back = False
+            if not validation_result.get("success", False):
+                # Verificar con syntax check directo como respaldo
+                try:
+                    ast.parse(assembled_content)
+                except SyntaxError as se:
+                    # Sintaxis rota → rollback automático
+                    logger.warning(
+                        f"Rollback automático: código ensamblado falla sintaxis — {se.msg} línea {se.lineno}. "
+                        f"Restaurando original."
+                    )
+                    log.append(f"ROLLBACK: Código ensamblado falla validación de sintaxis — {se.msg} línea {se.lineno}")
+                    log.append("ROLLBACK: Restaurando contenido original")
+                    assembled_content = pre_modification_content
+                    _rolled_back = True
+                    validation_result = {
+                        "success": False,
+                        "output": f"Sintaxis rota tras ensamblaje: {se.msg} línea {se.lineno}. Rollback ejecutado.",
+                        "returncode": 1,
+                        "rolled_back": True,
+                        "original_error": str(se),
+                    }
+            
+            # v4.1: Log de ensamblaje
+            _latency_ms = int((time.time() - _assembly_start) * 1000)
+            _blocks_count = len(blocks) if blocks else 0
+            self._log_assembly_usage(
+                success=validation_result.get("success", False) and not _rolled_back,
+                script_name=script_name,
+                assembled_content=assembled_content,
+                planner_text=planner_text,
+                coder_text=coder_text,
+                project_id=project_id,
+                llm_metadata=llm_metadata,
+                latency_ms=_latency_ms,
+                error_type="" if validation_result.get("success") and not _rolled_back else ("rollback" if _rolled_back else "validation_failed"),
+                blocks_count=_blocks_count,
+            )
+            
             return FullAssemblyResult(
-                success=validation_result.get("success", False),
+                success=validation_result.get("success", False) and not _rolled_back,
                 assembled_content=assembled_content,
                 validation_result=validation_result,
                 parsed=parsed,
@@ -1984,9 +2165,19 @@ class Assembler:
                 script_name=script_name,
                 validation_mode=validation_mode,
                 log=log,
-                duplicate_decisions=dup_decisions_log
+                duplicate_decisions=dup_decisions_log,
+                rolled_back=_rolled_back,
             )
         except Exception as e:
+            # v4.1: Log de error en ensamblaje
+            _latency_ms = int((time.time() - _assembly_start) * 1000)
+            self._log_assembly_usage(
+                success=False, script_name=script_name,
+                assembled_content=original_content, planner_text=planner_text,
+                coder_text=coder_text, project_id=project_id,
+                llm_metadata=llm_metadata, latency_ms=_latency_ms,
+                error_type="assembly_error", blocks_count=0,
+            )
             return FullAssemblyResult(
                 success=False, assembled_content=original_content,
                 validation_result={"success": False, "output": str(e), "returncode": 1},

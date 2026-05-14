@@ -362,4 +362,60 @@ SOLUCIÓN: Informe y código en cuadros separados.
 
 RECTIFICACIÓN: Si el Director dice "REGLA ROTA", buscar backticks internos y separar en cuadros distintos.
 
-Regla adicional: No se resuelve y codifica has esclarecer muy bien el objetivo y previa autorización mía. Trabajas con agentes planificadora (p) y codificadores (c) con el objetivo de perfilar el trabajo del ensamblador_gui.py. El p descompone una tarea en partes si está trabando sobre un código determinado lo pide y le entrega al c la tarea dividida en la partes que antes desglosó con un formato determinado y cada tarea de esas tiene su ancla para ser insertada por el e en el lugar correcto, con la identación apropiada y también le menciona las dependencias de cada tarea. El c recibe cada bloque de tareas implementa sus dependencias desarrolla el código parte por parte (tarea a tarea) sin marcar explícitamente donde comienza y termina una tarea, le da la identación que el p le entregó e  implementa la validación de cada tarea del bloque en el if__name__. El output del cada agente se entrega  al e y este lo tiene que ensamblar con el estandar de la buenas practicas de python, estructurado por partes y cada parte en su lugar correspondiente y separado por una línea blanca que divide cada bloque estructural. 1ero El nombre de script y sus comentarios iniciales( si existen) este bloque no necesita anclas, 2do Las dependencias que el ensamblador tiene que ser capaz de evitar que se dupliquen las ordena en el orden de implementación y la entrega en un bloque, tampoco lleva ancla y se colocan de forma predeterminada detrás de los comentarios iniciales y el nombre. 3ero Las clases, métodos, funciones y partes de código que entrega el c y que se ubican en el ancla que dice el p en su output, se le coloca la identación correspondiente y se si no es la correcta el e da un aviso para que corrija el código. 4to La validación de código se coloca al final También sin ancla alguno 5to El código completo se válida y se aprueba de forma automática. Al aprobar es que el código se guarda en disco y se crea un copia del archivo original, si se desea deshacer la tarea actual, que está sin guardar se le da a la tecla deshacer y se vuelve al código original guardado anteriormente. Este es el flujo de trabajo actual de APA_.Metodología_ Atómica. 
+## FLUJO DE TRABAJO OBLIGATORIO
+
+### 1. Espacios separados
+- **El agente trabaja en:** `/home/z/my-project/download/`
+- **El proyecto del usuario está en:** `/home/z/my-project/APA/`
+- **GitHub del usuario:** `https://github.com/Juank6507/APA.git`
+
+### 2. El agente NO modifica directamente el proyecto del usuario
+- El agente lee archivos del proyecto para diagnosticar, SÍ
+- El aguede edita archivos del proyecto para probar, SÍ (solo en sesión activa)
+- Pero **la entrega final** siempre va a `/home/z/my-project/download/`
+
+### 3. Cuando el agente hace un cambio
+1. Hace el cambio
+2. Copia los archivos modificados a `/home/z/my-project/download/`
+3. Entrega al usuario con esta tabla:
+
+| Archivo | Destino en el proyecto |
+|---------|----------------------|
+| `archivo.py` | `APA/apa/core/archivo.py` |
+
+4. El usuario los copia a su proyecto local
+5. El usuario hace `git add` + `git commit` + `git push`
+
+### 4. El agente NUNCA hace git commit/push
+- No tiene credenciales de GitHub
+- El control de versiones lo maneja el usuario
+
+### 5. Comunicación: entrega antes que explicación
+- PRIMERO entregar los archivos
+- DESPUÉS explicar qué cambió
+- NUNCA gastar prompts en explicar sin haber entregado primero
+
+---
+
+## LECCIONES APRENDIDAS (Sesión 2026-05-14)
+
+### Lo que salió mal
+- El agente diagnosticó algo que ya funcionaba (Arena fetcher OK, pyarrow instalado)
+- Gastó 8 prompts y 1 hora sin entregar nada
+- Explicó y re-explicó en vez de entregar archivos
+- No entendió el flujo de trabajo hasta el prompt 7
+
+### Lo que NO debe repetirse
+- ❌ Diagnosticar sin antes verificar si ya funciona
+- ❌ Explicar el estado del sistema sin entregar los cambios
+- ❌ Modificar archivos del proyecto sin copiarlos a download/
+- ❌ Hacer git commit/push (no tiene permisos)
+- ❌ Asumir que el usuario puede ver los archivos del servidor
+- ❌ Responder a "cómo actualizamos" con explicaciones en vez de archivos
+
+### Lo que SÍ debe hacerse
+- ✅ Verificar rápido si algo ya funciona antes de diagnosticar
+- ✅ Entregar archivos en `/home/z/my-project/download/` con tabla de destinos
+- ✅ Ser breve: archivo + destino + qué cambió
+- ✅ Leer el worklog antes de empezar a trabajar
+- ✅ Escribir en el worklog después de terminar

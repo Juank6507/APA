@@ -1,4 +1,18 @@
 # apa/core/arena_fetcher.py
+# v3.0 — Sprint 1: Cache-first non-blocking (D-8/D-10),
+#         4-Phase Startup (Phase 0: cache, Phase 1: rankings, etc.)
+#
+# CAMBIOS v3.0 vs v2.0:
+#   - D-8/D-10: Cache-first non-blocking — carga caché local al importar,
+#     fetch en background. NUNCA bloquea al importar.
+#   - 4-Phase Startup:
+#     * Phase 0: Carga caché local (instantáneo, <100ms)
+#     * Phase 1: Inicia fetch en background para rankings frescos
+#     * Phase 2: Disponibilidad via model_health
+#     * Phase 3: Recuperar unavailable models
+#   - get_score_for_model() funciona inmediatamente con lo que haya en caché
+#   - Compatibilidad total con v2.0 (sin breaking changes en API pública)
+#
 # v2.0 — Corrección completa: soporte multi-categoría, eliminación de inferencias,
 #         fetch de config webdev, cache v2 con versionado, GitHub fallback real.
 import csv
@@ -249,9 +263,13 @@ def _load_cache() -> Dict[str, Dict[str, float]]:
         now = datetime.now(updated.tzinfo) if updated.tzinfo else datetime.now()
         cache_age = (now - updated).total_seconds()
         if updated.date() != date.today() and cache_age > _CACHE_DURATION_SECONDS:
-            _log("arena_fetcher", "CACHE_LOAD", "EXPIRADO",
-                 f"Antigüedad: {cache_age/3600:.1f}h, fecha: {updated.date()}")
-            return {}
+            # FIX: Usar caché expirado como fallback en vez de descartarlo.
+            # Es mejor tener datos de hace días que no tener nada.
+            # Se marca como expirado para que el background thread intente refrescar,
+            # pero se retorna el contenido del caché igualmente.
+            _log("arena_fetcher", "CACHE_LOAD", "EXPIRADO_PERO_UTIL",
+                 f"Antigüedad: {cache_age/3600:.1f}h, fecha: {updated.date()}. "
+                 f"Se usa como fallback — el background thread refrescará.")
 
         # Formato v2: {name: {category: {"elo": N, "votes": N}, ...}}
         models_raw = data.get("models", {})
@@ -737,26 +755,67 @@ def _start_background_refresh_if_needed() -> None:
 
 
 # -----------------------------------------------------------------------------
-# Inicialización al importar: carga con jerarquía HF→GitHub→caché
+# Inicialización al importar: D-8/D-10 Cache-first non-blocking
 # -----------------------------------------------------------------------------
-_initial_raw = _fetch_rankings_with_fallback()
-if _initial_raw:
-    _initial_cache = _build_fast_index(_initial_raw)
-    # Log de categorías disponibles en el fast_index
-    cats_in_index = set()
-    for scores in _initial_cache.values():
-        cats_in_index.update(scores.keys())
-    _log("arena_fetcher", "INIT", "DATOS_CARGADOS",
-         f"{len(_initial_cache)} modelos, categorías: {sorted(cats_in_index)}")
-else:
-    _initial_cache = {}
-    _log("arena_fetcher", "INIT", "SIN_DATOS",
-         "No hay datos disponibles de ninguna fuente")
+# Phase 0: Cargar SOLO caché local (instantáneo, <100ms)
+# Phase 1: Iniciar background fetch para rankings frescos
+#
+# v2.0 BLOCKED al importar: _fetch_rankings_with_fallback() tarda 5-6s+
+# v3.0 NON-BLOCKING: carga caché local al instante, fetch en background
+
+def _phase0_load_cache_only() -> Dict[str, Dict[str, float]]:
+    """Phase 0: Carga SOLO caché local (instantáneo).
+
+    D-10: 'Nothing blocks nothing' — arrancamos inmediatamente
+    con lo que tenemos en caché, sin esperar a HuggingFace.
+    """
+    # 1. Intentar caché local persistente
+    cached = _load_cache()
+    if cached:
+        cats = set()
+        for scores in cached.values():
+            cats.update(scores.keys())
+        _log("arena_fetcher", "PHASE0", "CACHE_LOCAL",
+             f"{len(cached)} modelos, categorías: {sorted(cats)}")
+        return cached
+
+    # 2. Intentar rankings locales
+    local = _load_local_rankings()
+    if local:
+        _log("arena_fetcher", "PHASE0", "LOCAL_RANKINGS",
+             f"{len(local)} modelos")
+        return local
+
+    # 3. Intentar snapshot
+    snapshot = _load_snapshot()
+    if snapshot:
+        _log("arena_fetcher", "PHASE0", "SNAPSHOT",
+             f"{len(snapshot)} modelos")
+        return snapshot
+
+    _log("arena_fetcher", "PHASE0", "VACIO",
+         "Sin datos locales, se obtendrán en background")
+    return {}
+
+
+_initial_cache = _phase0_load_cache_only()
 
 with _refresh_lock:
     _arena_data = _initial_cache
     _needs_refresh = (len(_initial_cache) == 0)
+
+# Phase 1: Iniciar fetch en background para rankings frescos
 _start_background_refresh_if_needed()
+
+if _initial_cache:
+    cats_in_index = set()
+    for scores in _initial_cache.values():
+        cats_in_index.update(scores.keys())
+    _log("arena_fetcher", "INIT", "LISTO",
+         f"Phase 0 OK: {len(_initial_cache)} modelos. Phase 1 en background.")
+else:
+    _log("arena_fetcher", "INIT", "ESPERANDO_BG",
+         "Phase 0 sin datos. Esperando background fetch...")
 
 
 # -----------------------------------------------------------------------------

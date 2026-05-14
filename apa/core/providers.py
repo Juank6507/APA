@@ -1,4 +1,13 @@
 # apa/core/providers.py
+# v2.3 — Sprint 1: confidence_score por provider (P-2),
+#         integración con Pool composite key (P-1).
+#
+# CAMBIOS v2.3 vs v2.2:
+#   - confidence_score property en ModelProvider ABC (P-2)
+#   - Default confidence por tipo de provider: native=90, aggregator=70, local=60
+#   - get_all_models_with_provider() retorna modelos con provider como dato
+#   - Compatibilidad total con v2.2 (sin breaking changes)
+#
 # v2.2 — Production-ready: CACHE_DIR usa _find_project_data_dir() para
 #         consistencia con model_health, logger.propagate=False.
 #
@@ -113,9 +122,26 @@ class ModelProvider(ABC):
     CACHE_DIR = _find_project_data_dir() / "providers"
     CACHE_TTL = 3600
 
+    # P-2: Default confidence score (override en subclases)
+    # Native providers (anthropic, openai) → 90 (API directa, máxima fiabilidad)
+    # Aggregator providers (openrouter, together, groq) → 70 (intermediario)
+    # Local providers (ollama) → 60 (depende de hardware local)
+    _DEFAULT_CONFIDENCE_SCORE: float = 70.0
+
     @property
     @abstractmethod
     def name(self) -> str: pass
+
+    @property
+    def confidence_score(self) -> float:
+        """P-2: Confidence score del provider (0-100).
+
+        Refleja la fiabilidad del provider para servir modelos sin error.
+        - Native (anthropic, openai): 90 — API directa
+        - Aggregator (openrouter, together, groq, github): 70 — intermediario
+        - Local (ollama): 60 — depende de hardware
+        """
+        return self._DEFAULT_CONFIDENCE_SCORE
 
     @abstractmethod
     def is_available(self) -> bool: pass
@@ -147,6 +173,8 @@ class ModelProvider(ABC):
             pass
 
 class OpenRouterProvider(ModelProvider):
+    _DEFAULT_CONFIDENCE_SCORE = 70.0  # Aggregator
+
     def __init__(self):
         self._api_key = settings.openrouter_api_key
         self._base_url = "https://openrouter.ai/api/v1"
@@ -217,6 +245,7 @@ class OpenRouterProvider(ModelProvider):
         except Exception as e: return {"content": "", "model_used": model_id, "provider": self.name, "success": False, "error": str(e)}
 
 class GroqProvider(ModelProvider):
+    _DEFAULT_CONFIDENCE_SCORE = 70.0  # Aggregator
     def __init__(self):
         self._api_key = settings.groq_api_key
         self._base_url = "https://api.groq.com/openai/v1"
@@ -258,6 +287,7 @@ class GroqProvider(ModelProvider):
         except Exception as e: return {"content": "", "model_used": model_id, "provider": self.name, "success": False, "error": str(e)}
 
 class GitHubModelsProvider(ModelProvider):
+    _DEFAULT_CONFIDENCE_SCORE = 70.0  # Aggregator
     def __init__(self):
         self._token = settings.github_token
         self._base_url = "https://models.inference.ai.azure.com"
@@ -299,6 +329,7 @@ class GitHubModelsProvider(ModelProvider):
         except Exception as e: return {"content": "", "model_used": model_id, "provider": self.name, "success": False, "error": str(e)}
 
 class TogetherProvider(ModelProvider):
+    _DEFAULT_CONFIDENCE_SCORE = 70.0  # Aggregator
     def __init__(self):
         self._api_key = settings.together_api_key
         self._base_url = "https://api.together.xyz/v1"
@@ -340,6 +371,7 @@ class TogetherProvider(ModelProvider):
         except Exception as e: return {"content": "", "model_used": model_id, "provider": self.name, "success": False, "error": str(e)}
 
 class FireworksProvider(ModelProvider):
+    _DEFAULT_CONFIDENCE_SCORE = 70.0  # Aggregator
     def __init__(self):
         self._api_key = settings.fireworks_api_key
         self._base_url = "https://api.fireworks.ai/inference/v1"
@@ -381,6 +413,7 @@ class FireworksProvider(ModelProvider):
         except Exception as e: return {"content": "", "model_used": model_id, "provider": self.name, "success": False, "error": str(e)}
 
 class OllamaProvider(ModelProvider):
+    _DEFAULT_CONFIDENCE_SCORE = 60.0  # Local
     def __init__(self):
         self._base_url = settings.ollama_base_url.rstrip("/")
         self._avail_cache, self._avail_ts = None, None
@@ -421,6 +454,7 @@ class OllamaProvider(ModelProvider):
         except Exception as e: return {"content": "", "model_used": model_id, "provider": self.name, "success": False, "error": str(e)}
 
 class AnthropicProvider(ModelProvider):
+    _DEFAULT_CONFIDENCE_SCORE = 90.0  # Native
     _FALLBACK = [{"id": "claude-3-5-sonnet-20241022", "name": "Claude 3.5 Sonnet", "context_length": 200000}, {"id": "claude-3-5-haiku-20241022", "name": "Claude 3.5 Haiku", "context_length": 200000}]
 
     def __init__(self):
@@ -467,6 +501,7 @@ class AnthropicProvider(ModelProvider):
         except Exception as e: return {"content": "", "model_used": model_id, "provider": self.name, "success": False, "error": str(e)}
 
 class OpenAIProvider(ModelProvider):
+    _DEFAULT_CONFIDENCE_SCORE = 90.0  # Native
     _FALLBACK = [{"id": "gpt-4o", "name": "GPT-4o", "context_length": 128000}, {"id": "gpt-4o-mini", "name": "GPT-4o Mini", "context_length": 128000}]
 
     def __init__(self):
@@ -543,6 +578,26 @@ class ProviderManager:
                          if m["id"] not in seen: seen[m["id"]] = m
             except: pass
         return list(seen.values())
+
+    def get_all_models_with_provider(self) -> List[Dict[str, Any]]:
+        """P-1: Retorna TODOS los modelos de TODOS los providers, SIN deduplicar.
+
+        A diferencia de get_all_models() que deduplica por model_id,
+        este método retorna una entrada por cada (provider, model_id),
+        permitiendo que el Pool tenga composite keys distintas para
+        el mismo modelo en distintos providers.
+        """
+        all_models = []
+        for p in self.providers.values():
+            try:
+                if p.is_available():
+                    for m in p.get_models():
+                        m_copy = dict(m)
+                        m_copy["provider"] = p.name
+                        m_copy["provider_confidence"] = p.confidence_score
+                        all_models.append(m_copy)
+            except: pass
+        return all_models
 
     def get_available_models(self) -> List[str]:
         """Retorna una lista con los IDs de todos los modelos disponibles."""
@@ -808,7 +863,7 @@ class ProviderManager:
                 result["provider"] = p.name
                 return self._sanitize_response(result)
 
-        return {"content": "", "model_used": model_id, "provider": None, "success": False, "error": "All providers failed"}
+        return {"content": "", "model_used": model_id, "provider": "unknown", "success": False, "error": "All providers failed"}
 
 
 # Instancia global

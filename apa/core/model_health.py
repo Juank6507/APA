@@ -1,62 +1,22 @@
 # apa/core/model_health.py
+# v4.0 — Sprint 1: payment_required status (D-5),
+#         response-code-driven scheduling (D-3/D-4),
+#         integración con Pool composite key (P-1).
+#
+# CAMBIOS v4.0 vs v3.1:
+#   - payment_required status (D-5): HTTP 402 → payment_required
+#   - mark_payment_required() method
+#   - Response-code-driven scheduling (D-3/D-4):
+#     * 429 → rate_limited (cooldown)
+#     * 402 → payment_required (D-5)
+#     * 5xx → failed con retry automático
+#   - get_status() reconoce payment_required
+#   - _classify_error() retorna 'payment' para 402
+#   - report_http_status() — entrada unificada para response codes
+#   - Compatibilidad total con v3.1 (sin breaking changes)
+#
 # v3.1 — Production-ready: SESSION TRUST configurable, logging limpio,
 #         sin print() de diagnóstico, lazy path resolution.
-#
-# ============================================================================
-# APROXIMACIÓN v3.1 vs RESULTADO ESPERADO:
-#   v3.0 era funcional pero tenía problemas de producción:
-#   - print() de diagnóstico por toda la consola en producción
-#   - Duplicate logging (logger + root logger propagation)
-#   - SESSION TRUST window hardcoded (300s, no configurable)
-#   - Path resolution diagnostic impreso al importar (ruidoso)
-#
-#   v3.1 FIX:
-#   1. Todos los print() → logger.debug() (solo visibles con DEBUG level)
-#   2. logger.propagate = False → elimina duplicados de logging
-#   3. SESSION TRUST window configurable via APA_TRUST_WINDOW env var
-#      o parámetro en configure()
-#   4. Path resolution diagnostic solo a logger.debug()
-#   5. configure() API para cambiar parámetros en runtime
-#   6. Standalone test usa logging.basicConfig (no print directo)
-#
-#   RESULTADO ESPERADO:
-#   - Salida limpia en producción (solo INFO/WARNING/ERROR)
-#   - Sin líneas duplicadas
-#   - SESSION TRUST window configurable sin tocar código
-#   - Diagnósticos disponibles via logger.debug() cuando se necesitan
-# ============================================================================
-#
-# CAMBIOS v3.1 vs v3.0:
-#   - logger.propagate = False → elimina duplicate log lines
-#   - Todos los print() de diagnóstico → logger.debug()
-#   - logger.info() solo para eventos importantes (SESSION TRUST, carga, flush)
-#   - _SESSION_TRUST_WINDOW configurable via APA_TRUST_WINDOW env var
-#   - configure(trust_window=...) para cambio en runtime
-#   - Path resolution diagnostic: print() → logger.debug()
-#   - Import-time print() eliminado
-#   - Standalone test: print() solo en __main__, funciones usan logger
-#
-# CAMBIOS v3.0 vs v2.9:
-#   - (v3.0 fue la versión del usuario con cambios menores)
-#
-# CAMBIOS v2.9 vs v2.8:
-#   - _find_project_data_dir(): búsqueda robusta del data dir correcto
-#   - Path(__file__).resolve() para path absoluto antes de calcular parent.parent
-#   - get_diagnostic_info() incluye _module_file y _module_file_resolved
-#   - Eliminado cálculo frágil parent.parent.parent / "data"
-#
-# CONCEPTO:
-#   - Al iniciar sesión: cargar health_cache.json (lo que funcionaba antes)
-#   - SESSION TRUST: modelos verificados hace <trust_window → mantener como "available"
-#   - Probar modelos en orden de ranking Arena (probe verificable)
-#   - El primer modelo que responde = modelo seleccionado
-#   - Background: seguir verificando el resto del ranking
-#   - Todo en memoria, flush a disco cada 5 min o al cerrar
-#
-# PROBE VERIFICABLE:
-#   Prompt: "Respond with exactly the word: PING"
-#   Verificación: respuesta contiene "PING" (case-insensitive)
-#   Timeout: 10s para probe sincrónico, 15s para background
 
 import json
 import logging
@@ -79,42 +39,25 @@ from core.normalizer import normalize_model_id
 # ============================================================================
 logger = logging.getLogger(__name__)
 
-# v3.1: Solo agregar handler si no hay; NO propagar al root logger
-# (evita líneas duplicadas cuando root logger también tiene handler)
 if not logger.handlers:
     handler = logging.StreamHandler()
     handler.setFormatter(logging.Formatter(
         '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     ))
     logger.addHandler(handler)
-logger.propagate = False  # v3.1: Evita duplicate log lines
+logger.propagate = False
 
 # ============================================================================
 # Configuración — SESSION TRUST window configurable
 # ============================================================================
-# Prioridad: configure() > APA_TRUST_WINDOW env var > default 300s
 _DEFAULT_TRUST_WINDOW = 300
 _SESSION_TRUST_WINDOW = int(os.environ.get("APA_TRUST_WINDOW", _DEFAULT_TRUST_WINDOW))
 
 # ============================================================================
 # Archivos de caché
 # ============================================================================
-# v2.9: _find_project_data_dir() busca el data dir correcto sin depender
-# de la profundidad de __file__. En Windows, __file__ puede ser relativo
-# cuando el módulo se importa como paquete.
-
 def _find_project_data_dir() -> Path:
-    """Busca el directorio data/ del proyecto APA de forma robusta.
-
-    ESTRATEGIA:
-    1. Resolve __file__ a path absoluto
-    2. Caminar hacia arriba buscando data/ con providers/
-    3. Para cada data/ candidato, verificar que su directorio padre
-       contiene 'apa/' como subdirectorio (marcador del raíz del proyecto)
-    4. Si no encuentra con criterio estructural, usar el data/ más
-       alejado de __file__ (el del raíz, no el interno)
-    5. Último fallback: parent.parent.parent / "data" (v2.8)
-    """
+    """Busca el directorio data/ del proyecto APA de forma robusta."""
     resolved = Path(__file__).resolve()
     current = resolved.parent
 
@@ -147,18 +90,15 @@ _DATA_DIR = _find_project_data_dir()
 _HEALTH_CACHE_PATH = _DATA_DIR / "health_cache.json"
 _ARENA_CACHE_PATH = _DATA_DIR / "arena_cache.json"
 
-# v2.9: Guardar info del módulo para diagnóstico
 _MODULE_FILE = str(Path(__file__))
 _MODULE_FILE_RESOLVED = str(Path(__file__).resolve())
 
-# v3.1: Path resolution diagnostic va a logger.debug(), no a print()
 logger.debug(f"Path resolution: data_dir={_DATA_DIR}, "
              f"__file__={_MODULE_FILE}, resolved={_MODULE_FILE_RESOLVED}")
 
 _HEALTH_CACHE_VERSION = 1
 _FLUSH_INTERVAL = 300
 
-# Prompt verificable para probe
 _PROBE_MESSAGES = [{"role": "user", "content": "Respond with exactly the word: PING"}]
 _PROBE_MAX_TOKENS = 10
 _PROBE_TEMPERATURE = 0.0
@@ -167,18 +107,12 @@ _PROBE_BG_TIMEOUT = 15
 _PROBE_BG_DELAY = 3
 _PROBE_SYNC_DELAY = 1.0
 
-# Rate limit y backoff
 _RATE_LIMIT_BACKOFF_BASE = 60
 _RATE_LIMIT_BACKOFF_MAX = 300
 
 
 def configure(trust_window: int = None) -> None:
-    """Configura parámetros de model_health en runtime.
-
-    Args:
-        trust_window: Ventana SESSION TRUST en segundos. Si es None,
-                      no se cambia el valor actual.
-    """
+    """Configura parámetros de model_health en runtime."""
     global _SESSION_TRUST_WINDOW
     if trust_window is not None:
         _SESSION_TRUST_WINDOW = trust_window
@@ -205,12 +139,10 @@ _last_cache_load_time = 0.0
 
 
 def _now_epoch() -> float:
-    """Retorna el tiempo actual como epoch float."""
     return time.time()
 
 
 def _parse_verified_at_epoch(value: Any) -> Optional[float]:
-    """Convierte verified_at a epoch float. Acepta ISO string, epoch float, o None."""
     if value is None:
         return None
     if isinstance(value, (int, float)):
@@ -235,14 +167,7 @@ def _parse_verified_at_epoch(value: Any) -> Optional[float]:
 # ============================================================================
 
 def load_health_from_cache(force: bool = False) -> Dict[str, Dict[str, Any]]:
-    """Carga datos de salud desde health_cache.json (archivo separado).
-
-    SESSION TRUST: Si un modelo estaba "available" y fue verificado
-    hace menos de trust_window segundos, se mantiene como "available"
-    en lugar de marcarlo como "unknown".
-
-    v3.1: Todos los diagnostics via logger.debug(), no print().
-    """
+    """Carga datos de salud desde health_cache.json."""
     global _health_data, _cache_loaded, _last_cache_load_time
 
     if _cache_loaded and not force:
@@ -258,7 +183,6 @@ def load_health_from_cache(force: bool = False) -> Dict[str, Dict[str, Any]]:
     logger.debug(f"load_health_from_cache() — cache_path={cache_path}, "
                  f"exists={cache_path.exists()}")
 
-    # 1. Intentar leer health_cache.json
     if cache_path.exists():
         try:
             with open(cache_path, "r", encoding="utf-8") as f:
@@ -269,7 +193,6 @@ def load_health_from_cache(force: bool = False) -> Dict[str, Dict[str, Any]]:
         except Exception as e:
             logger.warning(f"Error leyendo health_cache.json: {e}")
 
-    # 2. Migración one-time desde arena_cache.json
     if not raw_health and legacy_path.exists():
         try:
             with open(legacy_path, "r", encoding="utf-8") as f:
@@ -289,7 +212,6 @@ def load_health_from_cache(force: bool = False) -> Dict[str, Dict[str, Any]]:
         _last_cache_load_time = _now_epoch()
         return _health_data
 
-    # Procesar datos de salud
     _health_data = {}
     now = _now_epoch()
     prev_available = 0
@@ -303,7 +225,6 @@ def load_health_from_cache(force: bool = False) -> Dict[str, Dict[str, Any]]:
         rate_limited_count = info.get("rate_limited_count", 0) or 0
         rate_limited_at = _parse_verified_at_epoch(info.get("rate_limited_at"))
 
-        # SESSION TRUST
         if prev_status == "available" and verified_at is not None:
             age = now - verified_at
             if age < trust_window:
@@ -324,7 +245,6 @@ def load_health_from_cache(force: bool = False) -> Dict[str, Dict[str, Any]]:
             else:
                 logger.debug(f"SESSION TRUST expired: {model_id} (age={age:.0f}s >= {trust_window}s)")
 
-        # No califica para SESSION TRUST
         _health_data[model_id] = {
             "status": "unknown",
             "verified_at": verified_at,
@@ -348,15 +268,7 @@ def load_health_from_cache(force: bool = False) -> Dict[str, Dict[str, Any]]:
 
 
 def ensure_loaded() -> bool:
-    """Garantiza que el caché de salud esté cargado y actualizado.
-
-    v2.8: Usa mtime del archivo para detectar si el caché fue actualizado
-    por otro proceso después de la carga inicial.
-
-    v3.1: Todos los diagnostics via logger.debug().
-
-    Retorna True si hay modelos verificados disponibles.
-    """
+    """Garantiza que el caché de salud esté cargado y actualizado."""
     global _cache_loaded, _last_cache_load_time
 
     verified = get_verified_models()
@@ -390,12 +302,13 @@ def ensure_loaded() -> bool:
 
 
 def get_diagnostic_info() -> Dict[str, Any]:
-    """Retorna información de diagnóstico del módulo (para debugging)."""
+    """Retorna información de diagnóstico del módulo."""
     with _health_lock:
         total = len(_health_data)
         available = sum(1 for v in _health_data.values() if v.get("status") == "available")
         rate_limited = sum(1 for v in _health_data.values() if v.get("status") == "rate_limited")
         failed = sum(1 for v in _health_data.values() if v.get("status") == "failed")
+        payment_required = sum(1 for v in _health_data.values() if v.get("status") == "payment_required")
         unknown = sum(1 for v in _health_data.values() if v.get("status") in ("unknown", None))
 
     return {
@@ -410,6 +323,7 @@ def get_diagnostic_info() -> Dict[str, Any]:
         "available": available,
         "rate_limited": rate_limited,
         "failed": failed,
+        "payment_required": payment_required,
         "unknown": unknown,
         "verified_models": get_verified_models(),
         "trust_window": get_trust_window(),
@@ -458,13 +372,10 @@ def maybe_flush() -> None:
 
 
 # ============================================================================
-# Limpieza de rate_limited expirados (con exponential backoff)
+# Limpieza de rate_limited expirados
 # ============================================================================
 
 def _get_rate_limit_cooldown(count: int) -> float:
-    """Calcula cooldown para rate_limited basado en 429s consecutivos.
-    Exponential backoff: 60->120->180->300 (maximo)
-    """
     if count <= 0:
         return _RATE_LIMIT_BACKOFF_BASE
     cooldown = _RATE_LIMIT_BACKOFF_BASE * count
@@ -472,7 +383,6 @@ def _get_rate_limit_cooldown(count: int) -> float:
 
 
 def _cleanup_expired_rate_limits() -> None:
-    """Convierte rate_limited expirados de vuelta a unknown."""
     now = _now_epoch()
     with _health_lock:
         for model_id, info in _health_data.items():
@@ -488,11 +398,10 @@ def _cleanup_expired_rate_limits() -> None:
 
 
 # ============================================================================
-# Consultas de salud (en memoria, O(1))
+# Consultas de salud
 # ============================================================================
 
 def is_available(model_id: str) -> bool:
-    """Retorna True si el modelo esta verificado como available."""
     if not model_id:
         return False
     _cleanup_expired_rate_limits()
@@ -501,8 +410,18 @@ def is_available(model_id: str) -> bool:
         return info is not None and info.get("status") == "available"
 
 
+def is_payment_required(model_id: str) -> bool:
+    """D-5: Retorna True si el modelo tiene estado payment_required (HTTP 402)."""
+    if not model_id:
+        return False
+    _cleanup_expired_rate_limits()
+    with _health_lock:
+        info = _health_data.get(model_id)
+        return info is not None and info.get("status") == "payment_required"
+
+
 def get_status(model_id: str) -> str:
-    """Retorna el estado del modelo: 'available', 'failed', 'unknown', o 'rate_limited'."""
+    """Retorna el estado del modelo: 'available', 'failed', 'unknown', 'rate_limited', o 'payment_required'."""
     if not model_id:
         return "unknown"
     _cleanup_expired_rate_limits()
@@ -512,7 +431,6 @@ def get_status(model_id: str) -> str:
 
 
 def get_verified_models() -> List[str]:
-    """Retorna lista de modelos verificados como available."""
     _cleanup_expired_rate_limits()
     with _health_lock:
         return [mid for mid, info in _health_data.items()
@@ -520,7 +438,6 @@ def get_verified_models() -> List[str]:
 
 
 def get_all_health() -> Dict[str, Dict[str, Any]]:
-    """Retorna copia del estado de salud de todos los modelos (diagnostico)."""
     _cleanup_expired_rate_limits()
     with _health_lock:
         return dict(_health_data)
@@ -531,7 +448,6 @@ def get_all_health() -> Dict[str, Dict[str, Any]]:
 # ============================================================================
 
 def mark_available(model_id: str, provider: str = "") -> None:
-    """Marca un modelo como disponible (verificado)."""
     if not model_id:
         return
     now = _now_epoch()
@@ -551,7 +467,6 @@ def mark_available(model_id: str, provider: str = "") -> None:
 
 
 def mark_failed(model_id: str, provider: str = "", error: str = "") -> None:
-    """Marca un modelo como fallido permanentemente (404, auth, etc)."""
     if not model_id:
         return
     now = _now_epoch()
@@ -583,9 +498,7 @@ def mark_failed(model_id: str, provider: str = "", error: str = "") -> None:
 
 
 def mark_rate_limited(model_id: str, provider: str = "") -> None:
-    """Marca un modelo como rate_limited (error 429 temporal).
-    Exponential backoff: 60->120->180->300s cooldown.
-    """
+    """D-3: Marca un modelo como rate_limited (HTTP 429 → cooldown)."""
     if not model_id:
         return
     now = _now_epoch()
@@ -620,14 +533,66 @@ def mark_rate_limited(model_id: str, provider: str = "") -> None:
     maybe_flush()
 
 
+def mark_payment_required(model_id: str, provider: str = "") -> None:
+    """D-5: Marca un modelo como payment_required (HTTP 402).
+
+    No sobreescribe status 'available'.
+    """
+    if not model_id:
+        return
+    now = _now_epoch()
+    with _health_lock:
+        existing = _health_data.get(model_id)
+        if existing and existing.get("status") == "available":
+            logger.debug(f"{model_id}: ignoro payment_required (ya estaba available)")
+            if provider:
+                probe_errors = existing.get("probe_errors", {})
+                probe_errors[provider] = "HTTP 402 (payment required)"
+                existing["probe_errors"] = probe_errors
+            return
+
+        prev_errors = existing.get("probe_errors", {}) if existing else {}
+        if provider:
+            prev_errors[provider] = "HTTP 402 (payment required)"
+
+        _health_data[model_id] = {
+            "status": "payment_required",
+            "verified_at": now,
+            "provider": provider,
+            "error": "HTTP 402 (payment required)",
+            "rate_limited_at": None,
+            "rate_limited_count": 0,
+            "probe_errors": prev_errors,
+        }
+    logger.info(f"{model_id} -> payment_required (provider: {provider})")
+    maybe_flush()
+
+
+def report_http_status(model_id: str, http_status: int, provider: str = "", error_detail: str = "") -> None:
+    """D-3/D-4/D-5: Response-Code-Driven Scheduling unificado."""
+    if not model_id:
+        return
+
+    if http_status == 200:
+        mark_available(model_id, provider)
+    elif http_status == 429:
+        mark_rate_limited(model_id, provider)
+    elif http_status == 402:
+        mark_payment_required(model_id, provider)
+    elif http_status in (404, 401, 403):
+        mark_failed(model_id, provider, error_detail or f"HTTP {http_status}")
+    elif 500 <= http_status < 600:
+        mark_failed(model_id, provider, error_detail or f"HTTP {http_status} (server error, retryable)")
+    else:
+        logger.warning(f"report_http_status({model_id}): HTTP {http_status} no clasificado")
+        mark_failed(model_id, provider, error_detail or f"HTTP {http_status}")
+
+
 # ============================================================================
 # Clasificacion de errores HTTP
 # ============================================================================
 
 def _classify_error(error_str: str) -> str:
-    """Clasifica un error HTTP.
-    Retorna: 'rate_limit', 'not_found', 'auth', 'payment', 'server_error', 'unknown'
-    """
     err = str(error_str).lower()
     if "429" in err or "rate" in err:
         return "rate_limit"
@@ -643,11 +608,10 @@ def _classify_error(error_str: str) -> str:
 
 
 # ============================================================================
-# Probe verificable — con ID translation y TODOS los proveedores
+# Probe verificable
 # ============================================================================
 
 def _do_probe_call(model_id: str, provider, provider_name: str) -> Tuple[bool, str, str]:
-    """Hace la llamada HTTP real al proveedor. Retorna (success, provider_name, error_msg)."""
     try:
         result = provider.call(
             model_id,
@@ -670,10 +634,6 @@ def _do_probe_call(model_id: str, provider, provider_name: str) -> Tuple[bool, s
 
 
 def probe_model(model_id: str, timeout: float = None) -> Tuple[bool, str]:
-    """Hace un probe verificable a un modelo usando find_providers_for_model().
-
-    Retorna: (success: bool, provider_name: str)
-    """
     if timeout is None:
         timeout = _PROBE_SYNC_TIMEOUT
 
@@ -682,7 +642,6 @@ def probe_model(model_id: str, timeout: float = None) -> Tuple[bool, str]:
 
         providers_to_try: List[Tuple[Any, str]] = []
 
-        # 1. Usar find_providers_for_model()
         try:
             found = provider_manager.find_providers_for_model(model_id)
             for prov_obj, translated_id in found:
@@ -690,7 +649,6 @@ def probe_model(model_id: str, timeout: float = None) -> Tuple[bool, str]:
         except Exception as e:
             logger.debug(f"find_providers_for_model({model_id}) fallo: {e}")
 
-        # 2. Fallback: buscar en listas de proveedores
         if not providers_to_try:
             for p in provider_manager.providers.values():
                 try:
@@ -699,7 +657,6 @@ def probe_model(model_id: str, timeout: float = None) -> Tuple[bool, str]:
                 except Exception:
                     continue
 
-        # 3. Segundo fallback: inferir proveedor por prefijo
         if not providers_to_try:
             inferred = provider_manager._infer_provider_for_model(model_id)
             if inferred and inferred in provider_manager.providers:
@@ -712,7 +669,6 @@ def probe_model(model_id: str, timeout: float = None) -> Tuple[bool, str]:
             mark_failed(model_id, "", "No provider found")
             return False, ""
 
-        # Probar cada proveedor con su ID traducido
         last_error = ""
         had_permanent_error = False
 
@@ -770,7 +726,6 @@ def probe_model(model_id: str, timeout: float = None) -> Tuple[bool, str]:
                 last_error = error
                 continue
 
-        # Todos los proveedores fallaron
         if had_permanent_error:
             current_status = get_status(model_id)
             if current_status != "rate_limited":
@@ -784,7 +739,6 @@ def probe_model(model_id: str, timeout: float = None) -> Tuple[bool, str]:
 
 
 def probe_model_sync(model_id: str) -> Tuple[bool, str]:
-    """Probe sincronico con timeout. Para uso en select_model."""
     return probe_model(model_id, timeout=_PROBE_SYNC_TIMEOUT)
 
 
@@ -793,7 +747,6 @@ def probe_model_sync(model_id: str) -> Tuple[bool, str]:
 # ============================================================================
 
 def _background_probe_ranking(ranking: List[Dict[str, Any]]) -> None:
-    """Verifica todos los modelos del ranking en segundo plano."""
     logger.info(f"Background probing: {len(ranking)} modelos")
 
     def sort_key(m):
@@ -843,7 +796,6 @@ def _background_probe_ranking(ranking: List[Dict[str, Any]]) -> None:
 
 
 def start_background_probing(ranking: List[Dict[str, Any]]) -> None:
-    """Lanza el probing en segundo plano si no esta ya corriendo."""
     global _bg_thread_started
     with _bg_thread_lock:
         if _bg_thread_started:
@@ -862,7 +814,6 @@ def start_background_probing(ranking: List[Dict[str, Any]]) -> None:
 
 
 def on_session_close() -> None:
-    """Llamar al cerrar la sesion para flush final."""
     flush_to_disk()
     logger.info("Sesion cerrada, datos guardados")
 
@@ -885,17 +836,15 @@ if __name__ == "__main__":
     if not logging.root.handlers:
         logging.basicConfig(level=logging.INFO,
                             format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    # v3.1: Tambien habilitar DEBUG para este modulo en standalone
     logger.setLevel(logging.DEBUG)
 
     trust_window = get_trust_window()
 
     print("\n" + "=" * 70)
-    print(f"TEST: Model Health v3.1 — SESSION TRUST + production logging")
+    print(f"TEST: Model Health v4.0 — SESSION TRUST + D-5 payment_required")
     print(f"  trust_window={trust_window}s  data_dir={_DATA_DIR}")
     print("=" * 70)
 
-    # Estado actual
     print(f"\n[1] Modelos cargados de sesion anterior: {len(_health_data)}")
     prev_avail = sum(1 for v in _health_data.values()
                     if v.get("previous_status") == "available")
@@ -917,14 +866,13 @@ if __name__ == "__main__":
 
     print(f"\n[2] Modelos verificados AHORA: {len(get_verified_models())}")
 
-    # Diagnostico
     print(f"\n[2b] Diagnostico:")
     diag = get_diagnostic_info()
     for k, v in diag.items():
         print(f"    {k}: {v}")
 
     # Probe de prueba
-    print(f"\n[3] Probe de prueba (gratuitos primero, con ID translation):\n")
+    print(f"\n[3] Probe de prueba (con ID translation):\n")
     try:
         from core.providers import provider_manager
         test_ids = [
@@ -942,60 +890,45 @@ if __name__ == "__main__":
             print(f"    {mid}: {status}")
             providers_found = provider_manager.find_providers_for_model(mid)
             for p, tid in providers_found:
-                print(f"      -> provider={p.name}, translated_id={tid}")
-            print(f"    Probing {mid}...")
-            success, prov = probe_model_sync(mid)
-            info = get_all_health().get(mid, {})
-            err_detail = ""
-            if not success:
-                errors = info.get("probe_errors", {})
-                rl_count = info.get("rate_limited_count", 0)
-                rl_at = info.get("rate_limited_at")
-                if errors:
-                    err_detail = " | errores: " + ", ".join(f"{k}: {v}" for k, v in errors.items())
-                if rl_count:
-                    cooldown = _get_rate_limit_cooldown(rl_count)
-                    err_detail += f" (429 #{rl_count}, cooldown: {cooldown}s)"
-            print(f"    -> {'OK' if success else 'FAIL'} (provider: {prov}, "
-                  f"status: {info.get('status', '?')}{err_detail})\n")
+                print(f"      -> {p.name} (translated: {tid})")
+            if not providers_found:
+                print(f"      -> Sin providers encontrados")
     except Exception as e:
-        print(f"    Error en probe de prueba: {e}")
+        print(f"    Error: {e}")
 
-    # Estado despues de probes
-    print(f"\n[4] Estado despues de probes:")
-    for mid, info in get_all_health().items():
-        status = info.get("status", "unknown")
-        provider = info.get("provider", "")
-        errors = info.get("probe_errors", {})
-        rl_count = info.get("rate_limited_count", 0)
-        rl_at = info.get("rate_limited_at")
+    print(f"\n[4] Test D-5: payment_required status")
+    model_health_test = "test-payment-model"
+    _health_data[model_health_test] = {"status": "unknown"}
+    mark_payment_required(model_health_test, "openrouter")
+    assert get_status(model_health_test) == "payment_required", "FAIL: payment_required not set"
+    assert is_payment_required(model_health_test), "FAIL: is_payment_required() returns False"
+    print(f"    mark_payment_required: OK")
+    print(f"    is_payment_required: OK")
 
-        detail = ""
-        if status == "available":
-            detail = f" (provider: {provider})"
-        elif errors:
-            detail = f" [{' | '.join(f'{k}->{v}' for k, v in errors.items())}]"
-        if rl_count:
-            cooldown = _get_rate_limit_cooldown(rl_count)
-            detail += f" (429 #{rl_count}, cooldown: {cooldown}s)"
-        if rl_at and status == "rate_limited":
-            age = _now_epoch() - rl_at
-            detail += f" | per-provider: {', '.join(f'{k}->{v}' for k, v in errors.items())}"
+    # Test report_http_status
+    _health_data["http-test-402"] = {"status": "unknown"}
+    report_http_status("http-test-402", 402, "openrouter")
+    assert get_status("http-test-402") == "payment_required", "FAIL: HTTP 402 not mapped"
+    print(f"    report_http_status(402): OK")
 
-        print(f"    {mid}: {status}{detail}")
+    _health_data["http-test-429"] = {"status": "unknown"}
+    report_http_status("http-test-429", 429, "openrouter")
+    assert get_status("http-test-429") == "rate_limited", "FAIL: HTTP 429 not mapped"
+    print(f"    report_http_status(429): OK")
+
+    _health_data["http-test-500"] = {"status": "unknown"}
+    report_http_status("http-test-500", 503, "openrouter")
+    assert get_status("http-test-500") == "failed", "FAIL: HTTP 5xx not mapped"
+    print(f"    report_http_status(5xx): OK")
+
+    # Available should NOT be overwritten by payment_required
+    _health_data["avail-pr-test"] = {"status": "available", "verified_at": _now_epoch()}
+    mark_payment_required("avail-pr-test", "openrouter")
+    assert get_status("avail-pr-test") == "available", "FAIL: available overwritten by payment_required"
+    print(f"    available NOT overwritten by payment_required: OK")
 
     flush_to_disk()
-    print(f"\n[5] Cache guardado en: {_HEALTH_CACHE_PATH}")
-
-    # SESSION TRUST verification
-    print(f"\n[6] SESSION TRUST verification:")
-    for mid in get_verified_models():
-        info = get_all_health().get(mid, {})
-        va = info.get("verified_at")
-        if va:
-            age = _now_epoch() - va
-            ok = "OK" if age < get_trust_window() else "EXPIRED"
-            print(f"    {mid}: epoch={va}, age={age:.0f}s {ok}")
+    print(f"\n    D-5 tests: ALL OK")
 
     print("\n" + "=" * 70)
     print("TEST COMPLETADO")

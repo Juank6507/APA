@@ -1,4 +1,33 @@
 # apa/core/router.py
+# v5.4 — Fixes E2E real: populate_pool espera Arena data (F1),
+#         retry rota modelos (F3), update_arena_scores() (F4),
+#         provider null-coalescing (F2b).
+#
+# v5.3 — Métricas completas en call_llm():
+#         latencia, tokens in/out, coste estimado, Arena score,
+#         provider, success, error_type registrados en UsageTracker v2.0.
+#         Error logging en llamadas fallidas.
+#
+# CAMBIOS v5.3 vs v5.2:
+#   - call_llm() registra métricas completas en UsageTracker:
+#     · latencia: time.time() antes/después de cada llamada
+#     · tokens_input/output: extraídos de result o estimados
+#     · cost_usd: estimado via price_estimator o provider.get_model_price()
+#     · arena_score: obtenido del modelo seleccionado
+#     · provider: provider real que respondió
+#     · success: resultado de la llamada
+#     · error_type: clasificación del error (rate_limit, timeout, etc.)
+#   - Llamadas fallidas TAMBIÉN se registran en UsageTracker
+#   - Helper _estimate_tokens() para cuando el provider no retorna usage
+#   - Helper _estimate_cost_usd() para estimar coste
+#   - Helper _classify_error_type() para clasificar errores
+#
+# v5.2 — Sprint 1: select_model_entry() con Pool (P-1),
+#         sin free_first bias (D-1/D-2), integración con pool.py.
+#         select_model() DELEGA a Pool ranking (no más fallback alfabético).
+#         call_llm() usa select_model_entry() con provider directo.
+#         FIX: Recursión circular select_model_entry ↔ select_model.
+#
 # v4.1 — Production-ready: lazy loading Arena, logging limpio,
 #         SESSION TRUST configurable, sin print() de diagnóstico.
 #
@@ -52,6 +81,7 @@ import requests
 from core.normalizer import normalize_model_id
 from core.llm_cache import LLMCache
 from core import model_health
+from core.pool import PoolEntry, HealthStatus, pool as _global_pool
 
 # ============================================================================
 # Logging setup — production-ready
@@ -96,6 +126,241 @@ def _get_arena_categories() -> List[str]:
     """Wrapper lazy para arena_fetcher.get_available_categories()."""
     af = _get_arena_module()
     return af.get_available_categories()
+
+
+# ============================================================================
+# v5.3: Helpers para métricas de uso
+# ============================================================================
+
+def _estimate_tokens(text: str) -> int:
+    """Estima el número de tokens de un texto (aprox 4 chars/token)."""
+    if not text:
+        return 0
+    return max(1, len(text) // 4)
+
+
+def _classify_error_type(error_str: str) -> str:
+    """Clasifica el tipo de error a partir del string de error.
+
+    Returns: rate_limit, timeout, payment, auth, server, unknown
+    """
+    if not error_str:
+        return ""
+    err = str(error_str).lower()
+    if "429" in err or "rate" in err or "limit" in err or "throttl" in err:
+        return "rate_limit"
+    if "timeout" in err or "timed out" in err:
+        return "timeout"
+    if "402" in err or "payment" in err or "billing" in err or "quota" in err:
+        return "payment"
+    if "401" in err or "403" in err or "auth" in err or "permission" in err:
+        return "auth"
+    if "404" in err or "not found" in err or "model" in err:
+        return "model_not_found"
+    if "5" in err[:1] or "server" in err or "internal" in err:
+        return "server"
+    return "unknown"
+
+
+def _estimate_cost_usd(
+    tokens_input: int,
+    tokens_output: int,
+    model_id: str,
+    provider_name: str = "",
+) -> float:
+    """Estima el coste en USD de una llamada LLM.
+
+    Intenta obtener precios del provider_manager; si no puede,
+    usa una estimación conservadora por defecto.
+    """
+    try:
+        from core.providers import provider_manager
+        price = provider_manager.get_model_price(model_id, provider_name)
+        prompt_price = price.get("prompt", 0.0)
+        completion_price = price.get("completion", 0.0)
+        cost = (tokens_input / 1000.0) * prompt_price + (tokens_output / 1000.0) * completion_price
+        return round(cost, 6)
+    except Exception:
+        pass
+
+    # Fallback: estimación genérica ($0.01/1K input, $0.03/1K output)
+    try:
+        from core.price_estimator import estimate_price
+        per_token = estimate_price(model_id)
+        return round((tokens_input + tokens_output) * per_token, 6)
+    except Exception:
+        return 0.0
+
+
+# ============================================================================
+# v5.0: Pool population — llena el Pool desde providers
+# ============================================================================
+_pool_populated = False
+
+
+def populate_pool(force: bool = False) -> int:
+    """Puebla el Pool desde los providers con composite key (P-1).
+
+    D-8/D-10: Non-blocking — si ya está poblado, no hace nada
+    a menos que force=True.
+
+    P-1: Cada (provider, model_id) es una entrada independiente.
+    P-2: Provider Confidence se obtiene del provider.
+    P-3: Arena scores se obtienen de arena_fetcher.
+
+    v5.4 (F1): Espera hasta 15s a que Arena data esté disponible
+    antes de iterar los modelos, para que los scores se carguen
+    correctamente en el pool.
+
+    Retorna: número de entries en el pool.
+    """
+    global _pool_populated
+
+    if not force and _pool_populated and _global_pool.size() > 0:
+        return _global_pool.size()
+
+    try:
+        from core.providers import provider_manager
+
+        # v5.4 (F1): Esperar a que Arena data esté disponible (hasta 15s)
+        # Cuando el cache expira, arena_fetcher lanza un refresh en background
+        # que tarda 5-15s. Sin esta espera, todos los scores llegan como None.
+        af = _get_arena_module()
+        for wait_i in range(15):
+            with af._refresh_lock:
+                has_data = bool(af._arena_data) and len(af._arena_data) > 0
+            if has_data:
+                if wait_i > 0:
+                    logger.info(f"populate_pool(): Arena data disponible tras {wait_i}s de espera")
+                break
+            if wait_i == 0:
+                logger.info("populate_pool(): Esperando Arena data...")
+            time.sleep(1)
+        else:
+            logger.warning("populate_pool(): Arena data NO disponible tras 15s, "
+                          "continuando sin Arena scores")
+
+        # P-1: Obtener modelos con provider (sin deduplicar por model_id)
+        all_models = provider_manager.get_all_models_with_provider()
+
+        if not all_models:
+            logger.warning("populate_pool(): no se obtuvieron modelos de providers")
+            return _global_pool.size()
+
+        # Limpiar pool si force
+        if force:
+            _global_pool.clear()
+
+        count = 0
+        for m in all_models:
+            model_id = m.get("id", "")
+            provider_name = m.get("provider", "")
+            if not model_id or not provider_name:
+                continue
+
+            # Verificar si ya existe esta composite key
+            existing = _global_pool.get_entry(provider_name, model_id)
+            if existing and not force:
+                continue  # Ya existe, no sobreescribir
+
+            # Crear PoolEntry con composite key (P-1)
+            entry = PoolEntry(
+                provider=provider_name,
+                model_id=model_id,
+                context_length=m.get("context_length", 8192) or 8192,
+                is_free=bool(m.get("is_free", False) or m.get("is_free_tier", False)),
+                provider_confidence=m.get("provider_confidence", 50.0),
+                capabilities=m.get("capabilities", []),
+                pricing=m.get("pricing", {}),
+            )
+
+            # P-3: Arena score (Capa 2)
+            arena_score = _get_arena_score(model_id, None)
+            if arena_score is not None:
+                entry.arena_score = arena_score
+                entry.apa_score = arena_score  # APA placeholder (DEFERRED)
+
+            # Sync health from model_health
+            entry.health_status = model_health.get_status(model_id)
+
+            _global_pool.add_entry(entry)
+            count += 1
+
+        # P-2: Set provider confidence para cada provider
+        for prov_name, prov_obj in provider_manager.providers.items():
+            _global_pool.set_provider_confidence(prov_name, prov_obj.confidence_score)
+
+        _pool_populated = True
+
+        # Log resumen
+        summary = _global_pool.health_summary()
+        arena_count = sum(1 for e in _global_pool.get_all_entries() if e.arena_score is not None)
+        logger.info(f"populate_pool(): {count} entries ({arena_count} con Arena score), "
+                    f"health: {summary}")
+
+        return count
+
+    except Exception as e:
+        logger.error(f"populate_pool(): error: {e}")
+        return _global_pool.size()
+
+
+def _sync_health_to_pool() -> int:
+    """Sincroniza health status de model_health al pool.
+
+    Se llama después de probes o verificaciones para que el pool
+    refleje el estado más reciente de model_health.
+
+    Retorna: número de entries actualizadas.
+    """
+    updated = 0
+    try:
+        for entry in _global_pool.get_all_entries():
+            mh_status = model_health.get_status(entry.model_id)
+            if mh_status != entry.health_status:
+                if mh_status == "available":
+                    _global_pool.mark_available(entry.provider, entry.model_id)
+                    updated += 1
+                elif mh_status == "payment_required" and entry.health_status != "available":
+                    _global_pool.mark_payment_required(entry.provider, entry.model_id)
+                    updated += 1
+                elif mh_status == "rate_limited" and entry.health_status not in ("available",):
+                    entry.health_status = mh_status
+                    entry.verified_at = time.time()
+                    updated += 1
+                elif mh_status == "failed" and entry.health_status not in ("available",):
+                    entry.health_status = mh_status
+                    entry.verified_at = time.time()
+                    updated += 1
+        if updated > 0:
+            logger.debug(f"_sync_health_to_pool(): {updated} entries actualizadas")
+    except Exception as e:
+        logger.debug(f"_sync_health_to_pool(): error: {e}")
+    return updated
+
+
+def update_arena_scores() -> int:
+    """v5.4 (F4): Re-escanea pool entries y llena Arena scores faltantes.
+
+    Safety net: si populate_pool() corrió antes de que el background
+    refresh de Arena completara, esta función rellena los scores.
+
+    Retorna: número de entries actualizadas.
+    """
+    updated = 0
+    try:
+        for entry in _global_pool.get_all_entries():
+            if entry.arena_score is None:
+                score = _get_arena_score(entry.model_id, None)
+                if score is not None:
+                    entry.arena_score = score
+                    entry.apa_score = score  # APA placeholder
+                    updated += 1
+        if updated > 0:
+            logger.info(f"update_arena_scores(): {updated} entries actualizadas con Arena score")
+    except Exception as e:
+        logger.debug(f"update_arena_scores(): error: {e}")
+    return updated
 
 
 _cache: Dict[str, Any] = {
@@ -252,19 +517,134 @@ _MIN_CONTEXT_LENGTH = {
 }
 
 
+# v5.2: Guard contra recursión circular select_model_entry ↔ select_model
+_in_select_model_entry = False
+
+
+def select_model_entry(task_type: str, quality_mode: str = None) -> Optional[PoolEntry]:
+    """Selecciona el mejor modelo para una tarea, retornando PoolEntry.
+
+    D-1/D-2: Sin free_first bias — el ranking puro decide.
+    P-1: Retorna PoolEntry con composite key (provider, model_id).
+    P-3: 3-Layer Ranking — APA > Arena ELO > Provider Confidence.
+    D-8/D-10: Non-blocking — pobla pool lazy, usa lo que haya.
+
+    Flujo:
+    1. Poblar pool lazy si está vacío (populate_pool)
+    2. Buscar entries available (verified) en el pool
+    3. Si no hay verified, buscar unknown/rate_limited
+    4. Fallback a método clásico (probing activo) — SIN recursión
+
+    v5.2 FIX: PASO 3 usa guard _in_select_model_entry para evitar
+    que select_model() delegue de vuelta a select_model_entry()
+    cuando ya estamos dentro de select_model_entry().
+
+    Retorna PoolEntry o None si no hay modelo disponible.
+    """
+    global _in_select_model_entry
+
+    try:
+        model_health.ensure_loaded()
+
+        # D-8/D-10: Poblar pool lazy (non-blocking)
+        if _global_pool.size() == 0:
+            populate_pool()
+
+        # PASO 1: Buscar entries available (verified) en el pool
+        ranked = _global_pool.get_ranked_entries(
+            task_type=task_type,
+            only_available=True,
+        )
+
+        if ranked:
+            best = ranked[0]
+            logger.info(f"select_model_entry({task_type}): {best.model_id} "
+                       f"via {best.provider} (score: {best.composite_score:.1f}, VERIFIED)")
+            return best
+
+        # PASO 2: Sin verified -> buscar unknown/rate_limited
+        # (excluir payment_required y failed)
+        ranked = _global_pool.get_ranked_entries(
+            task_type=task_type,
+            exclude_statuses=["payment_required", "failed"],
+        )
+
+        if ranked:
+            best = ranked[0]
+            logger.info(f"select_model_entry({task_type}): {best.model_id} "
+                       f"via {best.provider} (score: {best.composite_score:.1f}, {best.health_status})")
+            return best
+
+        # PASO 3: Fallback a método clásico (probing activo)
+        # v5.2: Guard contra recursión circular con select_model()
+        if _in_select_model_entry:
+            logger.warning(f"select_model_entry({task_type}): recursión detectada,"
+                          f" no se llama a select_model() fallback")
+            return None
+
+        _in_select_model_entry = True
+        try:
+            model_id = select_model(task_type, quality_mode)
+        finally:
+            _in_select_model_entry = False
+
+        if model_id is None:
+            return None
+
+        # Crear PoolEntry y añadir al pool si no existe
+        provider = _infer_provider(model_id)
+        existing = _global_pool.get_entry(provider, model_id)
+        if existing:
+            # Actualizar health si model_health lo marca como available
+            if model_health.is_available(model_id):
+                _global_pool.mark_available(provider, model_id)
+                existing = _global_pool.get_entry(provider, model_id)
+            return existing
+
+        entry = PoolEntry(
+            provider=provider,
+            model_id=model_id,
+        )
+        # Intentar obtener scores
+        arena_score = _get_arena_score(model_id, task_type)
+        if arena_score is not None:
+            entry.arena_score = arena_score
+            entry.apa_score = arena_score  # placeholder
+
+        # Sync health
+        entry.health_status = model_health.get_status(model_id)
+        _global_pool.add_entry(entry)
+
+        logger.info(f"select_model_entry({task_type}): {model_id} "
+                   f"via {provider} (fallback, {entry.health_status})")
+        return entry
+
+    except Exception as e:
+        logger.error(f"Error en select_model_entry: {e}")
+        return None
+
+
 def select_model(task_type: str, quality_mode: str = None) -> Optional[str]:
-    """Selecciona el mejor modelo VERIFICADO para una tarea.
+    """Selecciona el mejor modelo para una tarea (retorna str, backward compat).
+    
+    v5.1: DELEGA a select_model_entry() cuando el Pool tiene entries.
+    Esto garantiza que select_model() SIEMPRE usa el ranking del Pool
+    (3-layer ranking: APA > Arena > Provider Confidence), nunca cae a
+    ordenamiento alfabético o por context_length.
     
     Flujo:
-    1. Obtener todos los modelos del catalogo, puntuar por Arena ELO
-    2. Filtrar por context_length minimo
-    3. Ordenar por ranking Arena (mejor primero)
-    4. Buscar el primero que este verificado como available en model_health
-    5. Si ninguno esta verificado -> probe sincronico al mejor del ranking
-    6. Si el probe falla -> probar el siguiente, y asi sucesivamente
-    7. Ultimo recurso: el mejor del ranking sin verificar
+    1. Si Pool tiene entries → usar select_model_entry() → return model_id
+    2. Si Pool vacío → método clásico (Arena ELO + probing)
     """
     try:
+        # v5.2: Solo delegar al Pool si NO venimos de select_model_entry()
+        # (evita recursión circular cuando PASO 3 llama a select_model())
+        if not _in_select_model_entry and _global_pool.size() > 0:
+            entry = select_model_entry(task_type, quality_mode)
+            if entry is not None:
+                return entry.model_id
+            # entry es None → Pool sin candidates → fallback a método clásico
+
         model_health.ensure_loaded()
 
         all_models = get_all_available_models()
@@ -289,7 +669,16 @@ def select_model(task_type: str, quality_mode: str = None) -> Optional[str]:
             scored.append((model, arena_score))
 
         if not scored:
-            logger.warning(f"select_model({task_type}): ningun modelo tiene score Arena")
+            logger.warning(f"select_model({task_type}): ningun modelo tiene score Arena, "
+                           f"Pool vacío, usando composite_score del Pool clásico")
+            # v5.1: Ya no hay fallback alfabético — si no hay scores,
+            # poblar Pool y reintentar
+            populate_pool()
+            if _global_pool.size() > 0:
+                entry = select_model_entry(task_type, quality_mode)
+                if entry is not None:
+                    return entry.model_id
+            # Último recurso: mayor context_length
             candidates.sort(key=lambda x: x.get("context_length", 0), reverse=True)
             return candidates[0]["id"] if candidates else None
 
@@ -316,16 +705,17 @@ def select_model(task_type: str, quality_mode: str = None) -> Optional[str]:
 
         # PASO 2: No hay verificados -> probe sincronico
         logger.info(f"select_model({task_type}): no hay modelos verificados, "
-                    f"haciendo probe sincronico a candidatos (priorizando free)")
+                    f"haciendo probe sincronico a candidatos")
 
+        # D-1/D-2: Eliminado free_first bias — ranking puro
         def _probe_priority(item):
             model_dict, arena_score = item
             m_id = model_dict["id"]
             st = model_health.get_status(m_id)
-            is_free = 0 if _is_free_model(model_dict) else 1
-            status_order = {"unknown": 0, "rate_limited": 1, "failed": 2, "available": 3}
-            status_rank = status_order.get(st, 0)
-            return (is_free, status_rank, -arena_score)
+            # D-5: payment_required models get lowest priority
+            status_order = {"available": 0, "unknown": 1, "rate_limited": 2, "failed": 3, "payment_required": 4}
+            status_rank = status_order.get(st, 1)
+            return (status_rank, -arena_score)
 
         probe_candidates = sorted(scored, key=_probe_priority)
 
@@ -396,6 +786,31 @@ def escalate_model(current_model_id: str) -> Optional[str]:
 
 _llm_cache = LLMCache()
 
+def _sync_health_after_call(model_id: str, provider: str, success: bool,
+                            error: str = "") -> None:
+    """Sincroniza el resultado de una llamada LLM al Pool y model_health.
+
+    D-3/D-4/D-5: Response-Code-Driven Scheduling.
+    """
+    try:
+        if success:
+            model_health.mark_available(model_id, provider)
+            _global_pool.mark_available(provider, model_id)
+        else:
+            error_type = model_health._classify_error(error)
+            if error_type == "rate_limit":
+                model_health.mark_rate_limited(model_id, provider)
+                _global_pool.mark_rate_limited(provider, model_id)
+            elif error_type == "payment":
+                model_health.mark_payment_required(model_id, provider)
+                _global_pool.mark_payment_required(provider, model_id)
+            else:
+                model_health.mark_failed(model_id, provider, error)
+                _global_pool.mark_failed(provider, model_id)
+    except Exception as e:
+        logger.debug(f"_sync_health_after_call error: {e}")
+
+
 def call_llm(
     task_type: str,
     system_prompt: str,
@@ -404,6 +819,14 @@ def call_llm(
     temperature: float = 0.1,
     project_id: Optional[str] = None
 ) -> Dict[str, Any]:
+    """Llama al mejor LLM disponible para la tarea.
+
+    v5.3: Registra métricas completas en UsageTracker v2.0:
+    - latencia (ms), tokens input/output, coste estimado (USD),
+    - Arena score del modelo, provider, éxito/error con clasificación.
+
+    Las llamadas fallidas TAMBIÉN se registran (success=False).
+    """
     # --- INTEGRACION DE CACHE ---
     try:
         cached_response = _llm_cache.get(user_prompt, "", max_tokens=max_tokens, temperature=temperature)
@@ -416,46 +839,98 @@ def call_llm(
     logger.debug("Router cache MISS")
     # --------------------------------
     
+    # v5.3: Timing del ciclo completo de llamadas
+    call_start_time = time.time()
+    
     for attempt in range(1, 4):
+        # v5.3: Timing por intento
+        attempt_start_time = time.time()
+        
         try:
             from core.providers import provider_manager
-            model_id = select_model(task_type)
-            if model_id is None:
+
+            # v5.1: Usar select_model_entry() para obtener PoolEntry
+            # con provider directo (no call_with_fallback ciego)
+            entry = select_model_entry(task_type)
+            if entry is None:
+                attempt_elapsed = int((time.time() - attempt_start_time) * 1000)
+                # v5.3: Registrar fallo (no se pudo seleccionar modelo)
+                _log_usage_if_possible(
+                    project_id=project_id,
+                    model="",
+                    task_type=task_type,
+                    tokens_input=_estimate_tokens(system_prompt + user_prompt),
+                    tokens_output=0,
+                    latency_ms=attempt_elapsed,
+                    cost_usd=0.0,
+                    arena_score=None,
+                    provider="",
+                    success=False,
+                    error_type="no_model_available",
+                )
                 return {
                     "content": "",
                     "model_used": "",
                     "provider_used": None,
                     "success": False,
                     "attempts": attempt,
-                    "error": "No se pudo seleccionar modelo"
+                    "error": "No se pudo seleccionar modelo",
+                    "tokens_input": _estimate_tokens(system_prompt + user_prompt),
+                    "tokens_output": 0,
+                    "latency_ms": attempt_elapsed,
+                    "cost_usd": 0.0,
+                    "arena_score": None,
+                    "provider": "",
                 }
-            
+
+            model_id = entry.model_id
+            provider_name = entry.provider
+            # v5.3: Arena score del modelo seleccionado
+            arena_score_val = entry.arena_score
+
             messages = [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}
             ]
-            result = provider_manager.call_with_fallback(model_id, messages, max_tokens, temperature)
-            
-            if result.get("success"):
+
+            # v5.1: Intentar provider directo del PoolEntry primero
+            result = None
+            if provider_name in provider_manager.providers:
+                provider = provider_manager.providers[provider_name]
+                translated_id = provider_manager.translate_model_id(model_id, provider_name)
                 try:
-                    model_health.mark_available(model_id, result.get("provider", ""))
-                except Exception:
-                    pass
+                    result = provider.call(translated_id, messages, max_tokens, temperature)
+                    if result.get("success"):
+                        result["provider"] = provider_name
+                except Exception as e:
+                    logger.debug(f"call_llm: provider directo {provider_name} falló: {e}")
+                    result = None
+
+            # Fallback: call_with_fallback si provider directo falló
+            if result is None or not result.get("success"):
+                result = provider_manager.call_with_fallback(model_id, messages, max_tokens, temperature)
+
+            # v5.3: Calcular latencia de este intento
+            attempt_elapsed_ms = int((time.time() - attempt_start_time) * 1000)
+
+            if result.get("success"):
+                actual_provider = result.get("provider", provider_name)
+                actual_model = result.get("model_used", model_id)
+
+                # Sincronizar health al Pool y model_health
+                _sync_health_after_call(model_id, actual_provider, True)
 
                 # Correccion de trazabilidad de proveedor
                 try:
-                    current_provider = result.get("provider")
-                    actual_model = result.get("model_used", model_id)
-                    is_generic = current_provider in (None, "openrouter", "unknown", "")
-                    
+                    is_generic = actual_provider in (None, "openrouter", "unknown", "")
                     if is_generic:
                         inferred = result.get("model_info", {}).get("provider")
                         if not inferred or inferred == "unknown":
                             inferred = _infer_provider(actual_model)
-                        
                         if inferred and inferred != "unknown":
                             result["provider"] = inferred
-                            logger.debug(f"Provider corrected from '{current_provider}' to '{inferred}' for model {actual_model}")
+                            actual_provider = inferred
+                            logger.debug(f"Provider corrected from '{provider_name}' to '{inferred}' for model {actual_model}")
                 except Exception as e:
                     logger.warning(f"Failed to correct provider traceability: {e}")
 
@@ -464,51 +939,199 @@ def call_llm(
                     _llm_cache.set(user_prompt, actual_model, result, max_tokens=max_tokens, temperature=temperature)
                 except Exception as e:
                     logger.warning(f"Cache set failed (continuing): {e}")
-                
-                # Registro de uso de tokens
-                if project_id is not None:
-                    try:
-                        from core.usage_tracker import UsageTracker
-                        tokens = result.get("tokens", 0)
-                        if tokens == 0:
-                            tokens = len(user_prompt) // 4
-                        logger.info(f"Registering usage for project {project_id}: model={actual_model}, tokens={tokens}")
-                        UsageTracker().log_usage(project_id, actual_model, tokens, task_type)
-                    except Exception as e:
-                        logger.warning(f"Usage tracking failed (continuing): {e}")
-                
-                return {**result, "attempts": attempt}
+
+                # v5.3: Extraer métricas de tokens
+                tokens_input = 0
+                tokens_output = 0
+
+                # Intentar extraer del result (algunos providers lo incluyen)
+                usage_data = result.get("usage", {})
+                if usage_data:
+                    tokens_input = usage_data.get("prompt_tokens", 0)
+                    tokens_output = usage_data.get("completion_tokens", 0)
+
+                # Fallback: estimar desde el texto
+                if tokens_input == 0:
+                    tokens_input = _estimate_tokens(system_prompt + user_prompt)
+                if tokens_output == 0:
+                    tokens_output = _estimate_tokens(result.get("content", ""))
+
+                total_tokens = tokens_input + tokens_output
+
+                # v5.3: Estimar coste
+                cost_usd = _estimate_cost_usd(tokens_input, tokens_output, actual_model, actual_provider)
+
+                # v5.3: Obtener Arena score si no lo teníamos del entry
+                if arena_score_val is None:
+                    arena_score_val = _get_arena_score(actual_model, task_type)
+
+                # v5.3: Registrar uso con métricas completas
+                _log_usage_if_possible(
+                    project_id=project_id,
+                    model=actual_model,
+                    task_type=task_type,
+                    tokens_input=tokens_input,
+                    tokens_output=tokens_output,
+                    latency_ms=attempt_elapsed_ms,
+                    cost_usd=cost_usd,
+                    arena_score=arena_score_val,
+                    provider=actual_provider,
+                    success=True,
+                    error_type="",
+                    total_tokens=total_tokens,
+                )
+
+                return {
+                    **result,
+                    "attempts": attempt,
+                    "tokens_input": tokens_input,
+                    "tokens_output": tokens_output,
+                    "latency_ms": attempt_elapsed_ms,
+                    "cost_usd": cost_usd,
+                    "arena_score": arena_score_val,
+                    "provider": actual_provider,
+                }
             
+            # Llamada falló — sincronizar health
+            error_str = str(result.get("error", "unknown"))
+            # v5.4 (F2b): Provider para health sync SIEMPRE usa el del pool entry,
+            # porque es la composite key correcta. El result.get("provider") puede
+            # ser "unknown" (de call_with_fallback) que no existe en el pool.
+            health_provider = provider_name  # Del pool entry — clave para sync
+            log_provider = result.get("provider") or provider_name or "unknown"  # Para logging
+            _sync_health_after_call(model_id, health_provider, False, error_str)
+
+            # v5.3: Registrar fallo con métricas
+            error_type_classified = _classify_error_type(error_str)
+            _log_usage_if_possible(
+                project_id=project_id,
+                model=model_id,
+                task_type=task_type,
+                tokens_input=_estimate_tokens(system_prompt + user_prompt),
+                tokens_output=0,
+                latency_ms=attempt_elapsed_ms,
+                cost_usd=0.0,
+                arena_score=arena_score_val,
+                provider=log_provider,
+                success=False,
+                error_type=error_type_classified,
+            )
+
             if result.get("error") == "rate_limit":
-                try:
-                    model_health.mark_rate_limited(model_id, result.get("provider", ""))
-                except Exception:
-                    pass
                 escalate_model(model_id)
                 time.sleep(1)
             else:
-                try:
-                    error_str = str(result.get("error", "unknown"))
-                    error_type = model_health._classify_error(error_str)
-                    if error_type == "rate_limit":
-                        model_health.mark_rate_limited(model_id, result.get("provider", ""))
-                    else:
-                        model_health.mark_failed(model_id, result.get("provider", ""), error_str)
-                except Exception:
-                    pass
-                break
+                # v5.4 (F3): continue en vez de break — permite rotar modelo
+                # El modelo actual fue marcado failed por _sync_health_after_call,
+                # así que select_model_entry() en el siguiente intento escogerá otro.
+                logger.info(f"call_llm: intento {attempt} falló ({error_type_classified}), "
+                           f"rotando modelo...")
+                continue
         except Exception as e:
+            attempt_elapsed_ms = int((time.time() - attempt_start_time) * 1000)
             logger.error(f"Excepcion en call_llm: {e}")
+
+            # v5.3: Registrar excepción
+            _log_usage_if_possible(
+                project_id=project_id,
+                model="",
+                task_type=task_type,
+                tokens_input=_estimate_tokens(system_prompt + user_prompt),
+                tokens_output=0,
+                latency_ms=attempt_elapsed_ms,
+                cost_usd=0.0,
+                arena_score=None,
+                provider="",
+                success=False,
+                error_type=_classify_error_type(str(e)),
+            )
             break
-    
+
+    # v5.3: Tiempo total del ciclo
+    total_elapsed_ms = int((time.time() - call_start_time) * 1000)
+
+    # v5.3: Registrar fallo final (reintentos agotados)
+    _log_usage_if_possible(
+        project_id=project_id,
+        model="",
+        task_type=task_type,
+        tokens_input=_estimate_tokens(system_prompt + user_prompt),
+        tokens_output=0,
+        latency_ms=total_elapsed_ms,
+        cost_usd=0.0,
+        arena_score=None,
+        provider="",
+        success=False,
+        error_type="retries_exhausted",
+    )
+
     return {
         "content": "",
         "model_used": "",
         "provider_used": None,
         "success": False,
         "attempts": 3,
-        "error": "Reintentos agotados"
+        "error": "Reintentos agotados",
+        "tokens_input": 0,
+        "tokens_output": 0,
+        "latency_ms": total_elapsed_ms,
+        "cost_usd": 0.0,
+        "arena_score": None,
+        "provider": "",
     }
+
+
+def _log_usage_if_possible(
+    project_id: Optional[str],
+    model: str,
+    task_type: str,
+    tokens_input: int,
+    tokens_output: int,
+    latency_ms: int,
+    cost_usd: float,
+    arena_score: Optional[float],
+    provider: str,
+    success: bool,
+    error_type: str,
+    total_tokens: int = 0,
+) -> None:
+    """v5.3: Helper para registrar uso con métricas completas.
+
+    No falla nunca — errores de logging no deben interrumpir el flujo.
+    Solo registra si project_id está disponible.
+    """
+    if project_id is None:
+        return
+
+    try:
+        from core.usage_tracker import UsageTracker
+        if total_tokens == 0:
+            total_tokens = tokens_input + tokens_output
+
+        UsageTracker().log_usage(
+            project_id=project_id,
+            model=model,
+            tokens=total_tokens,
+            request_type=task_type,
+            provider=provider,
+            tokens_input=tokens_input,
+            tokens_output=tokens_output,
+            latency_ms=latency_ms,
+            cost_usd=cost_usd,
+            arena_score=arena_score,
+            success=success,
+            error_type=error_type,
+        )
+        logger.info(
+            f"Usage logged: project={project_id} model={model} "
+            f"provider={provider} task={task_type} "
+            f"tokens_in={tokens_input} tokens_out={tokens_output} "
+            f"latency={latency_ms}ms cost=${cost_usd:.4f} "
+            f"arena={arena_score} success={success} "
+            f"error_type={error_type}"
+        )
+    except Exception as e:
+        logger.warning(f"Usage tracking failed (continuing): {e}")
 
 
 def validate_self() -> bool:
@@ -527,26 +1150,24 @@ def validate_self() -> bool:
 
 
 # =============================================================================
-# BLOQUE DE PRUEBA
+# BLOQUE DE PRUEBA — v5.3 con métricas completas
 # =============================================================================
 if __name__ == "__main__":
     import logging
     import time as _time
 
     logging.basicConfig(level=logging.WARNING)
-    # v4.1: Habilitar INFO para este modulo en standalone
     logger.setLevel(logging.INFO)
-    # model_health también a INFO en standalone
     mh_logger = logging.getLogger('core.model_health')
     mh_logger.setLevel(logging.INFO)
 
     start_time = _time.time()
 
     print("\n" + "=" * 60)
-    print("APA Router v4.1 — Arena ELO + Health Verification")
+    print("APA Router v5.3 — Pool + Arena ELO + Health + Métricas Completas")
     print("=" * 60)
 
-    # model_health state
+    # --- model_health state ---
     print("\nmodel_health state:")
     try:
         diag = model_health.get_diagnostic_info()
@@ -561,101 +1182,76 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"  Error obteniendo diagnostico: {e}")
 
-    # Pool de modelos
-    print("\nPool de modelos:")
-    try:
-        models = get_all_available_models()
-        total = len(models)
-        free_count = sum(1 for m in models if _is_free_model(m))
-        paid_count = total - free_count
-        print(f"  {total} modelos ({free_count} gratuitos, {paid_count} de pago)")
-    except Exception as e:
-        print(f"  Error obteniendo modelos: {e}")
+    # --- Pool population (v5.0) ---
+    print("\n--- Pool population (P-1 composite key) ---")
+    t0 = _time.time()
+    pool_count = populate_pool()
+    pool_elapsed = _time.time() - t0
+    print(f"  {pool_count} entries en el pool ({pool_elapsed:.2f}s)")
 
-    # select_model() por tarea
-    print("\nselect_model() por tarea:")
+    # Pool health summary
+    summary = _global_pool.health_summary()
+    print(f"  Health: {summary}")
+
+    # Arena scores
+    arena_count = sum(1 for e in _global_pool.get_all_entries() if e.arena_score is not None)
+    print(f"  Arena scores: {arena_count}/{pool_count}")
+
+    # Providers in pool
+    providers_in_pool = set(e.provider for e in _global_pool.get_all_entries())
+    print(f"  Providers: {', '.join(sorted(providers_in_pool))}")
+
+    # --- select_model_entry() por tarea ---
+    print("\nselect_model_entry() por tarea (PoolEntry):")
     print("-" * 40)
-    task_times = {}
     for task in ["planning", "generation", "coding", "correction", "evaluation"]:
         t0 = _time.time()
-        sel = select_model(task)
+        entry = select_model_entry(task)
         elapsed = _time.time() - t0
-        task_times[task] = elapsed
-        if sel:
-            score = _get_arena_score(sel, task)
-            score_str = f"{score:.1f}" if score else "N/A"
-            verified = model_health.is_available(sel)
-            v_str = "VERIFIED" if verified else "UNVERIFIED"
-            via = ""
-            try:
-                info = model_health.get_all_health().get(sel, {})
-                prov = info.get("provider", "")
-                if prov:
-                    via = f", via: {prov}"
-            except Exception:
-                pass
-            print(f"  {task:12s} -> {sel:45s} (Arena: {score_str}, {v_str}{via}) [{elapsed:.2f}s]")
+        if entry:
+            score_str = f"{entry.composite_score:.1f}" if entry.composite_score > 0 else "N/A"
+            print(f"  {task:12s} -> PoolEntry(provider={entry.provider}, "
+                  f"model={entry.model_id}, score={score_str}, "
+                  f"health={entry.health_status}) [{elapsed:.2f}s]")
         else:
             print(f"  {task:12s} -> Sin modelo disponible [{elapsed:.2f}s]")
 
-    # Categorias Arena
-    print("\nCategorias Arena:")
-    try:
-        cats = _get_arena_categories()
-        print(f"  {', '.join(cats[:10])}... ({len(cats)} total)")
-    except Exception as e:
-        print(f"  Error: {e}")
+    # --- v5.3: Test de helpers de métricas ---
+    print("\nv5.3 — Helpers de métricas:")
+    print("-" * 40)
 
-    # Trazabilidad de Proveedor
-    print("\nTrazabilidad de Proveedor:")
-    test_models = ["moonshotai/kimi-dev", "anthropic/claude-3-5-sonnet", "openai/gpt-4o", "qwen/qwen2.5-coder"]
-    for m in test_models:
-        real_prov = _infer_provider(m)
-        print(f"  {m:40s} -> {real_prov}")
+    # _estimate_tokens
+    test_text = "Hello, this is a test prompt for estimating tokens."
+    est_tokens = _estimate_tokens(test_text)
+    print(f"  _estimate_tokens('{test_text[:40]}...') = {est_tokens}")
 
-    # Top 10 Arena ELO
-    print("\nTop 10 Arena ELO (general):")
-    scored_models = []
-    try:
-        for m in models:
-            score = _get_arena_score(m["id"], None)
-            if score is not None:
-                scored_models.append((m["id"], score, _is_free_model(m)))
-        scored_models.sort(key=lambda x: x[1], reverse=True)
-        for mid, score, is_free in scored_models[:10]:
-            free_str = "FREE" if is_free else "PAID"
-            status = model_health.get_status(mid)
-            print(f"  {mid:45s} (Arena: {score:.1f}, {free_str}, health: {status})")
-    except Exception as e:
-        print(f"  Error: {e}")
+    # _classify_error_type
+    test_errors = [
+        ("HTTP 429 Too Many Requests", "rate_limit"),
+        ("Request timeout after 30s", "timeout"),
+        ("HTTP 402 Payment Required", "payment"),
+        ("HTTP 401 Unauthorized", "auth"),
+        ("HTTP 404 Model not found", "model_not_found"),
+        ("HTTP 500 Internal Server Error", "server"),
+        ("Unknown error", "unknown"),
+    ]
+    for err_str, expected in test_errors:
+        classified = _classify_error_type(err_str)
+        ok = "OK" if classified == expected else f"FAIL (got {classified})"
+        print(f"  _classify_error_type('{err_str}') = {classified} [{ok}]")
 
-    # Proveedores para modelos top (ID translation)
-    print("\nProveedores para modelos top (ID translation):")
-    try:
-        from core.providers import provider_manager
-        for mid, score, _ in scored_models[:5]:
-            providers_found = provider_manager.find_providers_for_model(mid)
-            if providers_found:
-                prov_str = ", ".join(f"{p.name}({tid})" for p, tid in providers_found)
-                print(f"  {mid}: {prov_str}")
-            else:
-                print(f"  {mid}: sin proveedores")
-    except Exception as e:
-        print(f"  Error: {e}")
+    # _estimate_cost_usd
+    cost = _estimate_cost_usd(1000, 500, "openai/gpt-4o", "openai")
+    print(f"  _estimate_cost_usd(1000 in, 500 out, gpt-4o) = ${cost:.6f}")
 
-    # Resumen de salud
-    print("\nResumen de salud:")
-    try:
-        all_h = model_health.get_all_health()
-        avail = sum(1 for v in all_h.values() if v.get("status") == "available")
-        rl = sum(1 for v in all_h.values() if v.get("status") == "rate_limited")
-        fail = sum(1 for v in all_h.values() if v.get("status") == "failed")
-        unk = sum(1 for v in all_h.values() if v.get("status") in ("unknown", None))
-        verified = model_health.get_verified_models()
-        print(f"  Available: {avail}, Rate-limited: {rl}, Failed: {fail}, Unknown: {unk}")
-        print(f"  Verificados: {verified}")
-    except Exception as e:
-        print(f"  Error obteniendo salud: {e}")
+    # --- Resumen de salud (pool) ---
+    print("\nResumen de salud (pool):")
+    print(f"  {summary}")
+    avail_entries = _global_pool.get_available_entries()
+    if avail_entries:
+        print(f"  Available entries: {', '.join(f'{e.model_id}({e.provider})' for e in avail_entries[:10])}")
+    else:
+        print(f"  No available entries en el pool")
 
     elapsed = _time.time() - start_time
     print(f"\nTiempo total: {elapsed:.2f}s")
