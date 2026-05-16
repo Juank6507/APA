@@ -788,6 +788,10 @@ def report_http_status(model_id: str, http_status: int, provider: str = "", erro
         mark_rate_limited(model_id, provider)
     elif http_status == 402:
         mark_payment_required(model_id, provider)
+    elif http_status == 413:
+        # v6.2: Contexto excedido — no es fallo del modelo, es del tamaño.
+        # Tratar como transitorio para que se pueda reintentar con prompt más pequeño.
+        mark_temporarily_unavailable(model_id, provider, error_detail or "HTTP 413 (context exceeded)")
     elif http_status in (404, 401, 403):
         mark_failed(model_id, provider, error_detail or f"HTTP {http_status}")
     elif 500 <= http_status < 600:
@@ -796,6 +800,53 @@ def report_http_status(model_id: str, http_status: int, provider: str = "", erro
     else:
         logger.warning(f"report_http_status({model_id}): HTTP {http_status} no clasificado")
         mark_failed(model_id, provider, error_detail or f"HTTP {http_status}")
+
+
+# ============================================================================
+# Detección de contexto excedido (v6.2)
+# ============================================================================
+_CONTEXT_EXCEEDED_SIGNALS = [
+    "context_length_exceeded",
+    "maximum context length",
+    "tokens limit",
+    "token limit",
+    "too long",
+    "context window",
+    "max_tokens",
+    "input too large",
+    "prompt too large",
+    "request too large",
+]
+
+
+def is_context_exceeded(http_code: int, error_body: str = "") -> bool:
+    """v6.2: Detecta si un error fue causado por exceder el contexto del modelo.
+
+    No es lo mismo que un modelo roto o sin crédito. El modelo funciona,
+    pero el prompt enviado es más grande de lo que puede procesar.
+
+    Detecta dos casos:
+    - HTTP 413: el API dice explícitamente que el contenido es demasiado grande
+    - HTTP 400 con señales de contexto: algunos providers usan 400 en vez de 413
+      pero incluyen mensajes como "context_length_exceeded" o "maximum context length"
+
+    Args:
+        http_code: Código HTTP de la respuesta (413, 400, etc.)
+        error_body: Mensaje de error devuelto por el provider
+
+    Returns:
+        True si el error fue por contexto excedido, False en caso contrario.
+    """
+    # HTTP 413: siempre es contexto excedido
+    if http_code == 413:
+        return True
+
+    # HTTP 400 con señales de contexto: algunos providers no usan 413
+    if http_code == 400 and error_body:
+        body_lower = str(error_body).lower()
+        return any(signal in body_lower for signal in _CONTEXT_EXCEEDED_SIGNALS)
+
+    return False
 
 
 # ============================================================================
@@ -815,13 +866,22 @@ def _classify_error(error_str: str) -> str:
     - 'temporarily_unavailable': errores transitorios (antes caían a 'unknown' → failed permanente)
 
     Returns: rate_limit | not_found | auth | payment | server_error |
-             timeout | connection | temporarily_unavailable | unknown
+             timeout | connection | temporarily_unavailable | context_exceeded | unknown
     """
     if not error_str:
         return "unknown"
     err = str(error_str).lower()
 
-    # --- Rate limiting (prioridad máxima) ---
+    # --- Contexto excedido (v6.2, prioridad máxima) ---
+    # Se verifica ANTES de rate_limit porque frases como "token limit"
+    # o "tokens limit" contienen "limit" que coincidiría con rate_limit.
+    if any(kw in err for kw in ("context_length_exceeded", "maximum context length",
+                                 "input too large", "prompt too large",
+                                 "request too large", "context window",
+                                 "token limit", "tokens limit")):
+        return "context_exceeded"
+
+    # --- Rate limiting ---
     if any(kw in err for kw in ("429", "rate", "limit", "throttl", "too many", "quota exceeded", "capacity")):
         return "rate_limit"
 

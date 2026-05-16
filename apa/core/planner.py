@@ -235,6 +235,187 @@ def _generate_multi_file_plan(spec: dict, project_id: str) -> dict:
     logger.info(f"Multi-file plan saved to {plan_path} with {len(tasks)} tasks")
     return plan_result
 
+def split_task_into_subtasks(task: dict, plan: dict, tokens_needed: int,
+                              max_available_context: int) -> dict:
+    """Divide una tarea demasiado grande en subtareas más pequeñas.
+
+    Recibe una tarea que excedió el contexto de todos los modelos
+    y pide a un modelo de planificación que la descomponga en
+    subtareas que quepan dentro del límite disponible.
+
+    Args:
+        task: La tarea original que hay que dividir.
+        plan: El plan completo actual (para conocer el proyecto).
+        tokens_needed: Tokens estimados que necesita la tarea original.
+        max_available_context: Contexto máximo del modelo más grande.
+
+    Returns:
+        Diccionario con:
+        - success: bool
+        - subtasks: lista de subtareas (vacía si falló)
+        - error: string (vacío si éxito)
+        - model_used: modelo usado para la división
+    """
+    logger.info(
+        f"Dividiendo tarea {task['id']} ({task.get('name', '')}): "
+        f"necesita ~{tokens_needed} tokens, máximo disponible {max_available_context}"
+    )
+
+    # Calcular cuántas subtareas se necesitan con margen de seguridad
+    if max_available_context > 0:
+        ratio = tokens_needed / max_available_context
+        n_subtasks = max(2, int(ratio) + 1)
+    else:
+        n_subtasks = 3  # valor por defecto si no hay contexto disponible
+
+    # Limitar a un máximo razonable para no crear planes infinitos
+    n_subtasks = min(n_subtasks, 8)
+
+    # Construir el prompt para que el modelo divida la tarea
+    context_limit_tokens = max_available_context * 0.7 if max_available_context > 0 else 4000
+    context_limit_tokens = int(context_limit_tokens)
+
+    system_prompt = (
+        "Eres un planificador experto. Tu función es dividir una tarea "
+        "de software demasiado grande en subtareas más pequeñas que "
+        "puedan ser ejecutadas independientemente por un modelo de IA "
+        "con contexto limitado. Respondes ÚNICAMENTE con JSON válido, "
+        "sin texto adicional, sin bloques markdown."
+    )
+
+    # Incluir información de dependencias originales para contexto
+    original_deps = task.get("depends_on", [])
+    deps_info = f"Dependencias de la tarea original: {original_deps}" if original_deps else "La tarea no tiene dependencias."
+
+    user_prompt = (
+        f"Divide la siguiente tarea de software en subtareas más pequeñas.\n\n"
+        f"Tarea original:\n"
+        f"- ID: {task['id']}\n"
+        f"- Nombre: {task.get('name', '')}\n"
+        f"- Descripción: {task.get('description', '')}\n"
+        f"- Inputs: {task.get('inputs', [])}\n"
+        f"- Output esperado: {task.get('expected_output', '')}\n"
+        f"- Criterio de aceptación: {task.get('acceptance_criterion', '')}\n"
+        f"- Tipo: {task.get('task_type', 'generation')}\n"
+        f"- {deps_info}\n\n"
+        f"Restricciones de contexto:\n"
+        f"- Cada subtarea debe poder completarse dentro de ~{context_limit_tokens} tokens\n"
+        f"- Número sugerido de subtareas: {n_subtasks}\n"
+        f"- Máximo permitido: 8 subtareas\n\n"
+        f"Reglas:\n"
+        f"- Las subtareas deben ser secuenciales: cada una depende de la anterior\n"
+        f"- La primera subtarea no tiene dependencias (o hereda las de la tarea original)\n"
+        f"- La última subtarea debe producir el resultado final de la tarea original\n"
+        f"- Cada subtarea debe tener su propio criterio de aceptación verificable\n"
+        f"- Los IDs deben ser {task['id']}_1, {task['id']}_2, etc.\n\n"
+        f"Responde con este JSON exacto:\n"
+        f"{{\n"
+        f'    "subtasks": [\n'
+        f'    {{\n'
+        f'        "id": "{task["id"]}_1",\n'
+        f'        "name": string,\n'
+        f'        "description": string,\n'
+        f'        "depends_on": [],\n'
+        f'        "inputs": array de strings,\n'
+        f'        "expected_output": string,\n'
+        f'        "acceptance_criterion": string,\n'
+        f'        "task_type": "{task.get("task_type", "generation")}"\n'
+        f'    }}\n'
+        f'  ]\n'
+        f"}}"
+    )
+
+    result = call_llm(
+        task_type="planning",
+        system_prompt=system_prompt,
+        user_prompt=user_prompt,
+        max_tokens=3000
+    )
+
+    if not result.get("success"):
+        error_msg = result.get("error", "Error desconocido")
+        logger.error(f"Error al dividir tarea {task['id']}: {error_msg}")
+        return {
+            "success": False,
+            "subtasks": [],
+            "error": error_msg,
+            "model_used": result.get("model_used")
+        }
+
+    # Parsear la respuesta del modelo
+    try:
+        cleaned = _clean_llm_response(result.get("content", ""))
+        parsed = json.loads(cleaned)
+    except json.JSONDecodeError as e:
+        logger.error(f"JSON inválido al dividir tarea {task['id']}: {e}")
+        return {
+            "success": False,
+            "subtasks": [],
+            "error": f"Respuesta inválida del planificador: {e}",
+            "model_used": result.get("model_used")
+        }
+
+    if "subtasks" not in parsed or not parsed["subtasks"]:
+        logger.error(f"El planificador no devolvió subtareas para {task['id']}")
+        return {
+            "success": False,
+            "subtasks": [],
+            "error": "El planificador no generó subtareas",
+            "model_used": result.get("model_used")
+        }
+
+    # Construir las subtareas con el formato completo del sistema
+    language = task.get("language", "python")
+    subtasks = []
+    subtask_ids = []
+
+    for sub_data in parsed["subtasks"]:
+        sub_id = sub_data.get("id", f"{task['id']}_{len(subtasks) + 1}")
+        subtask_ids.append(sub_id)
+
+        subtask = {
+            "id": sub_id,
+            "name": sub_data.get("name", f"Subtarea {sub_id}"),
+            "description": sub_data.get("description", ""),
+            "depends_on": sub_data.get("depends_on", []),
+            "inputs": sub_data.get("inputs", []),
+            "expected_output": sub_data.get("expected_output", ""),
+            "acceptance_criterion": sub_data.get("acceptance_criterion", ""),
+            "task_type": sub_data.get("task_type", task.get("task_type", "generation")),
+            "status": "pending",
+            "attempts": 0,
+            "result": None,
+            "model_used": None,
+            "language": language,
+            "parent_task_id": task["id"],  # Referencia a la tarea original
+            "split_reason": "context_exceeded"
+        }
+        subtasks.append(subtask)
+
+    # Garantizar que las dependencias entre subtareas sean secuenciales
+    # Si la subtarea N no tiene depends_on, dependen de la subtarea N-1
+    # La primera subtarea hereda las dependencias de la tarea original
+    for i, subtask in enumerate(subtasks):
+        provided_deps = subtask.get("depends_on", [])
+        if not provided_deps and i > 0:
+            subtask["depends_on"] = [subtasks[i - 1]["id"]]
+        elif not provided_deps and i == 0:
+            # La primera subtarea hereda las dependencias de la tarea original
+            subtask["depends_on"] = list(original_deps)
+
+    logger.info(
+        f"Tarea {task['id']} dividida en {len(subtasks)} subtareas: "
+        f"{subtask_ids}"
+    )
+
+    return {
+        "success": True,
+        "subtasks": subtasks,
+        "error": "",
+        "model_used": result.get("model_used")
+    }
+
+
 def _generate_simple_plan(spec: dict, project_id: str) -> dict:
     """Genera un plan usando LLM para specs simples (comportamiento original)."""
     system_prompt = (

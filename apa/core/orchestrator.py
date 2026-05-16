@@ -7,7 +7,7 @@ from pathlib import Path
 from datetime import datetime
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from config.settings import settings
-from core.planner import parse_spec, generate_plan
+from core.planner import parse_spec, generate_plan, split_task_into_subtasks
 from core.providers import provider_manager
 from agents.generator import GeneratorAgent
 from agents.corrector import CorrectorAgent
@@ -116,6 +116,23 @@ class Orchestrator:
             
             gen_result = self.generator.generate_and_test(task)
             
+            # FASE 2: Detectar señal split_task y propagarla
+            if not gen_result.get("success") and gen_result.get("action_required") == "split_task":
+                logger.info(f"Tarea {task['id']} requiere división por contexto excedido")
+                return {
+                    "success": False,
+                    "code": "",
+                    "filename": "",
+                    "criterion_passed": False,
+                    "attempts_used": 0,  # No consume intento real
+                    "model_used": gen_result.get("model_used"),
+                    "diagnosis": gen_result.get("split_message", "Contexto excedido, requiere división"),
+                    "action_required": "split_task",
+                    "error_type": gen_result.get("error_type", "context_exceeded_no_fallback"),
+                    "tokens_needed": gen_result.get("tokens_needed", 0),
+                    "max_available_context": gen_result.get("max_available_context", 0)
+                }
+            
             if not gen_result.get("success"):
                 return {
                     "success": False,
@@ -186,6 +203,96 @@ class Orchestrator:
                 "diagnosis": f"Excepción en ejecución: {str(e)}"
             }
 
+    def _handle_task_split(self, task: dict, result: dict, plan: dict,
+                           completed_tasks: dict, on_progress=None) -> bool:
+        """Gestiona la división de una tarea por contexto excedido.
+
+        Llama al planificador para dividir la tarea en subtareas,
+        las inserta en el plan actual y actualiza las dependencias
+        de las demás tareas que dependían de la original.
+
+        Returns:
+            True si la división fue exitosa, False si falló.
+        """
+        original_task_id = task["id"]
+        tokens_needed = result.get("tokens_needed", 0)
+        max_context = result.get("max_available_context", 0)
+
+        logger.info(
+            f"Iniciando división de tarea {original_task_id}: "
+            f"tokens_needed={tokens_needed}, max_context={max_context}"
+        )
+
+        # Llamar al planificador para dividir la tarea
+        split_result = split_task_into_subtasks(
+            task=task,
+            plan=plan,
+            tokens_needed=tokens_needed,
+            max_available_context=max_context
+        )
+
+        if not split_result.get("success"):
+            logger.error(
+                f"No se pudo dividir la tarea {original_task_id}: "
+                f"{split_result.get('error', 'Error desconocido')}"
+            )
+            return False
+
+        subtasks = split_result["subtasks"]
+        if not subtasks:
+            logger.error(f"División de tarea {original_task_id} no produjo subtareas")
+            return False
+
+        # Marcar la tarea original como dividida (no como fallida ni completada)
+        task["status"] = "split"
+        task["result"] = {
+            "success": False,
+            "action_required": "split_task",
+            "diagnosis": result.get("diagnosis", "Tarea dividida por contexto excedido"),
+            "split_into": [st["id"] for st in subtasks],
+            "model_used": split_result.get("model_used")
+        }
+
+        # Reemplazar referencias a la tarea original en las dependencias
+        # Si otra tarea dependía de la original, ahora depende de la última subtarea
+        last_subtask_id = subtasks[-1]["id"]
+        for t in plan.get("tasks", []):
+            if t["id"] == original_task_id:
+                continue
+            deps = t.get("depends_on", [])
+            if original_task_id in deps:
+                t["depends_on"] = [last_subtask_id if d == original_task_id else d for d in deps]
+                logger.info(
+                    f"Tarea {t['id']} actualizada: depende de {last_subtask_id} "
+                    f"(era {original_task_id})"
+                )
+
+        # Insertar las subtareas en el plan
+        plan["tasks"].extend(subtasks)
+
+        # Notificar via evento de progreso (Cambio 4)
+        self._emit(on_progress, {
+            "type": "task_split",
+            "original_task_id": original_task_id,
+            "original_task_name": task.get("name", ""),
+            "subtask_ids": [st["id"] for st in subtasks],
+            "subtask_count": len(subtasks),
+            "tokens_needed": tokens_needed,
+            "max_available_context": max_context,
+            "model_used": split_result.get("model_used"),
+            "message": (
+                f"Tarea '{task.get('name', original_task_id)}' dividida en "
+                f"{len(subtasks)} subtareas por contexto excedido "
+                f"(necesitaba ~{tokens_needed} tokens, máximo {max_context})"
+            )
+        })
+
+        logger.info(
+            f"Tarea {original_task_id} dividida exitosamente en "
+            f"{len(subtasks)} subtareas: {[st['id'] for st in subtasks]}"
+        )
+        return True
+
     def _execute_tasks(self, plan: dict, on_progress=None) -> dict:
         try:
             completed_tasks = {}
@@ -200,11 +307,12 @@ class Orchestrator:
                     break
                 
                 executable = []
+                split_task_ids = {t["id"] for t in tasks if t["status"] == "split"}
                 for task in pending:
                     if task["status"] != "pending":
                         continue
                     deps = task.get("depends_on", [])
-                    if all(dep_id in completed_tasks for dep_id in deps):
+                    if all(dep_id in completed_tasks or dep_id in split_task_ids for dep_id in deps):
                         executable.append(task)
                 
                 if not executable:
@@ -241,6 +349,31 @@ class Orchestrator:
                     })
                     
                     result = self._run_task(task)
+                    
+                    # FASE 2: Si la tarea requiere división, dividirla y continuar
+                    if result.get("action_required") == "split_task":
+                        split_ok = self._handle_task_split(
+                            task, result, plan, completed_tasks, on_progress
+                        )
+                        if not split_ok:
+                            # Si la división falló, marcar como fallida
+                            task["status"] = "failed"
+                            task["result"] = result
+                            failed_tasks[task["id"]] = {
+                                "diagnosis": result.get("diagnosis", "No se pudo dividir la tarea"),
+                                "attempts_used": 0
+                            }
+                            self._emit(on_progress, {
+                                "type": "task_failed",
+                                "task_id": task["id"],
+                                "task_name": task["name"],
+                                "diagnosis": result.get("diagnosis", "No se pudo dividir la tarea"),
+                                "attempts_used": 0
+                            })
+                        self._persist_plan(plan)
+                        if hasattr(self, 'checkpoint_mgr') and self.checkpoint_mgr:
+                            self.checkpoint_mgr.save(self.current_plan)
+                        continue
                     
                     if result.get("success"):
                         task["status"] = "completed"
@@ -379,7 +512,7 @@ class Orchestrator:
                     "diagnosis": result.get("diagnosis") if not result.get("success") else None
                 })
             
-            all_completed = all(t["status"] == "completed" for t in tasks)
+            all_completed = all(t["status"] in ("completed", "split") for t in tasks)
             
             return {
                 "project_id": plan.get("project_id"),

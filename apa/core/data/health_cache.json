@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "updated_at": "2026-05-16T20:06:05.840366",
+  "updated_at": "2026-05-16T23:13:04.658905",
   "models": {
     "test-model-402-val": {
       "status": "failed",
@@ -29,10 +29,10 @@
     },
     "qwen/qwen3-next-80b-a3b-instruct:free": {
       "status": "unknown",
-      "verified_at": 1778958011.318778,
+      "verified_at": 1778968722.7611637,
       "provider": "openrouter",
       "error": null,
-      "rate_limited_count": 20,
+      "rate_limited_count": 28,
       "rate_limited_at": null,
       "probe_errors": {
         "openrouter": "HTTP 429 (rate limit)"
@@ -125,10 +125,10 @@
     },
     "openai/gpt-5.5-pro": {
       "status": "unknown",
-      "verified_at": 1778958014.076723,
+      "verified_at": 1778968725.4739664,
       "provider": "openai",
       "error": null,
-      "rate_limited_count": 17,
+      "rate_limited_count": 25,
       "rate_limited_at": null,
       "probe_errors": {
         "openrouter": "HTTP 402",
@@ -138,10 +138,10 @@
     },
     "openai/gpt-5.5": {
       "status": "unknown",
-      "verified_at": 1778958016.8561516,
+      "verified_at": 1778968728.1411483,
       "provider": "openai",
       "error": null,
-      "rate_limited_count": 17,
+      "rate_limited_count": 25,
       "rate_limited_at": null,
       "probe_errors": {
         "openrouter": "HTTP 402",
@@ -164,10 +164,10 @@
     },
     "openai/gpt-5.4": {
       "status": "unknown",
-      "verified_at": 1778958019.5330017,
+      "verified_at": 1778968730.8676457,
       "provider": "openai",
       "error": null,
-      "rate_limited_count": 19,
+      "rate_limited_count": 27,
       "rate_limited_at": null,
       "probe_errors": {
         "openrouter": "HTTP 402",
@@ -453,10 +453,10 @@
     },
     "meta-llama/Llama-Guard-4-12B": {
       "status": "unknown",
-      "verified_at": 1778958022.8998394,
+      "verified_at": 1778968734.1306605,
       "provider": "together",
       "error": null,
-      "rate_limited_count": 19,
+      "rate_limited_count": 27,
       "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
@@ -465,10 +465,10 @@
     },
     "meta-llama/Llama-4-Scout-17B-16E-Instruct": {
       "status": "unknown",
-      "verified_at": 1778958025.4440238,
+      "verified_at": 1778968736.6696117,
       "provider": "together",
       "error": null,
-      "rate_limited_count": 22,
+      "rate_limited_count": 30,
       "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
@@ -489,10 +489,10 @@
     },
     "openai/gpt-4.1": {
       "status": "unknown",
-      "verified_at": 1778958030.8686953,
+      "verified_at": 1778968741.8964977,
       "provider": "openai",
       "error": null,
-      "rate_limited_count": 23,
+      "rate_limited_count": 31,
       "rate_limited_at": null,
       "probe_errors": {
         "openrouter": "HTTP 402",
@@ -502,10 +502,10 @@
     },
     "openai/gpt-4.1-mini": {
       "status": "unknown",
-      "verified_at": 1778958033.6527982,
+      "verified_at": 1778968744.6101248,
       "provider": "openai",
       "error": null,
-      "rate_limited_count": 23,
+      "rate_limited_count": 31,
       "rate_limited_at": null,
       "probe_errors": {
         "openrouter": "HTTP 402",
@@ -515,10 +515,10 @@
     },
     "openai/gpt-4.1-nano": {
       "status": "unknown",
-      "verified_at": 1778958036.318953,
+      "verified_at": 1778968747.3034096,
       "provider": "openai",
       "error": null,
-      "rate_limited_count": 24,
+      "rate_limited_count": 32,
       "rate_limited_at": null,
       "probe_errors": {
         "openrouter": "HTTP 402",
@@ -831,10 +831,10 @@
     },
     "deepseek-ai/DeepSeek-V4-Pro": {
       "status": "unknown",
-      "verified_at": 1778958038.9062455,
+      "verified_at": 1778968750.4916313,
       "provider": "together",
       "error": null,
-      "rate_limited_count": 24,
+      "rate_limited_count": 32,
       "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
@@ -867,10 +867,10 @@
     },
     "openai/gpt-5.4-nano": {
       "status": "unknown",
-      "verified_at": 1778958041.6078238,
+      "verified_at": 1778968753.333111,
       "provider": "openai",
       "error": null,
-      "rate_limited_count": 22,
+      "rate_limited_count": 30,
       "rate_limited_at": null,
       "probe_errors": {
         "openrouter": "HTTP 402",
@@ -880,10 +880,10 @@
     },
     "openai/gpt-5.4-mini": {
       "status": "unknown",
-      "verified_at": 1778958044.3617852,
+      "verified_at": 1778968756.0068955,
       "provider": "openai",
       "error": null,
-      "rate_limited_count": 24,
+      "rate_limited_count": 32,
       "rate_limited_at": null,
       "probe_errors": {
         "openrouter": "HTTP 402",
@@ -893,10 +893,10 @@
     },
     "openai/gpt-5.3-codex": {
       "status": "unknown",
-      "verified_at": 1778958047.0181289,
+      "verified_at": 1778968758.7193274,
       "provider": "openai",
       "error": null,
-      "rate_limited_count": 23,
+      "rate_limited_count": 30,
       "rate_limited_at": null,
       "probe_errors": {
         "openrouter": "HTTP 402",
@@ -906,10 +906,10 @@
     },
     "openai/gpt-5.2-codex": {
       "status": "unknown",
-      "verified_at": 1778958049.703463,
+      "verified_at": 1778968761.4072235,
       "provider": "openai",
       "error": null,
-      "rate_limited_count": 21,
+      "rate_limited_count": 28,
       "rate_limited_at": null,
       "probe_errors": {
         "openrouter": "HTTP 402",
@@ -919,10 +919,10 @@
     },
     "openai/gpt-5.2-pro": {
       "status": "unknown",
-      "verified_at": 1778958052.3391,
+      "verified_at": 1778968764.115629,
       "provider": "openai",
       "error": null,
-      "rate_limited_count": 23,
+      "rate_limited_count": 30,
       "rate_limited_at": null,
       "probe_errors": {
         "openrouter": "HTTP 402",
@@ -932,10 +932,10 @@
     },
     "openai/gpt-5.2": {
       "status": "unknown",
-      "verified_at": 1778958055.058264,
+      "verified_at": 1778968766.945105,
       "provider": "openai",
       "error": null,
-      "rate_limited_count": 24,
+      "rate_limited_count": 31,
       "rate_limited_at": null,
       "probe_errors": {
         "openrouter": "HTTP 402",
@@ -945,10 +945,10 @@
     },
     "openai/gpt-5.1-codex-max": {
       "status": "unknown",
-      "verified_at": 1778958057.765821,
+      "verified_at": 1778968769.6202967,
       "provider": "openai",
       "error": null,
-      "rate_limited_count": 22,
+      "rate_limited_count": 29,
       "rate_limited_at": null,
       "probe_errors": {
         "openrouter": "HTTP 402",
@@ -958,10 +958,10 @@
     },
     "openai/gpt-5.1": {
       "status": "unknown",
-      "verified_at": 1778958060.4520981,
+      "verified_at": 1778968772.3108363,
       "provider": "openai",
       "error": null,
-      "rate_limited_count": 24,
+      "rate_limited_count": 31,
       "rate_limited_at": null,
       "probe_errors": {
         "openrouter": "HTTP 402",
@@ -970,12 +970,12 @@
       "previously_available": false
     },
     "openai/gpt-5.1-codex": {
-      "status": "rate_limited",
-      "verified_at": 1778958063.0906508,
+      "status": "unknown",
+      "verified_at": 1778968774.9359977,
       "provider": "openai",
-      "error": "HTTP 429 (rate limit)",
-      "rate_limited_count": 24,
-      "rate_limited_at": 1778958063.0906508,
+      "error": null,
+      "rate_limited_count": 31,
+      "rate_limited_at": null,
       "probe_errors": {
         "openrouter": "HTTP 402",
         "openai": "HTTP 429 (rate limit)"
@@ -983,12 +983,12 @@
       "previously_available": false
     },
     "openai/gpt-5.1-codex-mini": {
-      "status": "rate_limited",
-      "verified_at": 1778958065.7631423,
+      "status": "unknown",
+      "verified_at": 1778968777.5494153,
       "provider": "openai",
-      "error": "HTTP 429 (rate limit)",
-      "rate_limited_count": 24,
-      "rate_limited_at": 1778958065.7631423,
+      "error": null,
+      "rate_limited_count": 31,
+      "rate_limited_at": null,
       "probe_errors": {
         "openrouter": "HTTP 402",
         "openai": "HTTP 429 (rate limit)"
@@ -1020,12 +1020,12 @@
       "previously_available": false
     },
     "openai/gpt-5-pro": {
-      "status": "rate_limited",
-      "verified_at": 1778958068.4894178,
+      "status": "unknown",
+      "verified_at": 1778968780.2215283,
       "provider": "openai",
-      "error": "HTTP 429 (rate limit)",
-      "rate_limited_count": 23,
-      "rate_limited_at": 1778958068.4894178,
+      "error": null,
+      "rate_limited_count": 30,
+      "rate_limited_at": null,
       "probe_errors": {
         "openrouter": "HTTP 402",
         "openai": "HTTP 429 (rate limit)"
@@ -1033,12 +1033,12 @@
       "previously_available": false
     },
     "openai/gpt-5-codex": {
-      "status": "rate_limited",
-      "verified_at": 1778958071.270121,
+      "status": "unknown",
+      "verified_at": 1778968782.88248,
       "provider": "openai",
-      "error": "HTTP 429 (rate limit)",
-      "rate_limited_count": 23,
-      "rate_limited_at": 1778958071.270121,
+      "error": null,
+      "rate_limited_count": 30,
+      "rate_limited_at": null,
       "probe_errors": {
         "openrouter": "HTTP 402",
         "openai": "HTTP 429 (rate limit)"
@@ -1046,12 +1046,12 @@
       "previously_available": false
     },
     "openai/gpt-5": {
-      "status": "rate_limited",
-      "verified_at": 1778958074.0443249,
+      "status": "unknown",
+      "verified_at": 1778968785.5375586,
       "provider": "openai",
-      "error": "HTTP 429 (rate limit)",
-      "rate_limited_count": 25,
-      "rate_limited_at": 1778958074.0443249,
+      "error": null,
+      "rate_limited_count": 32,
+      "rate_limited_at": null,
       "probe_errors": {
         "openrouter": "HTTP 402",
         "openai": "HTTP 429 (rate limit)"
@@ -1059,12 +1059,12 @@
       "previously_available": false
     },
     "openai/gpt-5-mini": {
-      "status": "rate_limited",
-      "verified_at": 1778958076.6943042,
+      "status": "unknown",
+      "verified_at": 1778968788.279894,
       "provider": "openai",
-      "error": "HTTP 429 (rate limit)",
-      "rate_limited_count": 24,
-      "rate_limited_at": 1778958076.6943042,
+      "error": null,
+      "rate_limited_count": 31,
+      "rate_limited_at": null,
       "probe_errors": {
         "openrouter": "HTTP 402",
         "openai": "HTTP 429 (rate limit)"
@@ -1072,12 +1072,12 @@
       "previously_available": false
     },
     "openai/gpt-5-nano": {
-      "status": "rate_limited",
-      "verified_at": 1778958079.3881855,
+      "status": "unknown",
+      "verified_at": 1778968790.9227228,
       "provider": "openai",
-      "error": "HTTP 429 (rate limit)",
-      "rate_limited_count": 23,
-      "rate_limited_at": 1778958079.3881855,
+      "error": null,
+      "rate_limited_count": 30,
+      "rate_limited_at": null,
       "probe_errors": {
         "openrouter": "HTTP 402",
         "openai": "HTTP 429 (rate limit)"
@@ -1229,12 +1229,12 @@
       "previously_available": false
     },
     "google/gemma-4-26b-a4b-it:free": {
-      "status": "rate_limited",
-      "verified_at": 1778958081.930072,
+      "status": "unknown",
+      "verified_at": 1778968793.4696584,
       "provider": "openrouter",
-      "error": "HTTP 429 (rate limit)",
-      "rate_limited_count": 26,
-      "rate_limited_at": 1778958081.930072,
+      "error": null,
+      "rate_limited_count": 33,
+      "rate_limited_at": null,
       "probe_errors": {
         "openrouter": "HTTP 429 (rate limit)"
       },
@@ -1253,12 +1253,12 @@
       "previously_available": false
     },
     "google/gemma-4-31b-it:free": {
-      "status": "rate_limited",
-      "verified_at": 1778958084.4611304,
+      "status": "unknown",
+      "verified_at": 1778968796.0564253,
       "provider": "openrouter",
-      "error": "HTTP 429 (rate limit)",
-      "rate_limited_count": 27,
-      "rate_limited_at": 1778958084.4611304,
+      "error": null,
+      "rate_limited_count": 34,
+      "rate_limited_at": null,
       "probe_errors": {
         "openrouter": "HTTP 429 (rate limit)"
       },
@@ -1277,12 +1277,12 @@
       "previously_available": false
     },
     "arcee-ai/trinity-large-thinking:free": {
-      "status": "rate_limited",
-      "verified_at": 1778958087.0309079,
+      "status": "unknown",
+      "verified_at": 1778968798.5693054,
       "provider": "openrouter",
-      "error": "HTTP 429 (rate limit)",
-      "rate_limited_count": 20,
-      "rate_limited_at": 1778958087.0309079,
+      "error": null,
+      "rate_limited_count": 27,
+      "rate_limited_at": null,
       "probe_errors": {
         "openrouter": "HTTP 429 (rate limit)"
       },
@@ -1685,276 +1685,276 @@
       "previously_available": false
     },
     "moonshotai/Kimi-K2.6": {
-      "status": "rate_limited",
-      "verified_at": 1778958092.1299245,
+      "status": "unknown",
+      "verified_at": 1778968803.6881788,
       "provider": "together",
-      "error": "HTTP 429 (rate limit)",
-      "rate_limited_count": 25,
-      "rate_limited_at": 1778958092.1299245,
+      "error": null,
+      "rate_limited_count": 32,
+      "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
       },
       "previously_available": false
     },
     "google/gemma-4-31B-it": {
-      "status": "rate_limited",
-      "verified_at": 1778958094.6750112,
+      "status": "unknown",
+      "verified_at": 1778968807.0631444,
       "provider": "together",
-      "error": "HTTP 429 (rate limit)",
-      "rate_limited_count": 23,
-      "rate_limited_at": 1778958094.6750112,
+      "error": null,
+      "rate_limited_count": 30,
+      "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
       },
       "previously_available": false
     },
     "Qwen/Qwen3.5-397B-A17B": {
-      "status": "rate_limited",
-      "verified_at": 1778958097.2557995,
+      "status": "unknown",
+      "verified_at": 1778968809.6443784,
       "provider": "together",
-      "error": "HTTP 429 (rate limit)",
-      "rate_limited_count": 24,
-      "rate_limited_at": 1778958097.2557995,
+      "error": null,
+      "rate_limited_count": 31,
+      "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
       },
       "previously_available": false
     },
     "moonshotai/Kimi-K2.5": {
-      "status": "rate_limited",
-      "verified_at": 1778958099.8535948,
+      "status": "unknown",
+      "verified_at": 1778968813.105786,
       "provider": "together",
-      "error": "HTTP 429 (rate limit)",
-      "rate_limited_count": 22,
-      "rate_limited_at": 1778958099.8535948,
+      "error": null,
+      "rate_limited_count": 29,
+      "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
       },
       "previously_available": false
     },
     "Qwen/Qwen3.5-9B": {
-      "status": "rate_limited",
-      "verified_at": 1778958102.7441473,
+      "status": "unknown",
+      "verified_at": 1778968815.6107202,
       "provider": "together",
-      "error": "HTTP 429 (rate limit)",
-      "rate_limited_count": 24,
-      "rate_limited_at": 1778958102.7441473,
+      "error": null,
+      "rate_limited_count": 31,
+      "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
       },
       "previously_available": false
     },
     "Qwen/Qwen3-Coder-Next-FP8": {
-      "status": "rate_limited",
-      "verified_at": 1778958106.2442496,
+      "status": "unknown",
+      "verified_at": 1778968818.7653043,
       "provider": "together",
-      "error": "HTTP 429 (rate limit)",
-      "rate_limited_count": 17,
-      "rate_limited_at": 1778958106.2442496,
+      "error": null,
+      "rate_limited_count": 24,
+      "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
       },
       "previously_available": false
     },
     "Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8": {
-      "status": "rate_limited",
-      "verified_at": 1778958109.3541005,
+      "status": "unknown",
+      "verified_at": 1778968821.282303,
       "provider": "together",
-      "error": "HTTP 429 (rate limit)",
-      "rate_limited_count": 24,
-      "rate_limited_at": 1778958109.3541005,
+      "error": null,
+      "rate_limited_count": 31,
+      "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
       },
       "previously_available": false
     },
     "Qwen/Qwen3-235B-A22B-Instruct-2507-tput": {
-      "status": "rate_limited",
-      "verified_at": 1778958112.7217627,
+      "status": "unknown",
+      "verified_at": 1778968824.3995187,
       "provider": "together",
-      "error": "HTTP 429 (rate limit)",
-      "rate_limited_count": 24,
-      "rate_limited_at": 1778958112.7217627,
+      "error": null,
+      "rate_limited_count": 31,
+      "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
       },
       "previously_available": false
     },
     "Qwen/Qwen3-VL-8B-Instruct": {
-      "status": "rate_limited",
-      "verified_at": 1778958115.840784,
+      "status": "unknown",
+      "verified_at": 1778968826.9433103,
       "provider": "together",
-      "error": "HTTP 429 (rate limit)",
-      "rate_limited_count": 24,
-      "rate_limited_at": 1778958115.840784,
+      "error": null,
+      "rate_limited_count": 31,
+      "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
       },
       "previously_available": false
     },
     "Hcompany/Holo3-35B-A3B": {
-      "status": "rate_limited",
-      "verified_at": 1778958118.6615677,
+      "status": "unknown",
+      "verified_at": 1778968829.5674484,
       "provider": "together",
-      "error": "HTTP 429 (rate limit)",
-      "rate_limited_count": 20,
-      "rate_limited_at": 1778958118.6615677,
+      "error": null,
+      "rate_limited_count": 27,
+      "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
       },
       "previously_available": false
     },
     "google/gemma-4-26B-A4B-it": {
-      "status": "rate_limited",
-      "verified_at": 1778958121.169742,
+      "status": "unknown",
+      "verified_at": 1778968832.2076914,
       "provider": "together",
-      "error": "HTTP 429 (rate limit)",
-      "rate_limited_count": 22,
-      "rate_limited_at": 1778958121.169742,
+      "error": null,
+      "rate_limited_count": 29,
+      "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
       },
       "previously_available": false
     },
     "Qwen/Qwen3-Coder-30B-A3B-Instruct": {
-      "status": "rate_limited",
-      "verified_at": 1778958123.814976,
+      "status": "unknown",
+      "verified_at": 1778968834.7731385,
       "provider": "together",
-      "error": "HTTP 429 (rate limit)",
-      "rate_limited_count": 24,
-      "rate_limited_at": 1778958123.814976,
+      "error": null,
+      "rate_limited_count": 31,
+      "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
       },
       "previously_available": false
     },
     "Qwen/Qwen3-VL-32B-Instruct": {
-      "status": "rate_limited",
-      "verified_at": 1778958126.295382,
+      "status": "unknown",
+      "verified_at": 1778968838.0560474,
       "provider": "together",
-      "error": "HTTP 429 (rate limit)",
-      "rate_limited_count": 23,
-      "rate_limited_at": 1778958126.295382,
+      "error": null,
+      "rate_limited_count": 30,
+      "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
       },
       "previously_available": false
     },
     "Qwen/Qwen3-Next-80B-A3B-Thinking": {
-      "status": "rate_limited",
-      "verified_at": 1778958129.1459622,
+      "status": "unknown",
+      "verified_at": 1778968840.7301502,
       "provider": "together",
-      "error": "HTTP 429 (rate limit)",
-      "rate_limited_count": 21,
-      "rate_limited_at": 1778958129.1459622,
+      "error": null,
+      "rate_limited_count": 28,
+      "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
       },
       "previously_available": false
     },
     "nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-FP8": {
-      "status": "rate_limited",
-      "verified_at": 1778958131.7497718,
+      "status": "unknown",
+      "verified_at": 1778968843.304946,
       "provider": "together",
-      "error": "HTTP 429 (rate limit)",
-      "rate_limited_count": 21,
-      "rate_limited_at": 1778958131.7497718,
+      "error": null,
+      "rate_limited_count": 28,
+      "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
       },
       "previously_available": false
     },
     "Qwen/Qwen3-Next-80B-A3B-Instruct": {
-      "status": "rate_limited",
-      "verified_at": 1778958134.425436,
+      "status": "unknown",
+      "verified_at": 1778968845.8843355,
       "provider": "together",
-      "error": "HTTP 429 (rate limit)",
-      "rate_limited_count": 24,
-      "rate_limited_at": 1778958134.425436,
+      "error": null,
+      "rate_limited_count": 31,
+      "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
       },
       "previously_available": false
     },
     "Qwen/Qwen3-VL-235B-A22B-Instruct-FP8": {
-      "status": "rate_limited",
-      "verified_at": 1778958136.9726427,
+      "status": "unknown",
+      "verified_at": 1778968848.5411148,
       "provider": "together",
-      "error": "HTTP 429 (rate limit)",
-      "rate_limited_count": 21,
-      "rate_limited_at": 1778958136.9726427,
+      "error": null,
+      "rate_limited_count": 28,
+      "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
       },
       "previously_available": false
     },
     "Qwen/Qwen3-30B-A3B-Instruct-2507-Lora": {
-      "status": "rate_limited",
-      "verified_at": 1778958139.5251572,
+      "status": "unknown",
+      "verified_at": 1778968851.1891491,
       "provider": "together",
-      "error": "HTTP 429 (rate limit)",
-      "rate_limited_count": 20,
-      "rate_limited_at": 1778958139.5251572,
+      "error": null,
+      "rate_limited_count": 27,
+      "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
       },
       "previously_available": false
     },
     "Qwen/Qwen3-4B-Instruct-2507": {
-      "status": "rate_limited",
-      "verified_at": 1778958142.0815792,
+      "status": "unknown",
+      "verified_at": 1778968853.7900393,
       "provider": "together",
-      "error": "HTTP 429 (rate limit)",
-      "rate_limited_count": 23,
-      "rate_limited_at": 1778958142.0815792,
+      "error": null,
+      "rate_limited_count": 30,
+      "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
       },
       "previously_available": false
     },
     "Qwen/Qwen3.6-35B-A3B-FP8": {
-      "status": "rate_limited",
-      "verified_at": 1778958144.656845,
+      "status": "unknown",
+      "verified_at": 1778968856.4663413,
       "provider": "together",
-      "error": "HTTP 429 (rate limit)",
-      "rate_limited_count": 21,
-      "rate_limited_at": 1778958144.656845,
+      "error": null,
+      "rate_limited_count": 28,
+      "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
       },
       "previously_available": false
     },
     "nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-BF16": {
-      "status": "rate_limited",
-      "verified_at": 1778958147.2294922,
+      "status": "unknown",
+      "verified_at": 1778968859.0796235,
       "provider": "together",
-      "error": "HTTP 429 (rate limit)",
-      "rate_limited_count": 20,
-      "rate_limited_at": 1778958147.2294922,
+      "error": null,
+      "rate_limited_count": 27,
+      "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
       },
       "previously_available": false
     },
     "Qwen/Qwen3.5-122B-A10B-FP8": {
-      "status": "rate_limited",
-      "verified_at": 1778958149.8068793,
+      "status": "unknown",
+      "verified_at": 1778968861.7540624,
       "provider": "together",
-      "error": "HTTP 429 (rate limit)",
-      "rate_limited_count": 22,
-      "rate_limited_at": 1778958149.8068793,
+      "error": null,
+      "rate_limited_count": 29,
+      "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
       },
       "previously_available": false
     },
     "meta-llama/Llama-4-Scout-17B-16E": {
-      "status": "rate_limited",
-      "verified_at": 1778958152.358295,
+      "status": "unknown",
+      "verified_at": 1778968864.4210563,
       "provider": "together",
-      "error": "HTTP 429 (rate limit)",
-      "rate_limited_count": 23,
-      "rate_limited_at": 1778958152.358295,
+      "error": null,
+      "rate_limited_count": 30,
+      "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
       },
@@ -1962,7 +1962,7 @@
     },
     "mistralai/Ministral-3-14B-Instruct-2512": {
       "status": "unknown",
-      "verified_at": 1778958184.7066479,
+      "verified_at": 1778968896.7854578,
       "provider": "",
       "error": null,
       "rate_limited_count": 0,
@@ -1973,60 +1973,60 @@
       "previously_available": false
     },
     "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16": {
-      "status": "rate_limited",
-      "verified_at": 1778958187.5755756,
+      "status": "unknown",
+      "verified_at": 1778968899.4438708,
       "provider": "together",
-      "error": "HTTP 429 (rate limit)",
-      "rate_limited_count": 17,
-      "rate_limited_at": 1778958187.5755756,
+      "error": null,
+      "rate_limited_count": 24,
+      "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
       },
       "previously_available": false
     },
     "Qwen/Qwen3.5-9B-FP8": {
-      "status": "rate_limited",
-      "verified_at": 1778958190.2018883,
+      "status": "unknown",
+      "verified_at": 1778968902.026565,
       "provider": "together",
-      "error": "HTTP 429 (rate limit)",
-      "rate_limited_count": 17,
-      "rate_limited_at": 1778958190.2018883,
+      "error": null,
+      "rate_limited_count": 24,
+      "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
       },
       "previously_available": false
     },
     "Qwen/Qwen3.5-35B-A3B": {
-      "status": "rate_limited",
-      "verified_at": 1778958192.7378361,
+      "status": "unknown",
+      "verified_at": 1778968904.6235638,
       "provider": "together",
-      "error": "HTTP 429 (rate limit)",
-      "rate_limited_count": 22,
-      "rate_limited_at": 1778958192.7378361,
+      "error": null,
+      "rate_limited_count": 29,
+      "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
       },
       "previously_available": false
     },
     "qwen/qwen3-coder:free": {
-      "status": "rate_limited",
-      "verified_at": 1778958195.423621,
-      "provider": "openrouter",
-      "error": "HTTP 429 (rate limit)",
-      "rate_limited_count": 26,
-      "rate_limited_at": 1778958195.423621,
+      "status": "failed",
+      "verified_at": 1778965950.6442266,
+      "provider": "",
+      "error": "HTTP 404 (code=404): Provider returned error",
+      "rate_limited_count": 30,
+      "rate_limited_at": null,
       "probe_errors": {
-        "openrouter": "HTTP 429 (rate limit)"
+        "openrouter": "HTTP 404"
       },
       "previously_available": false
     },
     "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free": {
-      "status": "rate_limited",
-      "verified_at": 1778958197.9741213,
+      "status": "unknown",
+      "verified_at": 1778968907.134876,
       "provider": "openrouter",
-      "error": "HTTP 429 (rate limit)",
-      "rate_limited_count": 21,
-      "rate_limited_at": 1778958197.9741213,
+      "error": null,
+      "rate_limited_count": 28,
+      "rate_limited_at": null,
       "probe_errors": {
         "openrouter": "HTTP 429 (rate limit)"
       },
@@ -2045,12 +2045,12 @@
       "previously_available": false
     },
     "nvidia/nemotron-3-nano-30b-a3b:free": {
-      "status": "rate_limited",
-      "verified_at": 1778958200.5277984,
+      "status": "unknown",
+      "verified_at": 1778968909.6695905,
       "provider": "openrouter",
-      "error": "HTTP 429 (rate limit)",
-      "rate_limited_count": 23,
-      "rate_limited_at": 1778958200.5277984,
+      "error": null,
+      "rate_limited_count": 30,
+      "rate_limited_at": null,
       "probe_errors": {
         "openrouter": "HTTP 429 (rate limit)"
       },
@@ -2225,48 +2225,48 @@
       "previously_available": false
     },
     "zai-org/GLM-5.1": {
-      "status": "rate_limited",
-      "verified_at": 1778958203.777483,
+      "status": "unknown",
+      "verified_at": 1778968912.990672,
       "provider": "together",
-      "error": "HTTP 429 (rate limit)",
-      "rate_limited_count": 22,
-      "rate_limited_at": 1778958203.777483,
+      "error": null,
+      "rate_limited_count": 29,
+      "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
       },
       "previously_available": false
     },
     "zai-org/GLM-5": {
-      "status": "rate_limited",
-      "verified_at": 1778958206.3755503,
+      "status": "unknown",
+      "verified_at": 1778968916.539397,
       "provider": "together",
-      "error": "HTTP 429 (rate limit)",
-      "rate_limited_count": 21,
-      "rate_limited_at": 1778958206.3755503,
+      "error": null,
+      "rate_limited_count": 28,
+      "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
       },
       "previously_available": false
     },
     "zai-org/GLM-4.7": {
-      "status": "rate_limited",
-      "verified_at": 1778958209.050243,
+      "status": "unknown",
+      "verified_at": 1778968919.792356,
       "provider": "together",
-      "error": "HTTP 429 (rate limit)",
-      "rate_limited_count": 23,
-      "rate_limited_at": 1778958209.050243,
+      "error": null,
+      "rate_limited_count": 30,
+      "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
       },
       "previously_available": false
     },
     "zai-org/GLM-4.6": {
-      "status": "rate_limited",
-      "verified_at": 1778958211.6502213,
+      "status": "unknown",
+      "verified_at": 1778968922.4195821,
       "provider": "together",
-      "error": "HTTP 429 (rate limit)",
-      "rate_limited_count": 22,
-      "rate_limited_at": 1778958211.6502213,
+      "error": null,
+      "rate_limited_count": 29,
+      "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
       },
@@ -2286,7 +2286,7 @@
     },
     "openrouter/free": {
       "status": "available",
-      "verified_at": 1778953048.9685395,
+      "verified_at": 1778964499.7525105,
       "provider": "openrouter",
       "error": null,
       "rate_limited_count": 0,
@@ -2294,7 +2294,7 @@
       "probe_errors": {
         "openrouter": "HTTP 429 (rate limit)"
       },
-      "previously_available": true
+      "previously_available": false
     },
     "anthropic/claude-opus-4.5": {
       "status": "failed",
@@ -2405,12 +2405,12 @@
       "previously_available": false
     },
     "openai/o3": {
-      "status": "rate_limited",
-      "verified_at": 1778958229.3362298,
+      "status": "unknown",
+      "verified_at": 1778968925.1095858,
       "provider": "openai",
-      "error": "HTTP 429 (rate limit)",
-      "rate_limited_count": 22,
-      "rate_limited_at": 1778958229.3362298,
+      "error": null,
+      "rate_limited_count": 29,
+      "rate_limited_at": null,
       "probe_errors": {
         "openrouter": "HTTP 402",
         "openai": "HTTP 429 (rate limit)"
@@ -2418,12 +2418,12 @@
       "previously_available": false
     },
     "openai/o4-mini": {
-      "status": "rate_limited",
-      "verified_at": 1778958232.1271687,
+      "status": "unknown",
+      "verified_at": 1778968927.8346977,
       "provider": "openai",
-      "error": "HTTP 429 (rate limit)",
-      "rate_limited_count": 22,
-      "rate_limited_at": 1778958232.1271687,
+      "error": null,
+      "rate_limited_count": 29,
+      "rate_limited_at": null,
       "probe_errors": {
         "openrouter": "HTTP 402",
         "openai": "HTTP 429 (rate limit)"
@@ -2467,12 +2467,12 @@
       "previously_available": false
     },
     "openai/o3-mini": {
-      "status": "rate_limited",
-      "verified_at": 1778958234.8544602,
+      "status": "unknown",
+      "verified_at": 1778968930.4543743,
       "provider": "openai",
-      "error": "HTTP 429 (rate limit)",
-      "rate_limited_count": 22,
-      "rate_limited_at": 1778958234.8544602,
+      "error": null,
+      "rate_limited_count": 29,
+      "rate_limited_at": null,
       "probe_errors": {
         "openrouter": "HTTP 402",
         "openai": "HTTP 429 (rate limit)"
@@ -2480,12 +2480,12 @@
       "previously_available": false
     },
     "openai/o1": {
-      "status": "rate_limited",
-      "verified_at": 1778958237.5679471,
+      "status": "unknown",
+      "verified_at": 1778968933.1288831,
       "provider": "openai",
-      "error": "HTTP 429 (rate limit)",
-      "rate_limited_count": 22,
-      "rate_limited_at": 1778958237.5679471,
+      "error": null,
+      "rate_limited_count": 29,
+      "rate_limited_at": null,
       "probe_errors": {
         "openrouter": "HTTP 402",
         "openai": "HTTP 429 (rate limit)"
@@ -2628,7 +2628,7 @@
     },
     "minimax/minimax-m2.5:free": {
       "status": "available",
-      "verified_at": 1778953066.4462817,
+      "verified_at": 1778963027.191895,
       "provider": "openrouter",
       "error": null,
       "rate_limited_count": 0,
@@ -2636,7 +2636,7 @@
       "probe_errors": {
         "openrouter": "HTTP 429 (rate limit)"
       },
-      "previously_available": true
+      "previously_available": false
     },
     "minimax/minimax-m2.5": {
       "status": "failed",
@@ -2675,24 +2675,24 @@
       "previously_available": false
     },
     "MiniMaxAI/MiniMax-M2.7": {
-      "status": "rate_limited",
-      "verified_at": 1778958243.4598813,
+      "status": "unknown",
+      "verified_at": 1778968936.2431014,
       "provider": "together",
-      "error": "HTTP 429 (rate limit)",
-      "rate_limited_count": 22,
-      "rate_limited_at": 1778958243.4598813,
+      "error": null,
+      "rate_limited_count": 29,
+      "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
       },
       "previously_available": false
     },
     "MiniMaxAI/MiniMax-M2": {
-      "status": "rate_limited",
-      "verified_at": 1778958246.1207414,
+      "status": "unknown",
+      "verified_at": 1778968938.8345551,
       "provider": "together",
-      "error": "HTTP 429 (rate limit)",
-      "rate_limited_count": 21,
-      "rate_limited_at": 1778958246.1207414,
+      "error": null,
+      "rate_limited_count": 28,
+      "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
       },
@@ -2831,12 +2831,12 @@
       "previously_available": false
     },
     "baidu/cobuddy:free": {
-      "status": "rate_limited",
-      "verified_at": 1778958251.3445892,
+      "status": "unknown",
+      "verified_at": 1778968943.9778383,
       "provider": "openrouter",
-      "error": "HTTP 429 (rate limit)",
-      "rate_limited_count": 21,
-      "rate_limited_at": 1778958251.3445892,
+      "error": null,
+      "rate_limited_count": 28,
+      "rate_limited_at": null,
       "probe_errors": {
         "openrouter": "HTTP 429 (rate limit)"
       },
@@ -2855,24 +2855,24 @@
       "previously_available": false
     },
     "poolside/laguna-xs.2:free": {
-      "status": "rate_limited",
-      "verified_at": 1778958254.2359064,
+      "status": "unknown",
+      "verified_at": 1778968947.2668076,
       "provider": "openrouter",
-      "error": "HTTP 429 (rate limit)",
-      "rate_limited_count": 21,
-      "rate_limited_at": 1778958254.2359064,
+      "error": null,
+      "rate_limited_count": 28,
+      "rate_limited_at": null,
       "probe_errors": {
         "openrouter": "HTTP 429 (rate limit)"
       },
       "previously_available": false
     },
     "poolside/laguna-m.1:free": {
-      "status": "rate_limited",
-      "verified_at": 1778958256.7771382,
+      "status": "unknown",
+      "verified_at": 1778968949.8175097,
       "provider": "openrouter",
-      "error": "HTTP 429 (rate limit)",
-      "rate_limited_count": 21,
-      "rate_limited_at": 1778958256.7771382,
+      "error": null,
+      "rate_limited_count": 28,
+      "rate_limited_at": null,
       "probe_errors": {
         "openrouter": "HTTP 429 (rate limit)"
       },
@@ -2927,12 +2927,12 @@
       "previously_available": false
     },
     "arcee-ai/trinity-mini": {
-      "status": "rate_limited",
-      "verified_at": 1778958259.4778743,
+      "status": "unknown",
+      "verified_at": 1778968952.6435854,
       "provider": "together",
-      "error": "HTTP 429 (rate limit)",
-      "rate_limited_count": 21,
-      "rate_limited_at": 1778958259.4778743,
+      "error": null,
+      "rate_limited_count": 28,
+      "rate_limited_at": null,
       "probe_errors": {
         "openrouter": "HTTP 402",
         "together": "HTTP 429 (rate limit)"
@@ -3180,12 +3180,12 @@
       "previously_available": false
     },
     "openai/gpt-oss-120b": {
-      "status": "rate_limited",
-      "verified_at": 1778958275.1912723,
+      "status": "unknown",
+      "verified_at": 1778968955.6244526,
       "provider": "together",
-      "error": "HTTP 429 (rate limit)",
-      "rate_limited_count": 21,
-      "rate_limited_at": 1778958275.1912723,
+      "error": null,
+      "rate_limited_count": 28,
+      "rate_limited_at": null,
       "probe_errors": {
         "openrouter": "HTTP 402",
         "together": "HTTP 429 (rate limit)",
@@ -3194,12 +3194,12 @@
       "previously_available": false
     },
     "openai/gpt-oss-20b": {
-      "status": "rate_limited",
-      "verified_at": 1778958278.8052878,
+      "status": "unknown",
+      "verified_at": 1778968958.9962857,
       "provider": "together",
-      "error": "HTTP 429 (rate limit)",
-      "rate_limited_count": 21,
-      "rate_limited_at": 1778958278.8052878,
+      "error": null,
+      "rate_limited_count": 28,
+      "rate_limited_at": null,
       "probe_errors": {
         "openrouter": "HTTP 402",
         "together": "HTTP 429 (rate limit)",
@@ -3220,12 +3220,12 @@
       "previously_available": false
     },
     "z-ai/glm-4.5-air:free": {
-      "status": "rate_limited",
-      "verified_at": 1778958281.3413165,
+      "status": "unknown",
+      "verified_at": 1778968961.5317004,
       "provider": "openrouter",
-      "error": "HTTP 429 (rate limit)",
-      "rate_limited_count": 21,
-      "rate_limited_at": 1778958281.3413165,
+      "error": null,
+      "rate_limited_count": 28,
+      "rate_limited_at": null,
       "probe_errors": {
         "openrouter": "HTTP 429 (rate limit)"
       },
@@ -3424,12 +3424,12 @@
       "previously_available": false
     },
     "google/gemma-3-4b-it": {
-      "status": "rate_limited",
-      "verified_at": 1778958285.6046546,
+      "status": "unknown",
+      "verified_at": 1778968964.2784386,
       "provider": "together",
-      "error": "HTTP 429 (rate limit)",
-      "rate_limited_count": 21,
-      "rate_limited_at": 1778958285.6046546,
+      "error": null,
+      "rate_limited_count": 28,
+      "rate_limited_at": null,
       "probe_errors": {
         "openrouter": "HTTP 402",
         "together": "HTTP 429 (rate limit)"
@@ -3449,12 +3449,12 @@
       "previously_available": false
     },
     "google/gemma-3-27b-it": {
-      "status": "rate_limited",
-      "verified_at": 1778958290.7534847,
+      "status": "unknown",
+      "verified_at": 1778968967.9410899,
       "provider": "together",
-      "error": "HTTP 429 (rate limit)",
-      "rate_limited_count": 21,
-      "rate_limited_at": 1778958290.7534847,
+      "error": null,
+      "rate_limited_count": 28,
+      "rate_limited_at": null,
       "probe_errors": {
         "openrouter": "HTTP 402",
         "together": "HTTP 429 (rate limit)"
@@ -3606,12 +3606,12 @@
       "previously_available": false
     },
     "meta-llama/llama-3.2-3b-instruct:free": {
-      "status": "rate_limited",
-      "verified_at": 1778958293.4339943,
+      "status": "unknown",
+      "verified_at": 1778968970.5578015,
       "provider": "openrouter",
-      "error": "HTTP 429 (rate limit)",
-      "rate_limited_count": 26,
-      "rate_limited_at": 1778958293.4339943,
+      "error": null,
+      "rate_limited_count": 33,
+      "rate_limited_at": null,
       "probe_errors": {
         "openrouter": "HTTP 429 (rate limit)"
       },
@@ -3654,12 +3654,12 @@
       "previously_available": false
     },
     "nousresearch/hermes-3-llama-3.1-405b:free": {
-      "status": "rate_limited",
-      "verified_at": 1778958296.0710487,
+      "status": "unknown",
+      "verified_at": 1778968973.2257748,
       "provider": "openrouter",
-      "error": "HTTP 429 (rate limit)",
-      "rate_limited_count": 26,
-      "rate_limited_at": 1778958296.0710487,
+      "error": null,
+      "rate_limited_count": 33,
+      "rate_limited_at": null,
       "probe_errors": {
         "openrouter": "HTTP 429 (rate limit)"
       },
@@ -3772,216 +3772,216 @@
       "previously_available": false
     },
     "meta-llama/Llama-3.3-70B-Instruct-Turbo": {
-      "status": "rate_limited",
-      "verified_at": 1778958301.895595,
+      "status": "unknown",
+      "verified_at": 1778968978.9624717,
       "provider": "together",
-      "error": "HTTP 429 (rate limit)",
-      "rate_limited_count": 20,
-      "rate_limited_at": 1778958301.895595,
+      "error": null,
+      "rate_limited_count": 27,
+      "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
       },
       "previously_available": false
     },
     "meta-llama/Llama-3.3-70B-Instruct-Turbo-test": {
-      "status": "rate_limited",
-      "verified_at": 1778958304.3976038,
+      "status": "unknown",
+      "verified_at": 1778968981.904921,
       "provider": "together",
-      "error": "HTTP 429 (rate limit)",
-      "rate_limited_count": 20,
-      "rate_limited_at": 1778958304.3976038,
+      "error": null,
+      "rate_limited_count": 27,
+      "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
       },
       "previously_available": false
     },
     "google/gemma-4-E4B-it": {
-      "status": "rate_limited",
-      "verified_at": 1778958306.9399014,
+      "status": "unknown",
+      "verified_at": 1778968984.521205,
       "provider": "together",
-      "error": "HTTP 429 (rate limit)",
-      "rate_limited_count": 19,
-      "rate_limited_at": 1778958306.9399014,
+      "error": null,
+      "rate_limited_count": 26,
+      "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
       },
       "previously_available": false
     },
     "facebook/cwm": {
-      "status": "rate_limited",
-      "verified_at": 1778958309.550812,
+      "status": "unknown",
+      "verified_at": 1778968987.1261952,
       "provider": "together",
-      "error": "HTTP 429 (rate limit)",
-      "rate_limited_count": 19,
-      "rate_limited_at": 1778958309.550812,
+      "error": null,
+      "rate_limited_count": 26,
+      "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
       },
       "previously_available": false
     },
     "meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo": {
-      "status": "rate_limited",
-      "verified_at": 1778958312.0976424,
+      "status": "unknown",
+      "verified_at": 1778968989.7066212,
       "provider": "together",
-      "error": "HTTP 429 (rate limit)",
-      "rate_limited_count": 19,
-      "rate_limited_at": 1778958312.0976424,
+      "error": null,
+      "rate_limited_count": 26,
+      "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
       },
       "previously_available": false
     },
     "Qwen/Qwen2.5-32B": {
-      "status": "rate_limited",
-      "verified_at": 1778958314.6874683,
+      "status": "unknown",
+      "verified_at": 1778968992.3492146,
       "provider": "together",
-      "error": "HTTP 429 (rate limit)",
-      "rate_limited_count": 19,
-      "rate_limited_at": 1778958314.6874683,
+      "error": null,
+      "rate_limited_count": 26,
+      "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
       },
       "previously_available": false
     },
     "deepcogito/cogito-v1-preview-llama-70B": {
-      "status": "rate_limited",
-      "verified_at": 1778958317.5734458,
+      "status": "unknown",
+      "verified_at": 1778968994.9907804,
       "provider": "together",
-      "error": "HTTP 429 (rate limit)",
-      "rate_limited_count": 19,
-      "rate_limited_at": 1778958317.5734458,
+      "error": null,
+      "rate_limited_count": 26,
+      "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
       },
       "previously_available": false
     },
     "deepcogito/cogito-v1-preview-llama-70B-Turbo": {
-      "status": "rate_limited",
-      "verified_at": 1778958320.158785,
+      "status": "unknown",
+      "verified_at": 1778968997.575631,
       "provider": "together",
-      "error": "HTTP 429 (rate limit)",
-      "rate_limited_count": 18,
-      "rate_limited_at": 1778958320.158785,
+      "error": null,
+      "rate_limited_count": 25,
+      "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
       },
       "previously_available": false
     },
     "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning-fp8": {
-      "status": "rate_limited",
-      "verified_at": 1778958322.7416878,
+      "status": "unknown",
+      "verified_at": 1778969000.1678653,
       "provider": "together",
-      "error": "HTTP 429 (rate limit)",
-      "rate_limited_count": 18,
-      "rate_limited_at": 1778958322.7416878,
+      "error": null,
+      "rate_limited_count": 25,
+      "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
       },
       "previously_available": false
     },
     "deepcogito/cogito-v1-preview-llama-8B": {
-      "status": "rate_limited",
-      "verified_at": 1778958325.3092043,
+      "status": "unknown",
+      "verified_at": 1778969002.8099077,
       "provider": "together",
-      "error": "HTTP 429 (rate limit)",
-      "rate_limited_count": 18,
-      "rate_limited_at": 1778958325.3092043,
+      "error": null,
+      "rate_limited_count": 25,
+      "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
       },
       "previously_available": false
     },
     "deepcogito/cogito-v1-preview-qwen-14B": {
-      "status": "rate_limited",
-      "verified_at": 1778958327.8583345,
+      "status": "unknown",
+      "verified_at": 1778969009.5625134,
       "provider": "together",
-      "error": "HTTP 429 (rate limit)",
-      "rate_limited_count": 18,
-      "rate_limited_at": 1778958327.8583345,
+      "error": null,
+      "rate_limited_count": 25,
+      "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
       },
       "previously_available": false
     },
     "deepcogito/cogito-v1-preview-qwen-32B": {
-      "status": "rate_limited",
-      "verified_at": 1778958330.4208267,
+      "status": "unknown",
+      "verified_at": 1778969012.5452414,
       "provider": "together",
-      "error": "HTTP 429 (rate limit)",
-      "rate_limited_count": 18,
-      "rate_limited_at": 1778958330.4208267,
+      "error": null,
+      "rate_limited_count": 25,
+      "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
       },
       "previously_available": false
     },
     "deepseek-ai/DeepSeek-R1-Distill-Llama-70B": {
-      "status": "rate_limited",
-      "verified_at": 1778958332.9922864,
+      "status": "unknown",
+      "verified_at": 1778969015.160574,
       "provider": "together",
-      "error": "HTTP 429 (rate limit)",
-      "rate_limited_count": 18,
-      "rate_limited_at": 1778958332.9922864,
+      "error": null,
+      "rate_limited_count": 25,
+      "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
       },
       "previously_available": false
     },
     "deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B": {
-      "status": "rate_limited",
-      "verified_at": 1778958335.5728629,
+      "status": "unknown",
+      "verified_at": 1778969017.801875,
       "provider": "together",
-      "error": "HTTP 429 (rate limit)",
-      "rate_limited_count": 18,
-      "rate_limited_at": 1778958335.5728629,
+      "error": null,
+      "rate_limited_count": 25,
+      "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
       },
       "previously_available": false
     },
     "deepseek-ai/DeepSeek-R1-Distill-Qwen-14B": {
-      "status": "rate_limited",
-      "verified_at": 1778958338.1407957,
+      "status": "unknown",
+      "verified_at": 1778969020.408804,
       "provider": "together",
-      "error": "HTTP 429 (rate limit)",
-      "rate_limited_count": 18,
-      "rate_limited_at": 1778958338.1407957,
+      "error": null,
+      "rate_limited_count": 25,
+      "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
       },
       "previously_available": false
     },
     "deepseek-ai/DeepSeek-R1-Distill-Qwen-7B": {
-      "status": "rate_limited",
-      "verified_at": 1778958340.751186,
+      "status": "unknown",
+      "verified_at": 1778969023.076719,
       "provider": "together",
-      "error": "HTTP 429 (rate limit)",
-      "rate_limited_count": 18,
-      "rate_limited_at": 1778958340.751186,
+      "error": null,
+      "rate_limited_count": 25,
+      "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
       },
       "previously_available": false
     },
     "meta-llama/Llama-3.2-1B": {
-      "status": "rate_limited",
-      "verified_at": 1778958343.3487196,
+      "status": "unknown",
+      "verified_at": 1778969025.6652648,
       "provider": "together",
-      "error": "HTTP 429 (rate limit)",
-      "rate_limited_count": 19,
-      "rate_limited_at": 1778958343.3487196,
+      "error": null,
+      "rate_limited_count": 26,
+      "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
       },
       "previously_available": false
     },
     "meta-llama/Llama-3.3-70B-Instruct-FP8-Lora": {
-      "status": "rate_limited",
-      "verified_at": 1778958345.9164987,
+      "status": "unknown",
+      "verified_at": 1778969028.2716365,
       "provider": "together",
-      "error": "HTTP 429 (rate limit)",
-      "rate_limited_count": 15,
-      "rate_limited_at": 1778958345.9164987,
+      "error": null,
+      "rate_limited_count": 22,
+      "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
       },
@@ -3989,7 +3989,7 @@
     },
     "zai-org/GLM-4.5-Air-FP8": {
       "status": "unknown",
-      "verified_at": 1778956602.216498,
+      "verified_at": 1778969060.6055338,
       "provider": "",
       "error": null,
       "rate_limited_count": 0,
@@ -4001,10 +4001,10 @@
     },
     "Qwen/QwQ-32B": {
       "status": "unknown",
-      "verified_at": 1778956604.8374472,
+      "verified_at": 1778969063.255748,
       "provider": "together",
       "error": null,
-      "rate_limited_count": 17,
+      "rate_limited_count": 25,
       "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
@@ -4013,10 +4013,10 @@
     },
     "Qwen/Qwen2.5-1.5B": {
       "status": "unknown",
-      "verified_at": 1778956607.4022763,
+      "verified_at": 1778969065.865684,
       "provider": "together",
       "error": null,
-      "rate_limited_count": 18,
+      "rate_limited_count": 26,
       "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
@@ -4025,10 +4025,10 @@
     },
     "Qwen/Qwen2.5-14B": {
       "status": "unknown",
-      "verified_at": 1778956609.966794,
+      "verified_at": 1778969068.4576616,
       "provider": "together",
       "error": null,
-      "rate_limited_count": 16,
+      "rate_limited_count": 24,
       "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
@@ -4037,10 +4037,10 @@
     },
     "Qwen/Qwen2.5-72B": {
       "status": "unknown",
-      "verified_at": 1778956612.526693,
+      "verified_at": 1778969071.4666283,
       "provider": "together",
       "error": null,
-      "rate_limited_count": 18,
+      "rate_limited_count": 26,
       "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
@@ -4049,10 +4049,10 @@
     },
     "Qwen/Qwen2.5-7B": {
       "status": "unknown",
-      "verified_at": 1778956615.0994494,
+      "verified_at": 1778969074.0266972,
       "provider": "together",
       "error": null,
-      "rate_limited_count": 18,
+      "rate_limited_count": 26,
       "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
@@ -4061,10 +4061,10 @@
     },
     "meta-llama/Llama-3.1-405B": {
       "status": "unknown",
-      "verified_at": 1778956617.666607,
+      "verified_at": 1778969076.6521997,
       "provider": "together",
       "error": null,
-      "rate_limited_count": 17,
+      "rate_limited_count": 25,
       "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
@@ -4073,10 +4073,10 @@
     },
     "meta-llama/Meta-Llama-3.1-70B": {
       "status": "unknown",
-      "verified_at": 1778956620.2798226,
+      "verified_at": 1778969079.2299545,
       "provider": "together",
       "error": null,
-      "rate_limited_count": 17,
+      "rate_limited_count": 25,
       "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
@@ -4085,10 +4085,10 @@
     },
     "meta-llama/Llama-3.2-3B": {
       "status": "unknown",
-      "verified_at": 1778956622.8539019,
+      "verified_at": 1778969081.8153868,
       "provider": "together",
       "error": null,
-      "rate_limited_count": 18,
+      "rate_limited_count": 26,
       "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
@@ -4097,10 +4097,10 @@
     },
     "togethercomputer/meta-llama-3.1-8B-Instruct-AWQ-INT4": {
       "status": "unknown",
-      "verified_at": 1778956625.434436,
+      "verified_at": 1778969084.4941952,
       "provider": "together",
       "error": null,
-      "rate_limited_count": 17,
+      "rate_limited_count": 25,
       "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
@@ -4109,10 +4109,10 @@
     },
     "zai-org/GLM-OCR": {
       "status": "unknown",
-      "verified_at": 1778956628.0321977,
+      "verified_at": 1778969088.0418217,
       "provider": "together",
       "error": null,
-      "rate_limited_count": 18,
+      "rate_limited_count": 26,
       "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
@@ -4121,10 +4121,10 @@
     },
     "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo": {
       "status": "unknown",
-      "verified_at": 1778956630.5957396,
+      "verified_at": 1778969091.869808,
       "provider": "together",
       "error": null,
-      "rate_limited_count": 17,
+      "rate_limited_count": 25,
       "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
@@ -4133,10 +4133,10 @@
     },
     "google/gemma-4-E2B-it": {
       "status": "unknown",
-      "verified_at": 1778956633.4557335,
+      "verified_at": 1778969096.196026,
       "provider": "together",
       "error": null,
-      "rate_limited_count": 18,
+      "rate_limited_count": 26,
       "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
@@ -4145,10 +4145,10 @@
     },
     "meta-llama/Llama-3.2-1B-Instruct": {
       "status": "unknown",
-      "verified_at": 1778956635.9832668,
+      "verified_at": 1778969098.8223271,
       "provider": "together",
       "error": null,
-      "rate_limited_count": 17,
+      "rate_limited_count": 25,
       "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
@@ -4157,10 +4157,10 @@
     },
     "nvidia/NVIDIA-Nemotron-Nano-9B-v2": {
       "status": "unknown",
-      "verified_at": 1778956638.608106,
+      "verified_at": 1778969102.259272,
       "provider": "together",
       "error": null,
-      "rate_limited_count": 14,
+      "rate_limited_count": 22,
       "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
@@ -4169,10 +4169,10 @@
     },
     "meta-llama/Llama-3.3-70B-Instruct": {
       "status": "unknown",
-      "verified_at": 1778956641.171653,
+      "verified_at": 1778969104.857224,
       "provider": "together",
       "error": null,
-      "rate_limited_count": 17,
+      "rate_limited_count": 25,
       "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
@@ -4181,10 +4181,10 @@
     },
     "Qwen/Qwen2.5-72B-Instruct-Turbo": {
       "status": "unknown",
-      "verified_at": 1778956643.7273622,
+      "verified_at": 1778969107.8144622,
       "provider": "together",
       "error": null,
-      "rate_limited_count": 14,
+      "rate_limited_count": 22,
       "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
@@ -4253,10 +4253,10 @@
     },
     "openai/gpt-audio": {
       "status": "unknown",
-      "verified_at": 1778956646.4436376,
+      "verified_at": 1778969111.7643397,
       "provider": "openai",
       "error": null,
-      "rate_limited_count": 14,
+      "rate_limited_count": 22,
       "rate_limited_at": null,
       "probe_errors": {
         "openrouter": "HTTP 402",
@@ -4266,10 +4266,10 @@
     },
     "openai/gpt-audio-mini": {
       "status": "unknown",
-      "verified_at": 1778956649.1138625,
+      "verified_at": 1778969114.4888573,
       "provider": "openai",
       "error": null,
-      "rate_limited_count": 14,
+      "rate_limited_count": 22,
       "rate_limited_at": null,
       "probe_errors": {
         "openrouter": "HTTP 402",
@@ -4351,10 +4351,10 @@
     },
     "nvidia/nemotron-nano-9b-v2:free": {
       "status": "unknown",
-      "verified_at": 1778956657.073744,
+      "verified_at": 1778969119.5766232,
       "provider": "openrouter",
       "error": null,
-      "rate_limited_count": 17,
+      "rate_limited_count": 25,
       "rate_limited_at": null,
       "probe_errors": {
         "openrouter": "HTTP 429 (rate limit)"
@@ -4363,10 +4363,10 @@
     },
     "openai/gpt-4o-audio-preview": {
       "status": "unknown",
-      "verified_at": 1778956659.7835996,
+      "verified_at": 1778969122.3368866,
       "provider": "openai",
       "error": null,
-      "rate_limited_count": 17,
+      "rate_limited_count": 25,
       "rate_limited_at": null,
       "probe_errors": {
         "openrouter": "HTTP 402",
@@ -4436,10 +4436,10 @@
     },
     "openai/gpt-4o-mini-search-preview": {
       "status": "unknown",
-      "verified_at": 1778956662.4565558,
+      "verified_at": 1778969124.9726975,
       "provider": "openai",
       "error": null,
-      "rate_limited_count": 17,
+      "rate_limited_count": 25,
       "rate_limited_at": null,
       "probe_errors": {
         "openrouter": "HTTP 402",
@@ -4449,10 +4449,10 @@
     },
     "openai/gpt-4o-search-preview": {
       "status": "unknown",
-      "verified_at": 1778956665.0936494,
+      "verified_at": 1778969127.6946542,
       "provider": "openai",
       "error": null,
-      "rate_limited_count": 17,
+      "rate_limited_count": 25,
       "rate_limited_at": null,
       "probe_errors": {
         "openrouter": "HTTP 402",
@@ -4510,10 +4510,10 @@
     },
     "openai/gpt-4o-2024-11-20": {
       "status": "unknown",
-      "verified_at": 1778956667.8531294,
+      "verified_at": 1778969130.8917043,
       "provider": "openai",
       "error": null,
-      "rate_limited_count": 17,
+      "rate_limited_count": 25,
       "rate_limited_at": null,
       "probe_errors": {
         "openrouter": "HTTP 402",
@@ -4547,10 +4547,10 @@
     },
     "openai/gpt-4o-2024-08-06": {
       "status": "unknown",
-      "verified_at": 1778956670.4969008,
+      "verified_at": 1778969135.1580107,
       "provider": "openai",
       "error": null,
-      "rate_limited_count": 17,
+      "rate_limited_count": 25,
       "rate_limited_at": null,
       "probe_errors": {
         "openrouter": "HTTP 402",
@@ -4560,10 +4560,10 @@
     },
     "openai/gpt-4o-mini-2024-07-18": {
       "status": "unknown",
-      "verified_at": 1778956673.186855,
+      "verified_at": 1778969137.859625,
       "provider": "openai",
       "error": null,
-      "rate_limited_count": 17,
+      "rate_limited_count": 25,
       "rate_limited_at": null,
       "probe_errors": {
         "openrouter": "HTTP 402",
@@ -4586,10 +4586,10 @@
     },
     "openai/gpt-4o-2024-05-13": {
       "status": "unknown",
-      "verified_at": 1778956679.9751227,
+      "verified_at": 1778969140.5573463,
       "provider": "openai",
       "error": null,
-      "rate_limited_count": 17,
+      "rate_limited_count": 25,
       "rate_limited_at": null,
       "probe_errors": {
         "openrouter": "HTTP 402",
@@ -4660,10 +4660,10 @@
     },
     "whisper-1": {
       "status": "unknown",
-      "verified_at": 1778956686.5210788,
+      "verified_at": 1778969144.0716293,
       "provider": "openai",
       "error": null,
-      "rate_limited_count": 16,
+      "rate_limited_count": 24,
       "rate_limited_at": null,
       "probe_errors": {
         "openai": "HTTP 429 (rate limit)"
@@ -4672,10 +4672,10 @@
     },
     "gpt-3.5-turbo": {
       "status": "unknown",
-      "verified_at": 1778956689.1465187,
+      "verified_at": 1778969146.744918,
       "provider": "openai",
       "error": null,
-      "rate_limited_count": 16,
+      "rate_limited_count": 24,
       "rate_limited_at": null,
       "probe_errors": {
         "openrouter": "HTTP 402",
@@ -4685,10 +4685,10 @@
     },
     "tts-1": {
       "status": "unknown",
-      "verified_at": 1778956691.624754,
+      "verified_at": 1778969149.2653596,
       "provider": "openai",
       "error": null,
-      "rate_limited_count": 16,
+      "rate_limited_count": 24,
       "rate_limited_at": null,
       "probe_errors": {
         "openai": "HTTP 429 (rate limit)"
@@ -4697,10 +4697,10 @@
     },
     "gpt-3.5-turbo-16k": {
       "status": "unknown",
-      "verified_at": 1778956694.254303,
+      "verified_at": 1778969151.9245172,
       "provider": "openai",
       "error": null,
-      "rate_limited_count": 17,
+      "rate_limited_count": 25,
       "rate_limited_at": null,
       "probe_errors": {
         "openrouter": "HTTP 402",
@@ -4710,10 +4710,10 @@
     },
     "davinci-002": {
       "status": "unknown",
-      "verified_at": 1778956696.7214346,
+      "verified_at": 1778969154.4016922,
       "provider": "openai",
       "error": null,
-      "rate_limited_count": 16,
+      "rate_limited_count": 24,
       "rate_limited_at": null,
       "probe_errors": {
         "openai": "HTTP 429 (rate limit)"
@@ -4722,10 +4722,10 @@
     },
     "babbage-002": {
       "status": "unknown",
-      "verified_at": 1778956699.2613158,
+      "verified_at": 1778969156.984661,
       "provider": "openai",
       "error": null,
-      "rate_limited_count": 17,
+      "rate_limited_count": 25,
       "rate_limited_at": null,
       "probe_errors": {
         "openai": "HTTP 429 (rate limit)"
@@ -4734,10 +4734,10 @@
     },
     "gpt-3.5-turbo-instruct": {
       "status": "unknown",
-      "verified_at": 1778956701.907937,
+      "verified_at": 1778969159.6221259,
       "provider": "openai",
       "error": null,
-      "rate_limited_count": 17,
+      "rate_limited_count": 25,
       "rate_limited_at": null,
       "probe_errors": {
         "openrouter": "HTTP 402",
@@ -4747,10 +4747,10 @@
     },
     "gpt-3.5-turbo-instruct-0914": {
       "status": "unknown",
-      "verified_at": 1778956704.3863556,
+      "verified_at": 1778969162.1329048,
       "provider": "openai",
       "error": null,
-      "rate_limited_count": 16,
+      "rate_limited_count": 24,
       "rate_limited_at": null,
       "probe_errors": {
         "openai": "HTTP 429 (rate limit)"
@@ -4759,10 +4759,10 @@
     },
     "gpt-3.5-turbo-1106": {
       "status": "unknown",
-      "verified_at": 1778956706.838163,
+      "verified_at": 1778969164.6177962,
       "provider": "openai",
       "error": null,
-      "rate_limited_count": 16,
+      "rate_limited_count": 24,
       "rate_limited_at": null,
       "probe_errors": {
         "openai": "HTTP 429 (rate limit)"
@@ -4771,10 +4771,10 @@
     },
     "tts-1-hd": {
       "status": "unknown",
-      "verified_at": 1778956709.3430986,
+      "verified_at": 1778969167.1113265,
       "provider": "openai",
       "error": null,
-      "rate_limited_count": 17,
+      "rate_limited_count": 25,
       "rate_limited_at": null,
       "probe_errors": {
         "openai": "HTTP 429 (rate limit)"
@@ -4783,10 +4783,10 @@
     },
     "tts-1-1106": {
       "status": "unknown",
-      "verified_at": 1778956711.810545,
+      "verified_at": 1778969169.5958376,
       "provider": "openai",
       "error": null,
-      "rate_limited_count": 15,
+      "rate_limited_count": 23,
       "rate_limited_at": null,
       "probe_errors": {
         "openai": "HTTP 429 (rate limit)"
@@ -4795,10 +4795,10 @@
     },
     "tts-1-hd-1106": {
       "status": "unknown",
-      "verified_at": 1778956714.3043704,
+      "verified_at": 1778969172.1648872,
       "provider": "openai",
       "error": null,
-      "rate_limited_count": 17,
+      "rate_limited_count": 25,
       "rate_limited_at": null,
       "probe_errors": {
         "openai": "HTTP 429 (rate limit)"
@@ -4807,10 +4807,10 @@
     },
     "gpt-3.5-turbo-0125": {
       "status": "unknown",
-      "verified_at": 1778956716.822848,
+      "verified_at": 1778969175.2070253,
       "provider": "openai",
       "error": null,
-      "rate_limited_count": 16,
+      "rate_limited_count": 24,
       "rate_limited_at": null,
       "probe_errors": {
         "openai": "HTTP 429 (rate limit)"
@@ -4832,10 +4832,10 @@
     },
     "gpt-4o-2024-05-13": {
       "status": "unknown",
-      "verified_at": 1778956723.5018122,
+      "verified_at": 1778969178.5495229,
       "provider": "openai",
       "error": null,
-      "rate_limited_count": 17,
+      "rate_limited_count": 25,
       "rate_limited_at": null,
       "probe_errors": {
         "openrouter": "HTTP 402",
@@ -4845,10 +4845,10 @@
     },
     "gpt-4o-mini-2024-07-18": {
       "status": "unknown",
-      "verified_at": 1778956726.2261457,
+      "verified_at": 1778969181.2602127,
       "provider": "openai",
       "error": null,
-      "rate_limited_count": 17,
+      "rate_limited_count": 25,
       "rate_limited_at": null,
       "probe_errors": {
         "openrouter": "HTTP 402",
@@ -4871,10 +4871,10 @@
     },
     "gpt-4o-2024-08-06": {
       "status": "unknown",
-      "verified_at": 1778956733.475278,
+      "verified_at": 1778969183.983801,
       "provider": "openai",
       "error": null,
-      "rate_limited_count": 17,
+      "rate_limited_count": 25,
       "rate_limited_at": null,
       "probe_errors": {
         "openrouter": "HTTP 402",
@@ -4884,10 +4884,10 @@
     },
     "gpt-4o-audio-preview": {
       "status": "unknown",
-      "verified_at": 1778956736.1401293,
+      "verified_at": 1778969186.7508662,
       "provider": "openai",
       "error": null,
-      "rate_limited_count": 17,
+      "rate_limited_count": 25,
       "rate_limited_at": null,
       "probe_errors": {
         "openrouter": "HTTP 402",
@@ -4897,10 +4897,10 @@
     },
     "omni-moderation-latest": {
       "status": "unknown",
-      "verified_at": 1778956738.6281285,
+      "verified_at": 1778969189.4147794,
       "provider": "openai",
       "error": null,
-      "rate_limited_count": 17,
+      "rate_limited_count": 25,
       "rate_limited_at": null,
       "probe_errors": {
         "openai": "HTTP 429 (rate limit)"
@@ -4909,10 +4909,10 @@
     },
     "omni-moderation-2024-09-26": {
       "status": "unknown",
-      "verified_at": 1778956741.1336436,
+      "verified_at": 1778969191.8875227,
       "provider": "openai",
       "error": null,
-      "rate_limited_count": 17,
+      "rate_limited_count": 25,
       "rate_limited_at": null,
       "probe_errors": {
         "openai": "HTTP 429 (rate limit)"
@@ -4921,10 +4921,10 @@
     },
     "gpt-4o-audio-preview-2024-12-17": {
       "status": "unknown",
-      "verified_at": 1778956743.6486158,
+      "verified_at": 1778969194.3549438,
       "provider": "openai",
       "error": null,
-      "rate_limited_count": 17,
+      "rate_limited_count": 25,
       "rate_limited_at": null,
       "probe_errors": {
         "openai": "HTTP 429 (rate limit)"
@@ -4933,10 +4933,10 @@
     },
     "gpt-4o-mini-audio-preview-2024-12-17": {
       "status": "unknown",
-      "verified_at": 1778956746.1654353,
+      "verified_at": 1778969196.8198068,
       "provider": "openai",
       "error": null,
-      "rate_limited_count": 17,
+      "rate_limited_count": 25,
       "rate_limited_at": null,
       "probe_errors": {
         "openai": "HTTP 429 (rate limit)"
@@ -4945,10 +4945,10 @@
     },
     "o1-2024-12-17": {
       "status": "unknown",
-      "verified_at": 1778956748.7331638,
+      "verified_at": 1778969199.3376665,
       "provider": "openai",
       "error": null,
-      "rate_limited_count": 16,
+      "rate_limited_count": 24,
       "rate_limited_at": null,
       "probe_errors": {
         "openai": "HTTP 429 (rate limit)"
@@ -4957,10 +4957,10 @@
     },
     "o1": {
       "status": "unknown",
-      "verified_at": 1778956751.4107552,
+      "verified_at": 1778969202.0220134,
       "provider": "openai",
       "error": null,
-      "rate_limited_count": 16,
+      "rate_limited_count": 24,
       "rate_limited_at": null,
       "probe_errors": {
         "openrouter": "HTTP 402",
@@ -4970,10 +4970,10 @@
     },
     "gpt-4o-mini-audio-preview": {
       "status": "unknown",
-      "verified_at": 1778956753.9627626,
+      "verified_at": 1778969204.51291,
       "provider": "openai",
       "error": null,
-      "rate_limited_count": 17,
+      "rate_limited_count": 25,
       "rate_limited_at": null,
       "probe_errors": {
         "openai": "HTTP 429 (rate limit)"
@@ -4982,10 +4982,10 @@
     },
     "o3-mini": {
       "status": "unknown",
-      "verified_at": 1778956756.645115,
+      "verified_at": 1778969207.416798,
       "provider": "openai",
       "error": null,
-      "rate_limited_count": 16,
+      "rate_limited_count": 24,
       "rate_limited_at": null,
       "probe_errors": {
         "openrouter": "HTTP 402",
@@ -4995,10 +4995,10 @@
     },
     "o3-mini-2025-01-31": {
       "status": "unknown",
-      "verified_at": 1778956759.215237,
+      "verified_at": 1778969209.9434962,
       "provider": "openai",
       "error": null,
-      "rate_limited_count": 15,
+      "rate_limited_count": 23,
       "rate_limited_at": null,
       "probe_errors": {
         "openai": "HTTP 429 (rate limit)"
@@ -5007,10 +5007,10 @@
     },
     "gpt-4o-2024-11-20": {
       "status": "unknown",
-      "verified_at": 1778956761.9018433,
+      "verified_at": 1778969212.63801,
       "provider": "openai",
       "error": null,
-      "rate_limited_count": 17,
+      "rate_limited_count": 25,
       "rate_limited_at": null,
       "probe_errors": {
         "openrouter": "HTTP 402",
@@ -5020,10 +5020,10 @@
     },
     "gpt-4o-mini-search-preview-2025-03-11": {
       "status": "unknown",
-      "verified_at": 1778956764.3801253,
+      "verified_at": 1778969215.147309,
       "provider": "openai",
       "error": null,
-      "rate_limited_count": 16,
+      "rate_limited_count": 24,
       "rate_limited_at": null,
       "probe_errors": {
         "openai": "HTTP 429 (rate limit)"
@@ -5032,10 +5032,10 @@
     },
     "gpt-4o-mini-search-preview": {
       "status": "unknown",
-      "verified_at": 1778956767.0585372,
+      "verified_at": 1778969217.9007146,
       "provider": "openai",
       "error": null,
-      "rate_limited_count": 16,
+      "rate_limited_count": 24,
       "rate_limited_at": null,
       "probe_errors": {
         "openrouter": "HTTP 402",
@@ -5045,10 +5045,10 @@
     },
     "gpt-4o-transcribe": {
       "status": "unknown",
-      "verified_at": 1778956769.6641595,
+      "verified_at": 1778969220.3728225,
       "provider": "openai",
       "error": null,
-      "rate_limited_count": 16,
+      "rate_limited_count": 24,
       "rate_limited_at": null,
       "probe_errors": {
         "openai": "HTTP 429 (rate limit)"
@@ -5057,10 +5057,10 @@
     },
     "gpt-4o-mini-transcribe": {
       "status": "unknown",
-      "verified_at": 1778956772.1712296,
+      "verified_at": 1778969222.8665242,
       "provider": "openai",
       "error": null,
-      "rate_limited_count": 17,
+      "rate_limited_count": 25,
       "rate_limited_at": null,
       "probe_errors": {
         "openai": "HTTP 429 (rate limit)"
@@ -5069,10 +5069,10 @@
     },
     "gpt-4o-mini-tts": {
       "status": "unknown",
-      "verified_at": 1778956774.7173994,
+      "verified_at": 1778969225.3877788,
       "provider": "openai",
       "error": null,
-      "rate_limited_count": 16,
+      "rate_limited_count": 24,
       "rate_limited_at": null,
       "probe_errors": {
         "openai": "HTTP 429 (rate limit)"
@@ -5081,10 +5081,10 @@
     },
     "o3-2025-04-16": {
       "status": "unknown",
-      "verified_at": 1778956777.2159498,
+      "verified_at": 1778969227.8909261,
       "provider": "openai",
       "error": null,
-      "rate_limited_count": 16,
+      "rate_limited_count": 24,
       "rate_limited_at": null,
       "probe_errors": {
         "openai": "HTTP 429 (rate limit)"
@@ -5093,10 +5093,10 @@
     },
     "o4-mini-2025-04-16": {
       "status": "unknown",
-      "verified_at": 1778956781.813214,
+      "verified_at": 1778969230.330685,
       "provider": "openai",
       "error": null,
-      "rate_limited_count": 17,
+      "rate_limited_count": 25,
       "rate_limited_at": null,
       "probe_errors": {
         "openai": "HTTP 429 (rate limit)"
@@ -5105,10 +5105,10 @@
     },
     "o3": {
       "status": "unknown",
-      "verified_at": 1778956784.4707756,
+      "verified_at": 1778969233.024546,
       "provider": "openai",
       "error": null,
-      "rate_limited_count": 18,
+      "rate_limited_count": 26,
       "rate_limited_at": null,
       "probe_errors": {
         "openrouter": "HTTP 402",
@@ -5118,10 +5118,10 @@
     },
     "o4-mini": {
       "status": "unknown",
-      "verified_at": 1778956786.9425514,
+      "verified_at": 1778969235.533741,
       "provider": "openai",
       "error": null,
-      "rate_limited_count": 16,
+      "rate_limited_count": 24,
       "rate_limited_at": null,
       "probe_errors": {
         "openai": "HTTP 429 (rate limit)"
@@ -5130,10 +5130,10 @@
     },
     "gpt-4.1-2025-04-14": {
       "status": "unknown",
-      "verified_at": 1778956789.4481874,
+      "verified_at": 1778969238.0904908,
       "provider": "openai",
       "error": null,
-      "rate_limited_count": 16,
+      "rate_limited_count": 24,
       "rate_limited_at": null,
       "probe_errors": {
         "openai": "HTTP 429 (rate limit)"
@@ -5142,10 +5142,10 @@
     },
     "gpt-4.1": {
       "status": "unknown",
-      "verified_at": 1778956792.128225,
+      "verified_at": 1778969240.7621443,
       "provider": "openai",
       "error": null,
-      "rate_limited_count": 18,
+      "rate_limited_count": 26,
       "rate_limited_at": null,
       "probe_errors": {
         "openrouter": "HTTP 402",
@@ -5155,10 +5155,10 @@
     },
     "gpt-4.1-mini-2025-04-14": {
       "status": "unknown",
-      "verified_at": 1778956794.6451726,
+      "verified_at": 1778969243.2073114,
       "provider": "openai",
       "error": null,
-      "rate_limited_count": 17,
+      "rate_limited_count": 25,
       "rate_limited_at": null,
       "probe_errors": {
         "openai": "HTTP 429 (rate limit)"
@@ -5167,10 +5167,10 @@
     },
     "gpt-4.1-mini": {
       "status": "unknown",
-      "verified_at": 1778956797.3147073,
+      "verified_at": 1778969245.8673158,
       "provider": "openai",
       "error": null,
-      "rate_limited_count": 16,
+      "rate_limited_count": 24,
       "rate_limited_at": null,
       "probe_errors": {
         "openrouter": "HTTP 402",
@@ -5180,10 +5180,10 @@
     },
     "gpt-4.1-nano-2025-04-14": {
       "status": "unknown",
-      "verified_at": 1778956799.779319,
+      "verified_at": 1778969248.4102628,
       "provider": "openai",
       "error": null,
-      "rate_limited_count": 17,
+      "rate_limited_count": 25,
       "rate_limited_at": null,
       "probe_errors": {
         "openai": "HTTP 429 (rate limit)"
@@ -5192,10 +5192,10 @@
     },
     "gpt-4.1-nano": {
       "status": "unknown",
-      "verified_at": 1778956802.4751196,
+      "verified_at": 1778969251.1680422,
       "provider": "openai",
       "error": null,
-      "rate_limited_count": 18,
+      "rate_limited_count": 26,
       "rate_limited_at": null,
       "probe_errors": {
         "openrouter": "HTTP 402",
@@ -5205,10 +5205,10 @@
     },
     "gpt-image-1": {
       "status": "unknown",
-      "verified_at": 1778956804.9352293,
+      "verified_at": 1778969253.6788075,
       "provider": "openai",
       "error": null,
-      "rate_limited_count": 17,
+      "rate_limited_count": 25,
       "rate_limited_at": null,
       "probe_errors": {
         "openai": "HTTP 429 (rate limit)"
@@ -5217,10 +5217,10 @@
     },
     "gpt-4o-audio-preview-2025-06-03": {
       "status": "unknown",
-      "verified_at": 1778956807.5538018,
+      "verified_at": 1778969256.1549957,
       "provider": "openai",
       "error": null,
-      "rate_limited_count": 18,
+      "rate_limited_count": 26,
       "rate_limited_at": null,
       "probe_errors": {
         "openai": "HTTP 429 (rate limit)"
@@ -5229,10 +5229,10 @@
     },
     "gpt-4o-transcribe-diarize": {
       "status": "unknown",
-      "verified_at": 1778956809.986608,
+      "verified_at": 1778969258.8353045,
       "provider": "openai",
       "error": null,
-      "rate_limited_count": 16,
+      "rate_limited_count": 24,
       "rate_limited_at": null,
       "probe_errors": {
         "openai": "HTTP 429 (rate limit)"
@@ -5241,10 +5241,10 @@
     },
     "gpt-5-chat-latest": {
       "status": "unknown",
-      "verified_at": 1778956812.4542508,
+      "verified_at": 1778969261.271164,
       "provider": "openai",
       "error": null,
-      "rate_limited_count": 18,
+      "rate_limited_count": 26,
       "rate_limited_at": null,
       "probe_errors": {
         "openai": "HTTP 429 (rate limit)"
@@ -5253,10 +5253,10 @@
     },
     "gpt-5-2025-08-07": {
       "status": "unknown",
-      "verified_at": 1778956814.904007,
+      "verified_at": 1778969263.7215369,
       "provider": "openai",
       "error": null,
-      "rate_limited_count": 16,
+      "rate_limited_count": 24,
       "rate_limited_at": null,
       "probe_errors": {
         "openai": "HTTP 429 (rate limit)"
@@ -5265,10 +5265,10 @@
     },
     "gpt-5": {
       "status": "unknown",
-      "verified_at": 1778956818.1471307,
+      "verified_at": 1778969266.337552,
       "provider": "openai",
       "error": null,
-      "rate_limited_count": 18,
+      "rate_limited_count": 26,
       "rate_limited_at": null,
       "probe_errors": {
         "openrouter": "HTTP 402",
@@ -5278,10 +5278,10 @@
     },
     "gpt-5-mini-2025-08-07": {
       "status": "unknown",
-      "verified_at": 1778956820.100416,
+      "verified_at": 1778969268.830891,
       "provider": "openai",
       "error": null,
-      "rate_limited_count": 16,
+      "rate_limited_count": 24,
       "rate_limited_at": null,
       "probe_errors": {
         "openai": "HTTP 429 (rate limit)"
@@ -5290,10 +5290,10 @@
     },
     "gpt-5-mini": {
       "status": "unknown",
-      "verified_at": 1778956822.7630022,
+      "verified_at": 1778969271.507835,
       "provider": "openai",
       "error": null,
-      "rate_limited_count": 17,
+      "rate_limited_count": 25,
       "rate_limited_at": null,
       "probe_errors": {
         "openrouter": "HTTP 402",
@@ -5303,10 +5303,10 @@
     },
     "gpt-5-nano-2025-08-07": {
       "status": "unknown",
-      "verified_at": 1778956825.2474358,
+      "verified_at": 1778969274.0124176,
       "provider": "openai",
       "error": null,
-      "rate_limited_count": 18,
+      "rate_limited_count": 26,
       "rate_limited_at": null,
       "probe_errors": {
         "openai": "HTTP 429 (rate limit)"
@@ -5315,10 +5315,10 @@
     },
     "gpt-5-nano": {
       "status": "unknown",
-      "verified_at": 1778956827.9255362,
+      "verified_at": 1778969276.6491668,
       "provider": "openai",
       "error": null,
-      "rate_limited_count": 16,
+      "rate_limited_count": 24,
       "rate_limited_at": null,
       "probe_errors": {
         "openrouter": "HTTP 402",
@@ -5328,10 +5328,10 @@
     },
     "gpt-audio-2025-08-28": {
       "status": "unknown",
-      "verified_at": 1778956830.402929,
+      "verified_at": 1778969279.085761,
       "provider": "openai",
       "error": null,
-      "rate_limited_count": 17,
+      "rate_limited_count": 25,
       "rate_limited_at": null,
       "probe_errors": {
         "openai": "HTTP 429 (rate limit)"
@@ -5340,10 +5340,10 @@
     },
     "gpt-realtime": {
       "status": "unknown",
-      "verified_at": 1778956832.9206982,
+      "verified_at": 1778969281.6537163,
       "provider": "openai",
       "error": null,
-      "rate_limited_count": 18,
+      "rate_limited_count": 26,
       "rate_limited_at": null,
       "probe_errors": {
         "openai": "HTTP 429 (rate limit)"
@@ -5352,10 +5352,10 @@
     },
     "gpt-realtime-2025-08-28": {
       "status": "unknown",
-      "verified_at": 1778956835.7371058,
+      "verified_at": 1778967820.2964883,
       "provider": "openai",
       "error": null,
-      "rate_limited_count": 18,
+      "rate_limited_count": 25,
       "rate_limited_at": null,
       "probe_errors": {
         "openai": "HTTP 429 (rate limit)"
@@ -5364,10 +5364,10 @@
     },
     "gpt-audio": {
       "status": "unknown",
-      "verified_at": 1778956838.1143382,
+      "verified_at": 1778967822.9750156,
       "provider": "openai",
       "error": null,
-      "rate_limited_count": 18,
+      "rate_limited_count": 24,
       "rate_limited_at": null,
       "probe_errors": {
         "openrouter": "HTTP 402",
@@ -5376,12 +5376,12 @@
       "previously_available": false
     },
     "gpt-5-codex": {
-      "status": "unknown",
-      "verified_at": 1778956840.761731,
+      "status": "rate_limited",
+      "verified_at": 1778969284.33856,
       "provider": "openai",
-      "error": null,
-      "rate_limited_count": 17,
-      "rate_limited_at": null,
+      "error": "HTTP 429 (rate limit)",
+      "rate_limited_count": 23,
+      "rate_limited_at": 1778969284.33856,
       "probe_errors": {
         "openrouter": "HTTP 402",
         "openai": "HTTP 429 (rate limit)"
@@ -5401,12 +5401,12 @@
       "previously_available": false
     },
     "gpt-5-pro-2025-10-06": {
-      "status": "unknown",
-      "verified_at": 1778956843.2604296,
+      "status": "rate_limited",
+      "verified_at": 1778969286.781638,
       "provider": "openai",
-      "error": null,
-      "rate_limited_count": 17,
-      "rate_limited_at": null,
+      "error": "HTTP 429 (rate limit)",
+      "rate_limited_count": 23,
+      "rate_limited_at": 1778969286.781638,
       "probe_errors": {
         "openai": "HTTP 429 (rate limit)"
       },
@@ -5414,10 +5414,10 @@
     },
     "gpt-5-pro": {
       "status": "unknown",
-      "verified_at": 1778956846.4164886,
+      "verified_at": 1778967825.6151457,
       "provider": "openai",
       "error": null,
-      "rate_limited_count": 18,
+      "rate_limited_count": 23,
       "rate_limited_at": null,
       "probe_errors": {
         "openrouter": "HTTP 402",
@@ -5427,10 +5427,10 @@
     },
     "gpt-audio-mini": {
       "status": "unknown",
-      "verified_at": 1778956848.549756,
+      "verified_at": 1778967828.3113697,
       "provider": "openai",
       "error": null,
-      "rate_limited_count": 16,
+      "rate_limited_count": 21,
       "rate_limited_at": null,
       "probe_errors": {
         "openrouter": "HTTP 402",
@@ -5440,10 +5440,10 @@
     },
     "gpt-audio-mini-2025-10-06": {
       "status": "unknown",
-      "verified_at": 1778956851.0543115,
+      "verified_at": 1778967830.7866797,
       "provider": "openai",
       "error": null,
-      "rate_limited_count": 18,
+      "rate_limited_count": 23,
       "rate_limited_at": null,
       "probe_errors": {
         "openai": "HTTP 429 (rate limit)"
@@ -5452,10 +5452,10 @@
     },
     "gpt-5-search-api": {
       "status": "unknown",
-      "verified_at": 1778956853.5163236,
+      "verified_at": 1778967833.2866676,
       "provider": "openai",
       "error": null,
-      "rate_limited_count": 17,
+      "rate_limited_count": 22,
       "rate_limited_at": null,
       "probe_errors": {
         "openai": "HTTP 429 (rate limit)"
@@ -5464,10 +5464,10 @@
     },
     "gpt-realtime-mini": {
       "status": "unknown",
-      "verified_at": 1778956856.0219243,
+      "verified_at": 1778967835.794319,
       "provider": "openai",
       "error": null,
-      "rate_limited_count": 17,
+      "rate_limited_count": 22,
       "rate_limited_at": null,
       "probe_errors": {
         "openai": "HTTP 429 (rate limit)"
@@ -5476,10 +5476,10 @@
     },
     "gpt-realtime-mini-2025-10-06": {
       "status": "unknown",
-      "verified_at": 1778956858.5456724,
+      "verified_at": 1778967838.2706127,
       "provider": "openai",
       "error": null,
-      "rate_limited_count": 17,
+      "rate_limited_count": 22,
       "rate_limited_at": null,
       "probe_errors": {
         "openai": "HTTP 429 (rate limit)"
@@ -5488,10 +5488,10 @@
     },
     "sora-2": {
       "status": "unknown",
-      "verified_at": 1778956861.090509,
+      "verified_at": 1778967840.764124,
       "provider": "openai",
       "error": null,
-      "rate_limited_count": 17,
+      "rate_limited_count": 22,
       "rate_limited_at": null,
       "probe_errors": {
         "openai": "HTTP 429 (rate limit)"
@@ -5500,10 +5500,10 @@
     },
     "sora-2-pro": {
       "status": "unknown",
-      "verified_at": 1778956864.0185988,
+      "verified_at": 1778967843.2988644,
       "provider": "openai",
       "error": null,
-      "rate_limited_count": 18,
+      "rate_limited_count": 23,
       "rate_limited_at": null,
       "probe_errors": {
         "openai": "HTTP 429 (rate limit)"
@@ -5512,10 +5512,10 @@
     },
     "gpt-5-search-api-2025-10-14": {
       "status": "unknown",
-      "verified_at": 1778956866.0059433,
+      "verified_at": 1778967845.8113997,
       "provider": "openai",
       "error": null,
-      "rate_limited_count": 15,
+      "rate_limited_count": 20,
       "rate_limited_at": null,
       "probe_errors": {
         "openai": "HTTP 429 (rate limit)"
@@ -5523,36 +5523,36 @@
       "previously_available": false
     },
     "gpt-5.1-chat-latest": {
-      "status": "unknown",
-      "verified_at": 1778956868.510683,
+      "status": "rate_limited",
+      "verified_at": 1778969289.255299,
       "provider": "openai",
-      "error": null,
-      "rate_limited_count": 17,
-      "rate_limited_at": null,
+      "error": "HTTP 429 (rate limit)",
+      "rate_limited_count": 22,
+      "rate_limited_at": 1778969289.255299,
       "probe_errors": {
         "openai": "HTTP 429 (rate limit)"
       },
       "previously_available": false
     },
     "gpt-5.1-2025-11-13": {
-      "status": "unknown",
-      "verified_at": 1778956871.016893,
+      "status": "rate_limited",
+      "verified_at": 1778969291.7531946,
       "provider": "openai",
-      "error": null,
-      "rate_limited_count": 17,
-      "rate_limited_at": null,
+      "error": "HTTP 429 (rate limit)",
+      "rate_limited_count": 22,
+      "rate_limited_at": 1778969291.7531946,
       "probe_errors": {
         "openai": "HTTP 429 (rate limit)"
       },
       "previously_available": false
     },
     "gpt-5.1": {
-      "status": "unknown",
-      "verified_at": 1778956873.6417675,
+      "status": "rate_limited",
+      "verified_at": 1778969294.4615479,
       "provider": "openai",
-      "error": null,
-      "rate_limited_count": 16,
-      "rate_limited_at": null,
+      "error": "HTTP 429 (rate limit)",
+      "rate_limited_count": 21,
+      "rate_limited_at": 1778969294.4615479,
       "probe_errors": {
         "openrouter": "HTTP 402",
         "openai": "HTTP 429 (rate limit)"
@@ -5560,12 +5560,12 @@
       "previously_available": false
     },
     "gpt-5.1-codex": {
-      "status": "unknown",
-      "verified_at": 1778956876.2848065,
+      "status": "rate_limited",
+      "verified_at": 1778969297.1244452,
       "provider": "openai",
-      "error": null,
-      "rate_limited_count": 16,
-      "rate_limited_at": null,
+      "error": "HTTP 429 (rate limit)",
+      "rate_limited_count": 21,
+      "rate_limited_at": 1778969297.1244452,
       "probe_errors": {
         "openrouter": "HTTP 402",
         "openai": "HTTP 429 (rate limit)"
@@ -5573,12 +5573,12 @@
       "previously_available": false
     },
     "gpt-5.1-codex-mini": {
-      "status": "unknown",
-      "verified_at": 1778956879.0146816,
+      "status": "rate_limited",
+      "verified_at": 1778969299.7794113,
       "provider": "openai",
-      "error": null,
-      "rate_limited_count": 17,
-      "rate_limited_at": null,
+      "error": "HTTP 429 (rate limit)",
+      "rate_limited_count": 22,
+      "rate_limited_at": 1778969299.7794113,
       "probe_errors": {
         "openrouter": "HTTP 402",
         "openai": "HTTP 429 (rate limit)"
@@ -5586,12 +5586,12 @@
       "previously_available": false
     },
     "gpt-5.1-codex-max": {
-      "status": "unknown",
-      "verified_at": 1778956882.0690372,
+      "status": "rate_limited",
+      "verified_at": 1778969302.412952,
       "provider": "openai",
-      "error": null,
-      "rate_limited_count": 17,
-      "rate_limited_at": null,
+      "error": "HTTP 429 (rate limit)",
+      "rate_limited_count": 22,
+      "rate_limited_at": 1778969302.412952,
       "probe_errors": {
         "openrouter": "HTTP 402",
         "openai": "HTTP 429 (rate limit)"
@@ -5612,24 +5612,24 @@
       "previously_available": false
     },
     "gpt-5.2-2025-12-11": {
-      "status": "unknown",
-      "verified_at": 1778956884.196718,
+      "status": "rate_limited",
+      "verified_at": 1778969309.8996065,
       "provider": "openai",
-      "error": null,
-      "rate_limited_count": 16,
-      "rate_limited_at": null,
+      "error": "HTTP 429 (rate limit)",
+      "rate_limited_count": 21,
+      "rate_limited_at": 1778969309.8996065,
       "probe_errors": {
         "openai": "HTTP 429 (rate limit)"
       },
       "previously_available": false
     },
     "gpt-5.2": {
-      "status": "unknown",
-      "verified_at": 1778956886.8976367,
+      "status": "rate_limited",
+      "verified_at": 1778969312.664095,
       "provider": "openai",
-      "error": null,
-      "rate_limited_count": 16,
-      "rate_limited_at": null,
+      "error": "HTTP 429 (rate limit)",
+      "rate_limited_count": 21,
+      "rate_limited_at": 1778969312.664095,
       "probe_errors": {
         "openrouter": "HTTP 402",
         "openai": "HTTP 429 (rate limit)"
@@ -5637,24 +5637,24 @@
       "previously_available": false
     },
     "gpt-5.2-pro-2025-12-11": {
-      "status": "unknown",
-      "verified_at": 1778956889.3824914,
+      "status": "rate_limited",
+      "verified_at": 1778969315.1942575,
       "provider": "openai",
-      "error": null,
-      "rate_limited_count": 17,
-      "rate_limited_at": null,
+      "error": "HTTP 429 (rate limit)",
+      "rate_limited_count": 22,
+      "rate_limited_at": 1778969315.1942575,
       "probe_errors": {
         "openai": "HTTP 429 (rate limit)"
       },
       "previously_available": false
     },
     "gpt-5.2-pro": {
-      "status": "unknown",
-      "verified_at": 1778956892.1327941,
+      "status": "rate_limited",
+      "verified_at": 1778969317.8912737,
       "provider": "openai",
-      "error": null,
-      "rate_limited_count": 16,
-      "rate_limited_at": null,
+      "error": "HTTP 429 (rate limit)",
+      "rate_limited_count": 21,
+      "rate_limited_at": 1778969317.8912737,
       "probe_errors": {
         "openrouter": "HTTP 402",
         "openai": "HTTP 429 (rate limit)"
@@ -5662,108 +5662,108 @@
       "previously_available": false
     },
     "gpt-5.2-chat-latest": {
-      "status": "unknown",
-      "verified_at": 1778956894.5934987,
+      "status": "rate_limited",
+      "verified_at": 1778969320.441697,
       "provider": "openai",
-      "error": null,
-      "rate_limited_count": 17,
-      "rate_limited_at": null,
+      "error": "HTTP 429 (rate limit)",
+      "rate_limited_count": 22,
+      "rate_limited_at": 1778969320.441697,
       "probe_errors": {
         "openai": "HTTP 429 (rate limit)"
       },
       "previously_available": false
     },
     "gpt-4o-mini-transcribe-2025-12-15": {
-      "status": "unknown",
-      "verified_at": 1778956897.0214274,
+      "status": "rate_limited",
+      "verified_at": 1778969322.9328363,
       "provider": "openai",
-      "error": null,
-      "rate_limited_count": 17,
-      "rate_limited_at": null,
+      "error": "HTTP 429 (rate limit)",
+      "rate_limited_count": 22,
+      "rate_limited_at": 1778969322.9328363,
       "probe_errors": {
         "openai": "HTTP 429 (rate limit)"
       },
       "previously_available": false
     },
     "gpt-4o-mini-transcribe-2025-03-20": {
-      "status": "unknown",
-      "verified_at": 1778956899.66902,
+      "status": "rate_limited",
+      "verified_at": 1778969325.458527,
       "provider": "openai",
-      "error": null,
-      "rate_limited_count": 17,
-      "rate_limited_at": null,
+      "error": "HTTP 429 (rate limit)",
+      "rate_limited_count": 22,
+      "rate_limited_at": 1778969325.458527,
       "probe_errors": {
         "openai": "HTTP 429 (rate limit)"
       },
       "previously_available": false
     },
     "gpt-4o-mini-tts-2025-03-20": {
-      "status": "unknown",
-      "verified_at": 1778956902.0581098,
+      "status": "rate_limited",
+      "verified_at": 1778969327.9525337,
       "provider": "openai",
-      "error": null,
-      "rate_limited_count": 15,
-      "rate_limited_at": null,
+      "error": "HTTP 429 (rate limit)",
+      "rate_limited_count": 20,
+      "rate_limited_at": 1778969327.9525337,
       "probe_errors": {
         "openai": "HTTP 429 (rate limit)"
       },
       "previously_available": false
     },
     "gpt-4o-mini-tts-2025-12-15": {
-      "status": "unknown",
-      "verified_at": 1778956904.5469236,
+      "status": "rate_limited",
+      "verified_at": 1778969330.4714148,
       "provider": "openai",
-      "error": null,
-      "rate_limited_count": 17,
-      "rate_limited_at": null,
+      "error": "HTTP 429 (rate limit)",
+      "rate_limited_count": 22,
+      "rate_limited_at": 1778969330.4714148,
       "probe_errors": {
         "openai": "HTTP 429 (rate limit)"
       },
       "previously_available": false
     },
     "gpt-realtime-mini-2025-12-15": {
-      "status": "unknown",
-      "verified_at": 1778956906.9982016,
+      "status": "rate_limited",
+      "verified_at": 1778969333.0180607,
       "provider": "openai",
-      "error": null,
-      "rate_limited_count": 17,
-      "rate_limited_at": null,
+      "error": "HTTP 429 (rate limit)",
+      "rate_limited_count": 22,
+      "rate_limited_at": 1778969333.0180607,
       "probe_errors": {
         "openai": "HTTP 429 (rate limit)"
       },
       "previously_available": false
     },
     "gpt-audio-mini-2025-12-15": {
-      "status": "unknown",
-      "verified_at": 1778956909.518971,
+      "status": "rate_limited",
+      "verified_at": 1778969335.5103722,
       "provider": "openai",
-      "error": null,
-      "rate_limited_count": 16,
-      "rate_limited_at": null,
+      "error": "HTTP 429 (rate limit)",
+      "rate_limited_count": 21,
+      "rate_limited_at": 1778969335.5103722,
       "probe_errors": {
         "openai": "HTTP 429 (rate limit)"
       },
       "previously_available": false
     },
     "chatgpt-image-latest": {
-      "status": "unknown",
-      "verified_at": 1778956911.9835684,
+      "status": "rate_limited",
+      "verified_at": 1778969338.1394906,
       "provider": "openai",
-      "error": null,
-      "rate_limited_count": 16,
-      "rate_limited_at": null,
+      "error": "HTTP 429 (rate limit)",
+      "rate_limited_count": 21,
+      "rate_limited_at": 1778969338.1394906,
       "probe_errors": {
         "openai": "HTTP 429 (rate limit)"
       },
       "previously_available": false
     },
     "gpt-5.2-codex": {
-      "status": "unknown",
-      "verified_at": 1778956914.7024486,
+      "status": "rate_limited",
+      "verified_at": 1778969340.9031231,
       "provider": "openai",
-      "error": null,
-      "rate_limited_count": 17,
-      "rate_limited_at": null,
+      "error": "HTTP 429 (rate limit)",
+      "rate_limited_count": 22,
+      "rate_limited_at": 1778969340.9031231,
       "probe_errors": {
         "openrouter": "HTTP 402",
         "openai": "HTTP 429 (rate limit)"
@@ -5771,12 +5771,12 @@
       "previously_available": false
     },
     "gpt-5.3-codex": {
-      "status": "unknown",
-      "verified_at": 1778956917.5825033,
+      "status": "rate_limited",
+      "verified_at": 1778969343.5728374,
       "provider": "openai",
-      "error": null,
-      "rate_limited_count": 17,
-      "rate_limited_at": null,
+      "error": "HTTP 429 (rate limit)",
+      "rate_limited_count": 22,
+      "rate_limited_at": 1778969343.5728374,
       "probe_errors": {
         "openrouter": "HTTP 402",
         "openai": "HTTP 429 (rate limit)"
@@ -5784,36 +5784,36 @@
       "previously_available": false
     },
     "gpt-realtime-1.5": {
-      "status": "unknown",
-      "verified_at": 1778956919.836434,
+      "status": "rate_limited",
+      "verified_at": 1778969346.0817683,
       "provider": "openai",
-      "error": null,
-      "rate_limited_count": 15,
-      "rate_limited_at": null,
+      "error": "HTTP 429 (rate limit)",
+      "rate_limited_count": 20,
+      "rate_limited_at": 1778969346.0817683,
       "probe_errors": {
         "openai": "HTTP 429 (rate limit)"
       },
       "previously_available": false
     },
     "gpt-audio-1.5": {
-      "status": "unknown",
-      "verified_at": 1778956922.2696357,
+      "status": "rate_limited",
+      "verified_at": 1778969348.599226,
       "provider": "openai",
-      "error": null,
-      "rate_limited_count": 17,
-      "rate_limited_at": null,
+      "error": "HTTP 429 (rate limit)",
+      "rate_limited_count": 22,
+      "rate_limited_at": 1778969348.599226,
       "probe_errors": {
         "openai": "HTTP 429 (rate limit)"
       },
       "previously_available": false
     },
     "gpt-4o-search-preview": {
-      "status": "unknown",
-      "verified_at": 1778956925.0812745,
+      "status": "rate_limited",
+      "verified_at": 1778969351.2913103,
       "provider": "openai",
-      "error": null,
-      "rate_limited_count": 16,
-      "rate_limited_at": null,
+      "error": "HTTP 429 (rate limit)",
+      "rate_limited_count": 21,
+      "rate_limited_at": 1778969351.2913103,
       "probe_errors": {
         "openrouter": "HTTP 402",
         "openai": "HTTP 429 (rate limit)"
@@ -5821,36 +5821,36 @@
       "previously_available": false
     },
     "gpt-4o-search-preview-2025-03-11": {
-      "status": "unknown",
-      "verified_at": 1778956927.5478194,
+      "status": "rate_limited",
+      "verified_at": 1778969353.7710085,
       "provider": "openai",
-      "error": null,
-      "rate_limited_count": 15,
-      "rate_limited_at": null,
+      "error": "HTTP 429 (rate limit)",
+      "rate_limited_count": 20,
+      "rate_limited_at": 1778969353.7710085,
       "probe_errors": {
         "openai": "HTTP 429 (rate limit)"
       },
       "previously_available": false
     },
     "gpt-5.3-chat-latest": {
-      "status": "unknown",
-      "verified_at": 1778956930.0139635,
+      "status": "rate_limited",
+      "verified_at": 1778969356.4230964,
       "provider": "openai",
-      "error": null,
-      "rate_limited_count": 17,
-      "rate_limited_at": null,
+      "error": "HTTP 429 (rate limit)",
+      "rate_limited_count": 22,
+      "rate_limited_at": 1778969356.4230964,
       "probe_errors": {
         "openai": "HTTP 429 (rate limit)"
       },
       "previously_available": false
     },
     "gpt-5.4-2026-03-05": {
-      "status": "unknown",
-      "verified_at": 1778956932.5133934,
+      "status": "rate_limited",
+      "verified_at": 1778969359.2152603,
       "provider": "openai",
-      "error": null,
-      "rate_limited_count": 16,
-      "rate_limited_at": null,
+      "error": "HTTP 429 (rate limit)",
+      "rate_limited_count": 21,
+      "rate_limited_at": 1778969359.2152603,
       "probe_errors": {
         "openai": "HTTP 429 (rate limit)"
       },
@@ -5882,12 +5882,12 @@
       "previously_available": false
     },
     "gpt-5.4": {
-      "status": "unknown",
-      "verified_at": 1778956935.6944125,
+      "status": "rate_limited",
+      "verified_at": 1778969361.9043722,
       "provider": "openai",
-      "error": null,
-      "rate_limited_count": 15,
-      "rate_limited_at": null,
+      "error": "HTTP 429 (rate limit)",
+      "rate_limited_count": 20,
+      "rate_limited_at": 1778969361.9043722,
       "probe_errors": {
         "openrouter": "HTTP 402",
         "openai": "HTTP 429 (rate limit)"
@@ -5895,24 +5895,24 @@
       "previously_available": false
     },
     "gpt-5.4-nano-2026-03-17": {
-      "status": "unknown",
-      "verified_at": 1778956937.6908212,
+      "status": "rate_limited",
+      "verified_at": 1778969364.3550072,
       "provider": "openai",
-      "error": null,
-      "rate_limited_count": 15,
-      "rate_limited_at": null,
+      "error": "HTTP 429 (rate limit)",
+      "rate_limited_count": 20,
+      "rate_limited_at": 1778969364.3550072,
       "probe_errors": {
         "openai": "HTTP 429 (rate limit)"
       },
       "previously_available": false
     },
     "gpt-5.4-nano": {
-      "status": "unknown",
-      "verified_at": 1778956940.3268478,
+      "status": "rate_limited",
+      "verified_at": 1778969367.0811806,
       "provider": "openai",
-      "error": null,
-      "rate_limited_count": 16,
-      "rate_limited_at": null,
+      "error": "HTTP 429 (rate limit)",
+      "rate_limited_count": 21,
+      "rate_limited_at": 1778969367.0811806,
       "probe_errors": {
         "openrouter": "HTTP 402",
         "openai": "HTTP 429 (rate limit)"
@@ -5920,24 +5920,24 @@
       "previously_available": false
     },
     "gpt-5.4-mini-2026-03-17": {
-      "status": "unknown",
-      "verified_at": 1778956942.920972,
+      "status": "rate_limited",
+      "verified_at": 1778969369.5982254,
       "provider": "openai",
-      "error": null,
-      "rate_limited_count": 16,
-      "rate_limited_at": null,
+      "error": "HTTP 429 (rate limit)",
+      "rate_limited_count": 21,
+      "rate_limited_at": 1778969369.5982254,
       "probe_errors": {
         "openai": "HTTP 429 (rate limit)"
       },
       "previously_available": false
     },
     "gpt-5.4-mini": {
-      "status": "unknown",
-      "verified_at": 1778956945.504388,
+      "status": "rate_limited",
+      "verified_at": 1778969372.2415252,
       "provider": "openai",
-      "error": null,
-      "rate_limited_count": 14,
-      "rate_limited_at": null,
+      "error": "HTTP 429 (rate limit)",
+      "rate_limited_count": 19,
+      "rate_limited_at": 1778969372.2415252,
       "probe_errors": {
         "openrouter": "HTTP 402",
         "openai": "HTTP 429 (rate limit)"
@@ -5945,36 +5945,36 @@
       "previously_available": false
     },
     "gpt-image-2": {
-      "status": "unknown",
-      "verified_at": 1778956948.0653293,
+      "status": "rate_limited",
+      "verified_at": 1778969374.7622979,
       "provider": "openai",
-      "error": null,
-      "rate_limited_count": 16,
-      "rate_limited_at": null,
+      "error": "HTTP 429 (rate limit)",
+      "rate_limited_count": 21,
+      "rate_limited_at": 1778969374.7622979,
       "probe_errors": {
         "openai": "HTTP 429 (rate limit)"
       },
       "previously_available": false
     },
     "gpt-image-2-2026-04-21": {
-      "status": "unknown",
-      "verified_at": 1778956950.58824,
+      "status": "rate_limited",
+      "verified_at": 1778969377.2653668,
       "provider": "openai",
-      "error": null,
-      "rate_limited_count": 16,
-      "rate_limited_at": null,
+      "error": "HTTP 429 (rate limit)",
+      "rate_limited_count": 21,
+      "rate_limited_at": 1778969377.2653668,
       "probe_errors": {
         "openai": "HTTP 429 (rate limit)"
       },
       "previously_available": false
     },
     "gpt-5.5": {
-      "status": "unknown",
-      "verified_at": 1778956953.51527,
+      "status": "rate_limited",
+      "verified_at": 1778969379.9331865,
       "provider": "openai",
-      "error": null,
-      "rate_limited_count": 19,
-      "rate_limited_at": null,
+      "error": "HTTP 429 (rate limit)",
+      "rate_limited_count": 24,
+      "rate_limited_at": 1778969379.9331865,
       "probe_errors": {
         "openrouter": "HTTP 402",
         "openai": "HTTP 429 (rate limit)"
@@ -5982,24 +5982,24 @@
       "previously_available": false
     },
     "gpt-5.5-2026-04-23": {
-      "status": "unknown",
-      "verified_at": 1778956955.7452,
+      "status": "rate_limited",
+      "verified_at": 1778969382.387269,
       "provider": "openai",
-      "error": null,
-      "rate_limited_count": 16,
-      "rate_limited_at": null,
+      "error": "HTTP 429 (rate limit)",
+      "rate_limited_count": 21,
+      "rate_limited_at": 1778969382.387269,
       "probe_errors": {
         "openai": "HTTP 429 (rate limit)"
       },
       "previously_available": false
     },
     "gpt-5.5-pro": {
-      "status": "unknown",
-      "verified_at": 1778956958.4156785,
+      "status": "rate_limited",
+      "verified_at": 1778969385.0604923,
       "provider": "openai",
-      "error": null,
-      "rate_limited_count": 17,
-      "rate_limited_at": null,
+      "error": "HTTP 429 (rate limit)",
+      "rate_limited_count": 22,
+      "rate_limited_at": 1778969385.0604923,
       "probe_errors": {
         "openrouter": "HTTP 402",
         "openai": "HTTP 429 (rate limit)"
@@ -6007,60 +6007,60 @@
       "previously_available": false
     },
     "gpt-5.5-pro-2026-04-23": {
-      "status": "unknown",
-      "verified_at": 1778956960.8881576,
+      "status": "rate_limited",
+      "verified_at": 1778969387.5906692,
       "provider": "openai",
-      "error": null,
-      "rate_limited_count": 17,
-      "rate_limited_at": null,
+      "error": "HTTP 429 (rate limit)",
+      "rate_limited_count": 22,
+      "rate_limited_at": 1778969387.5906692,
       "probe_errors": {
         "openai": "HTTP 429 (rate limit)"
       },
       "previously_available": false
     },
     "chat-latest": {
-      "status": "unknown",
-      "verified_at": 1778956963.395979,
+      "status": "rate_limited",
+      "verified_at": 1778969390.1438677,
       "provider": "openai",
-      "error": null,
-      "rate_limited_count": 16,
-      "rate_limited_at": null,
+      "error": "HTTP 429 (rate limit)",
+      "rate_limited_count": 21,
+      "rate_limited_at": 1778969390.1438677,
       "probe_errors": {
         "openai": "HTTP 429 (rate limit)"
       },
       "previously_available": false
     },
     "gpt-realtime-translate": {
-      "status": "unknown",
-      "verified_at": 1778956965.8823924,
+      "status": "rate_limited",
+      "verified_at": 1778969392.6360104,
       "provider": "openai",
-      "error": null,
-      "rate_limited_count": 16,
-      "rate_limited_at": null,
+      "error": "HTTP 429 (rate limit)",
+      "rate_limited_count": 21,
+      "rate_limited_at": 1778969392.6360104,
       "probe_errors": {
         "openai": "HTTP 429 (rate limit)"
       },
       "previously_available": false
     },
     "gpt-realtime-2": {
-      "status": "unknown",
-      "verified_at": 1778956968.4673693,
+      "status": "rate_limited",
+      "verified_at": 1778969395.130553,
       "provider": "openai",
-      "error": null,
-      "rate_limited_count": 16,
-      "rate_limited_at": null,
+      "error": "HTTP 429 (rate limit)",
+      "rate_limited_count": 21,
+      "rate_limited_at": 1778969395.130553,
       "probe_errors": {
         "openai": "HTTP 429 (rate limit)"
       },
       "previously_available": false
     },
     "gpt-realtime-whisper": {
-      "status": "unknown",
-      "verified_at": 1778956971.265404,
+      "status": "rate_limited",
+      "verified_at": 1778969397.5880384,
       "provider": "openai",
-      "error": null,
-      "rate_limited_count": 16,
-      "rate_limited_at": null,
+      "error": "HTTP 429 (rate limit)",
+      "rate_limited_count": 21,
+      "rate_limited_at": 1778969397.5880384,
       "probe_errors": {
         "openai": "HTTP 429 (rate limit)"
       },
@@ -6223,12 +6223,12 @@
       "previously_available": false
     },
     "meta-llama/llama-3.3-70b-instruct:free": {
-      "status": "unknown",
-      "verified_at": 1778956973.6945157,
+      "status": "rate_limited",
+      "verified_at": 1778969400.2789366,
       "provider": "openrouter",
-      "error": null,
-      "rate_limited_count": 20,
-      "rate_limited_at": null,
+      "error": "HTTP 429 (rate limit)",
+      "rate_limited_count": 25,
+      "rate_limited_at": 1778969400.2789366,
       "probe_errors": {
         "openrouter": "HTTP 429 (rate limit)"
       },
@@ -6247,12 +6247,12 @@
       "previously_available": false
     },
     "zai-org/GLM-4.5V": {
-      "status": "unknown",
-      "verified_at": 1778956976.2778876,
+      "status": "rate_limited",
+      "verified_at": 1778969402.8951437,
       "provider": "together",
-      "error": null,
-      "rate_limited_count": 16,
-      "rate_limited_at": null,
+      "error": "HTTP 429 (rate limit)",
+      "rate_limited_count": 21,
+      "rate_limited_at": 1778969402.8951437,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
       },
@@ -6343,72 +6343,72 @@
       "previously_available": true
     },
     "Qwen/Qwen3-0.6B": {
-      "status": "unknown",
-      "verified_at": 1778956981.9726956,
+      "status": "rate_limited",
+      "verified_at": 1778969408.2799814,
       "provider": "together",
-      "error": null,
-      "rate_limited_count": 15,
-      "rate_limited_at": null,
+      "error": "HTTP 429 (rate limit)",
+      "rate_limited_count": 20,
+      "rate_limited_at": 1778969408.2799814,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
       },
       "previously_available": false
     },
     "Qwen/Qwen3-1.7B": {
-      "status": "unknown",
-      "verified_at": 1778956984.0682187,
+      "status": "rate_limited",
+      "verified_at": 1778969410.8616245,
       "provider": "together",
-      "error": null,
-      "rate_limited_count": 14,
-      "rate_limited_at": null,
+      "error": "HTTP 429 (rate limit)",
+      "rate_limited_count": 19,
+      "rate_limited_at": 1778969410.8616245,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
       },
       "previously_available": false
     },
     "Qwen/Qwen3-8B": {
-      "status": "unknown",
-      "verified_at": 1778956986.6346097,
+      "status": "rate_limited",
+      "verified_at": 1778969413.4704916,
       "provider": "together",
-      "error": null,
-      "rate_limited_count": 15,
-      "rate_limited_at": null,
+      "error": "HTTP 429 (rate limit)",
+      "rate_limited_count": 20,
+      "rate_limited_at": 1778969413.4704916,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
       },
       "previously_available": false
     },
     "mistralai/Magistral-Small-2506": {
-      "status": "unknown",
-      "verified_at": 1778956989.1569662,
+      "status": "rate_limited",
+      "verified_at": 1778969416.0925498,
       "provider": "together",
-      "error": null,
-      "rate_limited_count": 16,
-      "rate_limited_at": null,
+      "error": "HTTP 429 (rate limit)",
+      "rate_limited_count": 21,
+      "rate_limited_at": 1778969416.0925498,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
       },
       "previously_available": false
     },
     "Qwen/Qwen3-8B-Lora": {
-      "status": "unknown",
-      "verified_at": 1778956991.7101312,
+      "status": "rate_limited",
+      "verified_at": 1778969418.7249773,
       "provider": "together",
-      "error": null,
-      "rate_limited_count": 14,
-      "rate_limited_at": null,
+      "error": "HTTP 429 (rate limit)",
+      "rate_limited_count": 19,
+      "rate_limited_at": 1778969418.7249773,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
       },
       "previously_available": false
     },
     "Qwen/Qwen3-30B-A3B": {
-      "status": "unknown",
-      "verified_at": 1778956994.440783,
+      "status": "rate_limited",
+      "verified_at": 1778969421.314795,
       "provider": "together",
-      "error": null,
-      "rate_limited_count": 16,
-      "rate_limited_at": null,
+      "error": "HTTP 429 (rate limit)",
+      "rate_limited_count": 21,
+      "rate_limited_at": 1778969421.314795,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
       },
@@ -6499,12 +6499,12 @@
       "previously_available": false
     },
     "cognitivecomputations/dolphin-mistral-24b-venice-edition:free": {
-      "status": "unknown",
-      "verified_at": 1778957005.2736511,
+      "status": "rate_limited",
+      "verified_at": 1778969429.5630999,
       "provider": "openrouter",
-      "error": null,
-      "rate_limited_count": 19,
-      "rate_limited_at": null,
+      "error": "HTTP 429 (rate limit)",
+      "rate_limited_count": 24,
+      "rate_limited_at": 1778969429.5630999,
       "probe_errors": {
         "openrouter": "HTTP 429 (rate limit)"
       },
@@ -6667,24 +6667,24 @@
       "previously_available": false
     },
     "Qwen/Qwen2.5-7B-Instruct-Turbo": {
-      "status": "unknown",
-      "verified_at": 1778957007.95164,
+      "status": "rate_limited",
+      "verified_at": 1778969432.1148822,
       "provider": "together",
-      "error": null,
-      "rate_limited_count": 15,
-      "rate_limited_at": null,
+      "error": "HTTP 429 (rate limit)",
+      "rate_limited_count": 20,
+      "rate_limited_at": 1778969432.1148822,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
       },
       "previously_available": false
     },
     "google/gemma-3n-E4B-it": {
-      "status": "unknown",
-      "verified_at": 1778957010.4412203,
+      "status": "rate_limited",
+      "verified_at": 1778969435.0267503,
       "provider": "together",
-      "error": null,
-      "rate_limited_count": 15,
-      "rate_limited_at": null,
+      "error": "HTTP 429 (rate limit)",
+      "rate_limited_count": 20,
+      "rate_limited_at": 1778969435.0267503,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
       },
@@ -6711,20 +6711,308 @@
       "previously_available": false
     },
     "mistralai/Mistral-Small-24B-Instruct-2501": {
-      "status": "unknown",
-      "verified_at": 1778957018.17427,
+      "status": "rate_limited",
+      "verified_at": 1778969437.6864843,
       "provider": "together",
-      "error": null,
-      "rate_limited_count": 15,
-      "rate_limited_at": null,
+      "error": "HTTP 429 (rate limit)",
+      "rate_limited_count": 20,
+      "rate_limited_at": 1778969437.6864843,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
       },
       "previously_available": false
     },
     "Qwen/Qwen3-4B-Base": {
+      "status": "rate_limited",
+      "verified_at": 1778969440.3087757,
+      "provider": "together",
+      "error": "HTTP 429 (rate limit)",
+      "rate_limited_count": 21,
+      "rate_limited_at": 1778969440.3087757,
+      "probe_errors": {
+        "together": "HTTP 429 (rate limit)"
+      },
+      "previously_available": false
+    },
+    "Qwen/Qwen2-1.5B": {
+      "status": "rate_limited",
+      "verified_at": 1778969442.9376028,
+      "provider": "together",
+      "error": "HTTP 429 (rate limit)",
+      "rate_limited_count": 20,
+      "rate_limited_at": 1778969442.9376028,
+      "probe_errors": {
+        "together": "HTTP 429 (rate limit)"
+      },
+      "previously_available": false
+    },
+    "NousResearch/Nous-Hermes-2-Mixtral-8x7B-DPO": {
+      "status": "rate_limited",
+      "verified_at": 1778969445.542895,
+      "provider": "together",
+      "error": "HTTP 429 (rate limit)",
+      "rate_limited_count": 20,
+      "rate_limited_at": 1778969445.542895,
+      "probe_errors": {
+        "together": "HTTP 429 (rate limit)"
+      },
+      "previously_available": false
+    },
+    "mistralai/Mixtral-8x7B-Instruct-v0.1-FP8-Lora": {
+      "status": "rate_limited",
+      "verified_at": 1778969448.131847,
+      "provider": "together",
+      "error": "HTTP 429 (rate limit)",
+      "rate_limited_count": 20,
+      "rate_limited_at": 1778969448.131847,
+      "probe_errors": {
+        "together": "HTTP 429 (rate limit)"
+      },
+      "previously_available": false
+    },
+    "google/gemma-3-270m-it-lora": {
+      "status": "rate_limited",
+      "verified_at": 1778969450.717271,
+      "provider": "together",
+      "error": "HTTP 429 (rate limit)",
+      "rate_limited_count": 20,
+      "rate_limited_at": 1778969450.717271,
+      "probe_errors": {
+        "together": "HTTP 429 (rate limit)"
+      },
+      "previously_available": false
+    },
+    "Qwen/Qwen2-72B": {
+      "status": "rate_limited",
+      "verified_at": 1778969453.3039014,
+      "provider": "together",
+      "error": "HTTP 429 (rate limit)",
+      "rate_limited_count": 20,
+      "rate_limited_at": 1778969453.3039014,
+      "probe_errors": {
+        "together": "HTTP 429 (rate limit)"
+      },
+      "previously_available": false
+    },
+    "Qwen/Qwen2-1.5B-Instruct": {
+      "status": "rate_limited",
+      "verified_at": 1778969455.906214,
+      "provider": "together",
+      "error": "HTTP 429 (rate limit)",
+      "rate_limited_count": 17,
+      "rate_limited_at": 1778969455.906214,
+      "probe_errors": {
+        "together": "HTTP 429 (rate limit)"
+      },
+      "previously_available": false
+    },
+    "Qwen/Qwen2-7B": {
+      "status": "rate_limited",
+      "verified_at": 1778969458.5379376,
+      "provider": "together",
+      "error": "HTTP 429 (rate limit)",
+      "rate_limited_count": 17,
+      "rate_limited_at": 1778969458.5379376,
+      "probe_errors": {
+        "together": "HTTP 429 (rate limit)"
+      },
+      "previously_available": false
+    },
+    "Qwen/Qwen2.5-1.5B-Instruct": {
+      "status": "rate_limited",
+      "verified_at": 1778969461.1513698,
+      "provider": "together",
+      "error": "HTTP 429 (rate limit)",
+      "rate_limited_count": 17,
+      "rate_limited_at": 1778969461.1513698,
+      "probe_errors": {
+        "together": "HTTP 429 (rate limit)"
+      },
+      "previously_available": false
+    },
+    "Qwen/Qwen2.5-3B-Instruct": {
+      "status": "rate_limited",
+      "verified_at": 1778969463.8342059,
+      "provider": "together",
+      "error": "HTTP 429 (rate limit)",
+      "rate_limited_count": 17,
+      "rate_limited_at": 1778969463.8342059,
+      "probe_errors": {
+        "together": "HTTP 429 (rate limit)"
+      },
+      "previously_available": false
+    },
+    "Qwen/Qwen2.5-7B-Instruct": {
+      "status": "rate_limited",
+      "verified_at": 1778969466.4351492,
+      "provider": "together",
+      "error": "HTTP 429 (rate limit)",
+      "rate_limited_count": 18,
+      "rate_limited_at": 1778969466.4351492,
+      "probe_errors": {
+        "together": "HTTP 429 (rate limit)"
+      },
+      "previously_available": false
+    },
+    "Qwen/Qwen2.5-VL-72B-Instruct": {
+      "status": "rate_limited",
+      "verified_at": 1778969469.0435927,
+      "provider": "together",
+      "error": "HTTP 429 (rate limit)",
+      "rate_limited_count": 17,
+      "rate_limited_at": 1778969469.0435927,
+      "probe_errors": {
+        "together": "HTTP 429 (rate limit)"
+      },
+      "previously_available": false
+    },
+    "Qwen/Qwen3-0.6B-Base": {
+      "status": "rate_limited",
+      "verified_at": 1778969471.6458423,
+      "provider": "together",
+      "error": "HTTP 429 (rate limit)",
+      "rate_limited_count": 17,
+      "rate_limited_at": 1778969471.6458423,
+      "probe_errors": {
+        "together": "HTTP 429 (rate limit)"
+      },
+      "previously_available": false
+    },
+    "Qwen/Qwen3-1.7B-Base": {
+      "status": "rate_limited",
+      "verified_at": 1778969474.3672047,
+      "provider": "together",
+      "error": "HTTP 429 (rate limit)",
+      "rate_limited_count": 16,
+      "rate_limited_at": 1778969474.3672047,
+      "probe_errors": {
+        "together": "HTTP 429 (rate limit)"
+      },
+      "previously_available": false
+    },
+    "Qwen/Qwen3-14B-Base": {
+      "status": "rate_limited",
+      "verified_at": 1778969476.9758835,
+      "provider": "together",
+      "error": "HTTP 429 (rate limit)",
+      "rate_limited_count": 16,
+      "rate_limited_at": 1778969476.9758835,
+      "probe_errors": {
+        "together": "HTTP 429 (rate limit)"
+      },
+      "previously_available": false
+    },
+    "Qwen/Qwen3-30B-A3B-Base": {
+      "status": "rate_limited",
+      "verified_at": 1778969479.6352077,
+      "provider": "together",
+      "error": "HTTP 429 (rate limit)",
+      "rate_limited_count": 16,
+      "rate_limited_at": 1778969479.6352077,
+      "probe_errors": {
+        "together": "HTTP 429 (rate limit)"
+      },
+      "previously_available": false
+    },
+    "Qwen/Qwen3-8B-Base": {
+      "status": "rate_limited",
+      "verified_at": 1778969482.2390277,
+      "provider": "together",
+      "error": "HTTP 429 (rate limit)",
+      "rate_limited_count": 16,
+      "rate_limited_at": 1778969482.2390277,
+      "probe_errors": {
+        "together": "HTTP 429 (rate limit)"
+      },
+      "previously_available": false
+    },
+    "mistralai/Mistral-7B-Instruct-v0.1": {
+      "status": "rate_limited",
+      "verified_at": 1778969484.9006574,
+      "provider": "together",
+      "error": "HTTP 429 (rate limit)",
+      "rate_limited_count": 16,
+      "rate_limited_at": 1778969484.9006574,
+      "probe_errors": {
+        "together": "HTTP 429 (rate limit)"
+      },
+      "previously_available": false
+    },
+    "mistralai/Mistral-7B-v0.1": {
+      "status": "rate_limited",
+      "verified_at": 1778969487.5756538,
+      "provider": "together",
+      "error": "HTTP 429 (rate limit)",
+      "rate_limited_count": 16,
+      "rate_limited_at": 1778969487.5756538,
+      "probe_errors": {
+        "together": "HTTP 429 (rate limit)"
+      },
+      "previously_available": false
+    },
+    "Qwen/Qwen2.5-14B-Instruct": {
+      "status": "rate_limited",
+      "verified_at": 1778969490.1542397,
+      "provider": "together",
+      "error": "HTTP 429 (rate limit)",
+      "rate_limited_count": 19,
+      "rate_limited_at": 1778969490.1542397,
+      "probe_errors": {
+        "together": "HTTP 429 (rate limit)"
+      },
+      "previously_available": false
+    },
+    "google/gemma-3-1b-it": {
+      "status": "rate_limited",
+      "verified_at": 1778969492.8080838,
+      "provider": "together",
+      "error": "HTTP 429 (rate limit)",
+      "rate_limited_count": 18,
+      "rate_limited_at": 1778969492.8080838,
+      "probe_errors": {
+        "together": "HTTP 429 (rate limit)"
+      },
+      "previously_available": false
+    },
+    "google/gemma-3-270m-it": {
+      "status": "rate_limited",
+      "verified_at": 1778969495.3766918,
+      "provider": "together",
+      "error": "HTTP 429 (rate limit)",
+      "rate_limited_count": 17,
+      "rate_limited_at": 1778969495.3766918,
+      "probe_errors": {
+        "together": "HTTP 429 (rate limit)"
+      },
+      "previously_available": false
+    },
+    "mistralai/Mistral-7B-Instruct-v0.3": {
+      "status": "rate_limited",
+      "verified_at": 1778969497.9834223,
+      "provider": "together",
+      "error": "HTTP 429 (rate limit)",
+      "rate_limited_count": 19,
+      "rate_limited_at": 1778969497.9834223,
+      "probe_errors": {
+        "together": "HTTP 429 (rate limit)"
+      },
+      "previously_available": false
+    },
+    "mistralai/Mixtral-8x7B-v0.1": {
+      "status": "rate_limited",
+      "verified_at": 1778969500.679737,
+      "provider": "together",
+      "error": "HTTP 429 (rate limit)",
+      "rate_limited_count": 18,
+      "rate_limited_at": 1778969500.679737,
+      "probe_errors": {
+        "together": "HTTP 429 (rate limit)"
+      },
+      "previously_available": false
+    },
+    "nvidia/Llama-3.1-Nemotron-70B-Instruct-HF": {
       "status": "unknown",
-      "verified_at": 1778957020.7333665,
+      "verified_at": 1778967856.2062168,
       "provider": "together",
       "error": null,
       "rate_limited_count": 16,
@@ -6734,300 +7022,12 @@
       },
       "previously_available": false
     },
-    "Qwen/Qwen2-1.5B": {
-      "status": "unknown",
-      "verified_at": 1778957023.3262796,
-      "provider": "together",
-      "error": null,
-      "rate_limited_count": 15,
-      "rate_limited_at": null,
-      "probe_errors": {
-        "together": "HTTP 429 (rate limit)"
-      },
-      "previously_available": false
-    },
-    "NousResearch/Nous-Hermes-2-Mixtral-8x7B-DPO": {
-      "status": "unknown",
-      "verified_at": 1778957025.8596442,
-      "provider": "together",
-      "error": null,
-      "rate_limited_count": 15,
-      "rate_limited_at": null,
-      "probe_errors": {
-        "together": "HTTP 429 (rate limit)"
-      },
-      "previously_available": false
-    },
-    "mistralai/Mixtral-8x7B-Instruct-v0.1-FP8-Lora": {
-      "status": "unknown",
-      "verified_at": 1778957028.5147297,
-      "provider": "together",
-      "error": null,
-      "rate_limited_count": 15,
-      "rate_limited_at": null,
-      "probe_errors": {
-        "together": "HTTP 429 (rate limit)"
-      },
-      "previously_available": false
-    },
-    "google/gemma-3-270m-it-lora": {
-      "status": "unknown",
-      "verified_at": 1778957031.0822442,
-      "provider": "together",
-      "error": null,
-      "rate_limited_count": 15,
-      "rate_limited_at": null,
-      "probe_errors": {
-        "together": "HTTP 429 (rate limit)"
-      },
-      "previously_available": false
-    },
-    "Qwen/Qwen2-72B": {
-      "status": "unknown",
-      "verified_at": 1778957033.642356,
-      "provider": "together",
-      "error": null,
-      "rate_limited_count": 15,
-      "rate_limited_at": null,
-      "probe_errors": {
-        "together": "HTTP 429 (rate limit)"
-      },
-      "previously_available": false
-    },
-    "Qwen/Qwen2-1.5B-Instruct": {
-      "status": "unknown",
-      "verified_at": 1778957036.2083888,
-      "provider": "together",
-      "error": null,
-      "rate_limited_count": 12,
-      "rate_limited_at": null,
-      "probe_errors": {
-        "together": "HTTP 429 (rate limit)"
-      },
-      "previously_available": false
-    },
-    "Qwen/Qwen2-7B": {
-      "status": "unknown",
-      "verified_at": 1778957038.7786548,
-      "provider": "together",
-      "error": null,
-      "rate_limited_count": 12,
-      "rate_limited_at": null,
-      "probe_errors": {
-        "together": "HTTP 429 (rate limit)"
-      },
-      "previously_available": false
-    },
-    "Qwen/Qwen2.5-1.5B-Instruct": {
-      "status": "unknown",
-      "verified_at": 1778957041.3056507,
-      "provider": "together",
-      "error": null,
-      "rate_limited_count": 12,
-      "rate_limited_at": null,
-      "probe_errors": {
-        "together": "HTTP 429 (rate limit)"
-      },
-      "previously_available": false
-    },
-    "Qwen/Qwen2.5-3B-Instruct": {
-      "status": "unknown",
-      "verified_at": 1778957043.881626,
-      "provider": "together",
-      "error": null,
-      "rate_limited_count": 12,
-      "rate_limited_at": null,
-      "probe_errors": {
-        "together": "HTTP 429 (rate limit)"
-      },
-      "previously_available": false
-    },
-    "Qwen/Qwen2.5-7B-Instruct": {
-      "status": "unknown",
-      "verified_at": 1778957046.417386,
-      "provider": "together",
-      "error": null,
-      "rate_limited_count": 13,
-      "rate_limited_at": null,
-      "probe_errors": {
-        "together": "HTTP 429 (rate limit)"
-      },
-      "previously_available": false
-    },
-    "Qwen/Qwen2.5-VL-72B-Instruct": {
-      "status": "unknown",
-      "verified_at": 1778957049.0303986,
-      "provider": "together",
-      "error": null,
-      "rate_limited_count": 12,
-      "rate_limited_at": null,
-      "probe_errors": {
-        "together": "HTTP 429 (rate limit)"
-      },
-      "previously_available": false
-    },
-    "Qwen/Qwen3-0.6B-Base": {
-      "status": "unknown",
-      "verified_at": 1778957051.5841718,
-      "provider": "together",
-      "error": null,
-      "rate_limited_count": 12,
-      "rate_limited_at": null,
-      "probe_errors": {
-        "together": "HTTP 429 (rate limit)"
-      },
-      "previously_available": false
-    },
-    "Qwen/Qwen3-1.7B-Base": {
-      "status": "unknown",
-      "verified_at": 1778957054.1307225,
-      "provider": "together",
-      "error": null,
-      "rate_limited_count": 11,
-      "rate_limited_at": null,
-      "probe_errors": {
-        "together": "HTTP 429 (rate limit)"
-      },
-      "previously_available": false
-    },
-    "Qwen/Qwen3-14B-Base": {
-      "status": "unknown",
-      "verified_at": 1778957056.715578,
-      "provider": "together",
-      "error": null,
-      "rate_limited_count": 11,
-      "rate_limited_at": null,
-      "probe_errors": {
-        "together": "HTTP 429 (rate limit)"
-      },
-      "previously_available": false
-    },
-    "Qwen/Qwen3-30B-A3B-Base": {
-      "status": "unknown",
-      "verified_at": 1778957059.2724025,
-      "provider": "together",
-      "error": null,
-      "rate_limited_count": 11,
-      "rate_limited_at": null,
-      "probe_errors": {
-        "together": "HTTP 429 (rate limit)"
-      },
-      "previously_available": false
-    },
-    "Qwen/Qwen3-8B-Base": {
-      "status": "unknown",
-      "verified_at": 1778957061.9136574,
-      "provider": "together",
-      "error": null,
-      "rate_limited_count": 11,
-      "rate_limited_at": null,
-      "probe_errors": {
-        "together": "HTTP 429 (rate limit)"
-      },
-      "previously_available": false
-    },
-    "mistralai/Mistral-7B-Instruct-v0.1": {
-      "status": "unknown",
-      "verified_at": 1778957064.4459157,
-      "provider": "together",
-      "error": null,
-      "rate_limited_count": 11,
-      "rate_limited_at": null,
-      "probe_errors": {
-        "together": "HTTP 429 (rate limit)"
-      },
-      "previously_available": false
-    },
-    "mistralai/Mistral-7B-v0.1": {
-      "status": "unknown",
-      "verified_at": 1778957067.1443193,
-      "provider": "together",
-      "error": null,
-      "rate_limited_count": 11,
-      "rate_limited_at": null,
-      "probe_errors": {
-        "together": "HTTP 429 (rate limit)"
-      },
-      "previously_available": false
-    },
-    "Qwen/Qwen2.5-14B-Instruct": {
-      "status": "unknown",
-      "verified_at": 1778957069.672491,
-      "provider": "together",
-      "error": null,
-      "rate_limited_count": 14,
-      "rate_limited_at": null,
-      "probe_errors": {
-        "together": "HTTP 429 (rate limit)"
-      },
-      "previously_available": false
-    },
-    "google/gemma-3-1b-it": {
-      "status": "unknown",
-      "verified_at": 1778957072.5729578,
-      "provider": "together",
-      "error": null,
-      "rate_limited_count": 13,
-      "rate_limited_at": null,
-      "probe_errors": {
-        "together": "HTTP 429 (rate limit)"
-      },
-      "previously_available": false
-    },
-    "google/gemma-3-270m-it": {
-      "status": "unknown",
-      "verified_at": 1778957074.729084,
-      "provider": "together",
-      "error": null,
-      "rate_limited_count": 12,
-      "rate_limited_at": null,
-      "probe_errors": {
-        "together": "HTTP 429 (rate limit)"
-      },
-      "previously_available": false
-    },
-    "mistralai/Mistral-7B-Instruct-v0.3": {
-      "status": "unknown",
-      "verified_at": 1778957079.8395429,
-      "provider": "together",
-      "error": null,
-      "rate_limited_count": 14,
-      "rate_limited_at": null,
-      "probe_errors": {
-        "together": "HTTP 429 (rate limit)"
-      },
-      "previously_available": false
-    },
-    "mistralai/Mixtral-8x7B-v0.1": {
-      "status": "unknown",
-      "verified_at": 1778957085.4692335,
-      "provider": "together",
-      "error": null,
-      "rate_limited_count": 13,
-      "rate_limited_at": null,
-      "probe_errors": {
-        "together": "HTTP 429 (rate limit)"
-      },
-      "previously_available": false
-    },
-    "nvidia/Llama-3.1-Nemotron-70B-Instruct-HF": {
-      "status": "unknown",
-      "verified_at": 1778957087.069442,
-      "provider": "together",
-      "error": null,
-      "rate_limited_count": 12,
-      "rate_limited_at": null,
-      "probe_errors": {
-        "together": "HTTP 429 (rate limit)"
-      },
-      "previously_available": false
-    },
     "togethercomputer/EssentialAI-RNJ-1-Instruct": {
       "status": "unknown",
-      "verified_at": 1778957089.6576385,
+      "verified_at": 1778967858.8406973,
       "provider": "together",
       "error": null,
-      "rate_limited_count": 10,
+      "rate_limited_count": 14,
       "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
@@ -7036,10 +7036,10 @@
     },
     "mistralai/Mixtral-8x7B-Instruct-v0.1": {
       "status": "unknown",
-      "verified_at": 1778957093.3982906,
+      "verified_at": 1778967867.670186,
       "provider": "together",
       "error": null,
-      "rate_limited_count": 12,
+      "rate_limited_count": 16,
       "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
@@ -7048,10 +7048,10 @@
     },
     "Qwen/Qwen2.5-72B-Instruct": {
       "status": "unknown",
-      "verified_at": 1778957095.1292243,
+      "verified_at": 1778967870.3102152,
       "provider": "together",
       "error": null,
-      "rate_limited_count": 10,
+      "rate_limited_count": 14,
       "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
@@ -7060,10 +7060,10 @@
     },
     "Qwen/Qwen2-VL-72B-Instruct": {
       "status": "unknown",
-      "verified_at": 1778957097.671175,
+      "verified_at": 1778967872.9278102,
       "provider": "together",
       "error": null,
-      "rate_limited_count": 10,
+      "rate_limited_count": 14,
       "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
@@ -7108,10 +7108,10 @@
     },
     "openai/gpt-3.5-turbo-16k": {
       "status": "unknown",
-      "verified_at": 1778957100.353294,
+      "verified_at": 1778967875.5927854,
       "provider": "openai",
       "error": null,
-      "rate_limited_count": 10,
+      "rate_limited_count": 14,
       "rate_limited_at": null,
       "probe_errors": {
         "openrouter": "HTTP 402",
@@ -7121,10 +7121,10 @@
     },
     "openai/gpt-3.5-turbo": {
       "status": "unknown",
-      "verified_at": 1778957102.977224,
+      "verified_at": 1778967878.4176173,
       "provider": "openai",
       "error": null,
-      "rate_limited_count": 10,
+      "rate_limited_count": 14,
       "rate_limited_at": null,
       "probe_errors": {
         "openrouter": "HTTP 402",
@@ -7182,10 +7182,10 @@
     },
     "nim/meta/llama-3.1-70b-instruct": {
       "status": "unknown",
-      "verified_at": 1778957105.4932818,
+      "verified_at": 1778967881.0255275,
       "provider": "together",
       "error": null,
-      "rate_limited_count": 10,
+      "rate_limited_count": 14,
       "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
@@ -7194,10 +7194,10 @@
     },
     "nim/meta/llama-3.1-8b-instruct": {
       "status": "unknown",
-      "verified_at": 1778957108.0174315,
+      "verified_at": 1778967883.6669152,
       "provider": "together",
       "error": null,
-      "rate_limited_count": 10,
+      "rate_limited_count": 14,
       "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
@@ -7206,10 +7206,10 @@
     },
     "nim/nv-mistralai/mistral-nemo-12b-instruct": {
       "status": "unknown",
-      "verified_at": 1778957110.5403469,
+      "verified_at": 1778967886.2851129,
       "provider": "together",
       "error": null,
-      "rate_limited_count": 9,
+      "rate_limited_count": 13,
       "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
@@ -7218,10 +7218,10 @@
     },
     "nim/nvidia/llama-3.1-nemotron-70b-instruct": {
       "status": "unknown",
-      "verified_at": 1778957113.1011195,
+      "verified_at": 1778967888.9731886,
       "provider": "together",
       "error": null,
-      "rate_limited_count": 11,
+      "rate_limited_count": 15,
       "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
@@ -7230,10 +7230,10 @@
     },
     "deepseek-ai/deepseek-coder-33b-instruct": {
       "status": "unknown",
-      "verified_at": 1778957115.6152434,
+      "verified_at": 1778967891.563556,
       "provider": "together",
       "error": null,
-      "rate_limited_count": 11,
+      "rate_limited_count": 15,
       "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
@@ -7242,10 +7242,10 @@
     },
     "Qwen/Qwen2.5-Coder-32B-Instruct": {
       "status": "unknown",
-      "verified_at": 1778957118.315416,
+      "verified_at": 1778967894.1777751,
       "provider": "together",
       "error": null,
-      "rate_limited_count": 11,
+      "rate_limited_count": 15,
       "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
@@ -7254,10 +7254,10 @@
     },
     "nim/meta/llama-3.2-90b-vision-instruct": {
       "status": "unknown",
-      "verified_at": 1778957120.7427847,
+      "verified_at": 1778967896.767467,
       "provider": "together",
       "error": null,
-      "rate_limited_count": 11,
+      "rate_limited_count": 15,
       "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
@@ -7266,10 +7266,10 @@
     },
     "nim/mistralai/mixtral-8x22b-instruct-v01": {
       "status": "unknown",
-      "verified_at": 1778957123.277975,
+      "verified_at": 1778967899.3791826,
       "provider": "together",
       "error": null,
-      "rate_limited_count": 11,
+      "rate_limited_count": 15,
       "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
@@ -7278,10 +7278,10 @@
     },
     "nim/meta/llama-3.2-11b-vision-instruct": {
       "status": "unknown",
-      "verified_at": 1778957125.815466,
+      "verified_at": 1778967902.109848,
       "provider": "together",
       "error": null,
-      "rate_limited_count": 11,
+      "rate_limited_count": 15,
       "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
@@ -7290,10 +7290,10 @@
     },
     "nim/meta/llama-3.3-70b-instruct": {
       "status": "unknown",
-      "verified_at": 1778957128.3656876,
+      "verified_at": 1778967904.7310982,
       "provider": "together",
       "error": null,
-      "rate_limited_count": 9,
+      "rate_limited_count": 13,
       "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
@@ -7302,10 +7302,10 @@
     },
     "nim/mistralai/mixtral-8x7b-instruct-v01": {
       "status": "unknown",
-      "verified_at": 1778957130.9048145,
+      "verified_at": 1778967907.3493516,
       "provider": "together",
       "error": null,
-      "rate_limited_count": 12,
+      "rate_limited_count": 16,
       "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
@@ -7314,10 +7314,10 @@
     },
     "meta-llama/Meta-Llama-3.1-8B": {
       "status": "unknown",
-      "verified_at": 1778957133.4757993,
+      "verified_at": 1778967909.9349108,
       "provider": "together",
       "error": null,
-      "rate_limited_count": 11,
+      "rate_limited_count": 15,
       "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
@@ -7326,10 +7326,10 @@
     },
     "nim/nvidia/llama-3.3-nemotron-super-49b-v1": {
       "status": "unknown",
-      "verified_at": 1778957136.0547998,
+      "verified_at": 1778967912.6262517,
       "provider": "together",
       "error": null,
-      "rate_limited_count": 10,
+      "rate_limited_count": 14,
       "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
@@ -7362,10 +7362,10 @@
     },
     "google/gemma-2-27b-it": {
       "status": "unknown",
-      "verified_at": 1778957138.7694383,
+      "verified_at": 1778967915.4203336,
       "provider": "together",
       "error": null,
-      "rate_limited_count": 10,
+      "rate_limited_count": 14,
       "rate_limited_at": null,
       "probe_errors": {
         "openrouter": "HTTP 402",
@@ -7519,10 +7519,10 @@
     },
     "meta-llama/Meta-Llama-3-8B-Instruct-Lite": {
       "status": "unknown",
-      "verified_at": 1778957162.256802,
+      "verified_at": 1778967939.8343537,
       "provider": "together",
       "error": null,
-      "rate_limited_count": 12,
+      "rate_limited_count": 16,
       "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
@@ -7531,10 +7531,10 @@
     },
     "deepseek-ai/DeepSeek-OCR-2": {
       "status": "unknown",
-      "verified_at": 1778957164.8168964,
+      "verified_at": 1778967942.4757373,
       "provider": "together",
       "error": null,
-      "rate_limited_count": 12,
+      "rate_limited_count": 16,
       "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
@@ -7543,10 +7543,10 @@
     },
     "google/gemma-2b-it": {
       "status": "unknown",
-      "verified_at": 1778957167.3527775,
+      "verified_at": 1778967945.1004598,
       "provider": "together",
       "error": null,
-      "rate_limited_count": 12,
+      "rate_limited_count": 16,
       "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
@@ -7555,10 +7555,10 @@
     },
     "meta-llama/Meta-Llama-3-70B-Instruct-Turbo": {
       "status": "unknown",
-      "verified_at": 1778957169.956455,
+      "verified_at": 1778967947.8132687,
       "provider": "together",
       "error": null,
-      "rate_limited_count": 12,
+      "rate_limited_count": 16,
       "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
@@ -7567,10 +7567,10 @@
     },
     "meta-llama/Meta-Llama-3-8B-Instruct": {
       "status": "unknown",
-      "verified_at": 1778957172.5225298,
+      "verified_at": 1778967950.6599066,
       "provider": "together",
       "error": null,
-      "rate_limited_count": 12,
+      "rate_limited_count": 16,
       "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
@@ -7578,10 +7578,10 @@
       "previously_available": false
     },
     "Salesforce/Llama-Rank-V1": {
-      "status": "unknown",
-      "verified_at": 1778957191.6770616,
+      "status": "temporarily_unavailable",
+      "verified_at": 1778969556.736636,
       "provider": "",
-      "error": null,
+      "error": "Timeout after 15s on together",
       "rate_limited_count": 0,
       "rate_limited_at": null,
       "probe_errors": {
@@ -7591,10 +7591,10 @@
     },
     "meta-llama/Llama-3-8b-chat-hf": {
       "status": "unknown",
-      "verified_at": 1778957207.4361098,
+      "verified_at": 1778967953.2734942,
       "provider": "together",
       "error": null,
-      "rate_limited_count": 11,
+      "rate_limited_count": 15,
       "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
@@ -7719,10 +7719,10 @@
     },
     "hexgrad/Kokoro-82M": {
       "status": "unknown",
-      "verified_at": 1778957217.7275124,
+      "verified_at": 1778967956.6224902,
       "provider": "together",
       "error": null,
-      "rate_limited_count": 11,
+      "rate_limited_count": 15,
       "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
@@ -7744,10 +7744,10 @@
     },
     "black-forest-labs/FLUX.1-schnell": {
       "status": "unknown",
-      "verified_at": 1778957220.8798208,
+      "verified_at": 1778967959.9750602,
       "provider": "together",
       "error": null,
-      "rate_limited_count": 11,
+      "rate_limited_count": 15,
       "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
@@ -7756,10 +7756,10 @@
     },
     "black-forest-labs/FLUX.1-krea-dev": {
       "status": "unknown",
-      "verified_at": 1778957223.398578,
+      "verified_at": 1778967962.5175185,
       "provider": "together",
       "error": null,
-      "rate_limited_count": 11,
+      "rate_limited_count": 15,
       "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
@@ -7865,7 +7865,7 @@
     },
     "vidu/vidu-q1": {
       "status": "failed",
-      "verified_at": 1778953212.909229,
+      "verified_at": 1778958366.4496634,
       "provider": "",
       "error": "HTTP 402: A positive credit balance is required to use this model. Please navigate to https://api.together.ai/settings/billing to add additional credits.",
       "rate_limited_count": 0,
@@ -7877,7 +7877,7 @@
     },
     "ByteDance-Seed/Seedream-3.0": {
       "status": "failed",
-      "verified_at": 1778953216.5521016,
+      "verified_at": 1778958370.0865083,
       "provider": "",
       "error": "HTTP 402: A positive credit balance is required to use this model. Please navigate to https://api.together.ai/settings/billing to add additional credits.",
       "rate_limited_count": 0,
@@ -7889,7 +7889,7 @@
     },
     "ByteDance-Seed/Seedream-4.0": {
       "status": "failed",
-      "verified_at": 1778953220.3227894,
+      "verified_at": 1778958373.6634176,
       "provider": "",
       "error": "HTTP 402: A positive credit balance is required to use this model. Please navigate to https://api.together.ai/settings/billing to add additional credits.",
       "rate_limited_count": 0,
@@ -7901,7 +7901,7 @@
     },
     "Rundiffusion/Juggernaut-Lightning-Flux": {
       "status": "failed",
-      "verified_at": 1778953223.902821,
+      "verified_at": 1778958377.273587,
       "provider": "",
       "error": "HTTP 402: A positive credit balance is required to use this model. Please navigate to https://api.together.ai/settings/billing to add additional credits.",
       "rate_limited_count": 0,
@@ -7913,7 +7913,7 @@
     },
     "google/veo-3.0-audio": {
       "status": "failed",
-      "verified_at": 1778953227.5156825,
+      "verified_at": 1778958380.8661876,
       "provider": "",
       "error": "HTTP 402: A positive credit balance is required to use this model. Please navigate to https://api.together.ai/settings/billing to add additional credits.",
       "rate_limited_count": 0,
@@ -7925,7 +7925,7 @@
     },
     "kwaivgI/kling-2.1-master": {
       "status": "failed",
-      "verified_at": 1778953231.0981169,
+      "verified_at": 1778958384.4881816,
       "provider": "",
       "error": "HTTP 402: A positive credit balance is required to use this model. Please navigate to https://api.together.ai/settings/billing to add additional credits.",
       "rate_limited_count": 0,
@@ -7937,7 +7937,7 @@
     },
     "ideogram/ideogram-3.0": {
       "status": "failed",
-      "verified_at": 1778953234.6904461,
+      "verified_at": 1778958388.0996332,
       "provider": "",
       "error": "HTTP 402: A positive credit balance is required to use this model. Please navigate to https://api.together.ai/settings/billing to add additional credits.",
       "rate_limited_count": 0,
@@ -7949,7 +7949,7 @@
     },
     "kwaivgI/kling-2.1-pro": {
       "status": "failed",
-      "verified_at": 1778953238.2978094,
+      "verified_at": 1778958391.6999934,
       "provider": "",
       "error": "HTTP 402: A positive credit balance is required to use this model. Please navigate to https://api.together.ai/settings/billing to add additional credits.",
       "rate_limited_count": 0,
@@ -7961,7 +7961,7 @@
     },
     "Wan-AI/Wan2.2-I2V-A14B": {
       "status": "failed",
-      "verified_at": 1778953241.9038942,
+      "verified_at": 1778958395.3319254,
       "provider": "",
       "error": "HTTP 402: A positive credit balance is required to use this model. Please navigate to https://api.together.ai/settings/billing to add additional credits.",
       "rate_limited_count": 0,
@@ -7973,7 +7973,7 @@
     },
     "google/veo-2.0": {
       "status": "failed",
-      "verified_at": 1778953245.5256596,
+      "verified_at": 1778958398.969024,
       "provider": "",
       "error": "HTTP 402: A positive credit balance is required to use this model. Please navigate to https://api.together.ai/settings/billing to add additional credits.",
       "rate_limited_count": 0,
@@ -7985,7 +7985,7 @@
     },
     "kwaivgI/kling-2.0-master": {
       "status": "failed",
-      "verified_at": 1778953249.1781712,
+      "verified_at": 1778958402.5519106,
       "provider": "",
       "error": "HTTP 402: A positive credit balance is required to use this model. Please navigate to https://api.together.ai/settings/billing to add additional credits.",
       "rate_limited_count": 0,
@@ -7997,10 +7997,10 @@
     },
     "openai/sora-2": {
       "status": "failed",
-      "verified_at": 1778953253.243493,
+      "verified_at": 1778958406.4417458,
       "provider": "",
       "error": "HTTP 402: A positive credit balance is required to use this model. Please navigate to https://api.together.ai/settings/billing to add additional credits.",
-      "rate_limited_count": 4,
+      "rate_limited_count": 5,
       "rate_limited_at": null,
       "probe_errors": {
         "openai": "HTTP 429 (rate limit)",
@@ -8010,7 +8010,7 @@
     },
     "kwaivgI/kling-2.1-standard": {
       "status": "failed",
-      "verified_at": 1778953256.8795109,
+      "verified_at": 1778958410.0545533,
       "provider": "",
       "error": "HTTP 402: A positive credit balance is required to use this model. Please navigate to https://api.together.ai/settings/billing to add additional credits.",
       "rate_limited_count": 0,
@@ -8022,7 +8022,7 @@
     },
     "google/veo-3.0-fast": {
       "status": "failed",
-      "verified_at": 1778953260.567311,
+      "verified_at": 1778958413.6987038,
       "provider": "",
       "error": "HTTP 402: A positive credit balance is required to use this model. Please navigate to https://api.together.ai/settings/billing to add additional credits.",
       "rate_limited_count": 0,
@@ -8034,7 +8034,7 @@
     },
     "google/gemini-3-pro-image": {
       "status": "failed",
-      "verified_at": 1778953264.1879933,
+      "verified_at": 1778958417.2994404,
       "provider": "",
       "error": "HTTP 402: A positive credit balance is required to use this model. Please navigate to https://api.together.ai/settings/billing to add additional credits.",
       "rate_limited_count": 0,
@@ -8046,7 +8046,7 @@
     },
     "vidu/vidu-2.0": {
       "status": "failed",
-      "verified_at": 1778953267.7597804,
+      "verified_at": 1778958420.994071,
       "provider": "",
       "error": "HTTP 402: A positive credit balance is required to use this model. Please navigate to https://api.together.ai/settings/billing to add additional credits.",
       "rate_limited_count": 0,
@@ -8058,10 +8058,10 @@
     },
     "openai/sora-2-pro": {
       "status": "failed",
-      "verified_at": 1778953271.7246761,
+      "verified_at": 1778958424.9002624,
       "provider": "",
       "error": "HTTP 402: A positive credit balance is required to use this model. Please navigate to https://api.together.ai/settings/billing to add additional credits.",
-      "rate_limited_count": 4,
+      "rate_limited_count": 5,
       "rate_limited_at": null,
       "probe_errors": {
         "openai": "HTTP 429 (rate limit)",
@@ -8071,7 +8071,7 @@
     },
     "pixverse/pixverse-v5": {
       "status": "failed",
-      "verified_at": 1778953275.325667,
+      "verified_at": 1778958428.5014527,
       "provider": "",
       "error": "HTTP 402: A positive credit balance is required to use this model. Please navigate to https://api.together.ai/settings/billing to add additional credits.",
       "rate_limited_count": 0,
@@ -8083,7 +8083,7 @@
     },
     "stabilityai/stable-diffusion-xl-base-1.0": {
       "status": "failed",
-      "verified_at": 1778953279.0538378,
+      "verified_at": 1778958432.0805712,
       "provider": "",
       "error": "HTTP 402: A positive credit balance is required to use this model. Please navigate to https://api.together.ai/settings/billing to add additional credits.",
       "rate_limited_count": 0,
@@ -8095,7 +8095,7 @@
     },
     "ByteDance/Seedance-1.0-lite": {
       "status": "failed",
-      "verified_at": 1778953282.7290928,
+      "verified_at": 1778958435.6704304,
       "provider": "",
       "error": "HTTP 402: A positive credit balance is required to use this model. Please navigate to https://api.together.ai/settings/billing to add additional credits.",
       "rate_limited_count": 0,
@@ -8107,7 +8107,7 @@
     },
     "ByteDance/Seedance-1.0-pro": {
       "status": "failed",
-      "verified_at": 1778953286.334112,
+      "verified_at": 1778958439.3554053,
       "provider": "",
       "error": "HTTP 402: A positive credit balance is required to use this model. Please navigate to https://api.together.ai/settings/billing to add additional credits.",
       "rate_limited_count": 0,
@@ -8119,7 +8119,7 @@
     },
     "Wan-AI/Wan2.2-T2V-A14B": {
       "status": "failed",
-      "verified_at": 1778953289.953508,
+      "verified_at": 1778958443.0161903,
       "provider": "",
       "error": "HTTP 402: A positive credit balance is required to use this model. Please navigate to https://api.together.ai/settings/billing to add additional credits.",
       "rate_limited_count": 0,
@@ -8131,7 +8131,7 @@
     },
     "HiDream-ai/HiDream-I1-Fast": {
       "status": "failed",
-      "verified_at": 1778953293.5544298,
+      "verified_at": 1778958446.6070082,
       "provider": "",
       "error": "HTTP 402: A positive credit balance is required to use this model. Please navigate to https://api.together.ai/settings/billing to add additional credits.",
       "rate_limited_count": 0,
@@ -8155,7 +8155,7 @@
     },
     "google/flash-image-2.5": {
       "status": "failed",
-      "verified_at": 1778953297.1735914,
+      "verified_at": 1778958450.2364137,
       "provider": "",
       "error": "HTTP 402: A positive credit balance is required to use this model. Please navigate to https://api.together.ai/settings/billing to add additional credits.",
       "rate_limited_count": 0,
@@ -8167,7 +8167,7 @@
     },
     "stabilityai/stable-diffusion-3-medium": {
       "status": "failed",
-      "verified_at": 1778953300.7609031,
+      "verified_at": 1778958453.8563893,
       "provider": "",
       "error": "HTTP 402: A positive credit balance is required to use this model. Please navigate to https://api.together.ai/settings/billing to add additional credits.",
       "rate_limited_count": 0,
@@ -8179,7 +8179,7 @@
     },
     "minimax/hailuo-02": {
       "status": "failed",
-      "verified_at": 1778953304.391667,
+      "verified_at": 1778958457.4385743,
       "provider": "",
       "error": "HTTP 402: A positive credit balance is required to use this model. Please navigate to https://api.together.ai/settings/billing to add additional credits.",
       "rate_limited_count": 0,
@@ -8215,7 +8215,7 @@
     },
     "RunDiffusion/Juggernaut-pro-flux": {
       "status": "failed",
-      "verified_at": 1778953308.006002,
+      "verified_at": 1778958461.0544112,
       "provider": "",
       "error": "HTTP 402: A positive credit balance is required to use this model. Please navigate to https://api.together.ai/settings/billing to add additional credits.",
       "rate_limited_count": 0,
@@ -8227,7 +8227,7 @@
     },
     "Qwen/Qwen-Image": {
       "status": "failed",
-      "verified_at": 1778953311.6112885,
+      "verified_at": 1778958464.6152365,
       "provider": "",
       "error": "HTTP 402: A positive credit balance is required to use this model. Please navigate to https://api.together.ai/settings/billing to add additional credits.",
       "rate_limited_count": 0,
@@ -8239,7 +8239,7 @@
     },
     "HiDream-ai/HiDream-I1-Dev": {
       "status": "failed",
-      "verified_at": 1778953315.3423312,
+      "verified_at": 1778958468.2196581,
       "provider": "",
       "error": "HTTP 402: A positive credit balance is required to use this model. Please navigate to https://api.together.ai/settings/billing to add additional credits.",
       "rate_limited_count": 0,
@@ -8251,7 +8251,7 @@
     },
     "Lykon/DreamShaper": {
       "status": "failed",
-      "verified_at": 1778953318.9819133,
+      "verified_at": 1778958471.8366575,
       "provider": "",
       "error": "HTTP 402: A positive credit balance is required to use this model. Please navigate to https://api.together.ai/settings/billing to add additional credits.",
       "rate_limited_count": 0,
@@ -8263,7 +8263,7 @@
     },
     "google/veo-3.0": {
       "status": "failed",
-      "verified_at": 1778953322.920426,
+      "verified_at": 1778958475.469662,
       "provider": "",
       "error": "HTTP 402: A positive credit balance is required to use this model. Please navigate to https://api.together.ai/settings/billing to add additional credits.",
       "rate_limited_count": 0,
@@ -8275,7 +8275,7 @@
     },
     "HiDream-ai/HiDream-I1-Full": {
       "status": "failed",
-      "verified_at": 1778953326.5282528,
+      "verified_at": 1778958479.034788,
       "provider": "",
       "error": "HTTP 402: A positive credit balance is required to use this model. Please navigate to https://api.together.ai/settings/billing to add additional credits.",
       "rate_limited_count": 0,
@@ -8287,7 +8287,7 @@
     },
     "kwaivgI/kling-1.6-standard": {
       "status": "failed",
-      "verified_at": 1778953330.1615863,
+      "verified_at": 1778958482.6394956,
       "provider": "",
       "error": "HTTP 402: A positive credit balance is required to use this model. Please navigate to https://api.together.ai/settings/billing to add additional credits.",
       "rate_limited_count": 0,
@@ -8299,7 +8299,7 @@
     },
     "minimax/video-01-director": {
       "status": "failed",
-      "verified_at": 1778953333.7262177,
+      "verified_at": 1778958486.3080173,
       "provider": "",
       "error": "HTTP 402: A positive credit balance is required to use this model. Please navigate to https://api.together.ai/settings/billing to add additional credits.",
       "rate_limited_count": 0,
@@ -8311,7 +8311,7 @@
     },
     "pixverse/pixverse-v5.6": {
       "status": "failed",
-      "verified_at": 1778953337.769713,
+      "verified_at": 1778958489.90772,
       "provider": "",
       "error": "HTTP 402: A positive credit balance is required to use this model. Please navigate to https://api.together.ai/settings/billing to add additional credits.",
       "rate_limited_count": 0,
@@ -8323,7 +8323,7 @@
     },
     "Qwen/Qwen-Image-2.0-Pro": {
       "status": "failed",
-      "verified_at": 1778953341.3653035,
+      "verified_at": 1778958493.5204315,
       "provider": "",
       "error": "HTTP 402: A positive credit balance is required to use this model. Please navigate to https://api.together.ai/settings/billing to add additional credits.",
       "rate_limited_count": 0,
@@ -8335,7 +8335,7 @@
     },
     "google/flash-image-3.1": {
       "status": "failed",
-      "verified_at": 1778953345.039132,
+      "verified_at": 1778958497.1212788,
       "provider": "",
       "error": "HTTP 402: A positive credit balance is required to use this model. Please navigate to https://api.together.ai/settings/billing to add additional credits.",
       "rate_limited_count": 0,
@@ -8347,7 +8347,7 @@
     },
     "Qwen/Qwen-Image-2.0": {
       "status": "failed",
-      "verified_at": 1778953348.662922,
+      "verified_at": 1778958500.8169966,
       "provider": "",
       "error": "HTTP 402: A positive credit balance is required to use this model. Please navigate to https://api.together.ai/settings/billing to add additional credits.",
       "rate_limited_count": 0,
@@ -8359,10 +8359,10 @@
     },
     "Wan-AI/wan2.7-t2v": {
       "status": "unknown",
-      "verified_at": 1778957233.9795032,
+      "verified_at": 1778967972.9958699,
       "provider": "together",
       "error": null,
-      "rate_limited_count": 11,
+      "rate_limited_count": 15,
       "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
@@ -8371,10 +8371,10 @@
     },
     "Wan-AI/wan2.7-i2v": {
       "status": "unknown",
-      "verified_at": 1778957237.130331,
+      "verified_at": 1778967975.617249,
       "provider": "together",
       "error": null,
-      "rate_limited_count": 11,
+      "rate_limited_count": 15,
       "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
@@ -8383,10 +8383,10 @@
     },
     "Wan-AI/wan2.7-r2v": {
       "status": "unknown",
-      "verified_at": 1778957239.6535716,
+      "verified_at": 1778967978.2571921,
       "provider": "together",
       "error": null,
-      "rate_limited_count": 11,
+      "rate_limited_count": 15,
       "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
@@ -8395,7 +8395,7 @@
     },
     "vidu/vidu-q3": {
       "status": "failed",
-      "verified_at": 1778953352.2719898,
+      "verified_at": 1778958504.427433,
       "provider": "",
       "error": "HTTP 402: A positive credit balance is required to use this model. Please navigate to https://api.together.ai/settings/billing to add additional credits.",
       "rate_limited_count": 0,
@@ -8407,7 +8407,7 @@
     },
     "vidu/vidu-q3-turbo": {
       "status": "failed",
-      "verified_at": 1778953355.8391705,
+      "verified_at": 1778958508.0474932,
       "provider": "",
       "error": "HTTP 402: A positive credit balance is required to use this model. Please navigate to https://api.together.ai/settings/billing to add additional credits.",
       "rate_limited_count": 0,
@@ -8419,7 +8419,7 @@
     },
     "google/veo-3.1-test-debug": {
       "status": "failed",
-      "verified_at": 1778953359.4641201,
+      "verified_at": 1778958511.659338,
       "provider": "",
       "error": "HTTP 402: A positive credit balance is required to use this model. Please navigate to https://api.together.ai/settings/billing to add additional credits.",
       "rate_limited_count": 0,
@@ -8431,7 +8431,7 @@
     },
     "ByteDance/Seedance-2.0": {
       "status": "failed",
-      "verified_at": 1778953366.8852613,
+      "verified_at": 1778958518.9041495,
       "provider": "",
       "error": "HTTP 402: A positive credit balance is required to use this model. Please navigate to https://api.together.ai/settings/billing to add additional credits.",
       "rate_limited_count": 0,
@@ -8443,10 +8443,10 @@
     },
     "mistralai/Voxtral-Mini-3B-2507": {
       "status": "unknown",
-      "verified_at": 1778957242.3745582,
+      "verified_at": 1778967981.0921786,
       "provider": "together",
       "error": null,
-      "rate_limited_count": 11,
+      "rate_limited_count": 15,
       "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
@@ -8455,7 +8455,7 @@
     },
     "ByteDance/Seedream-5.0-lite": {
       "status": "failed",
-      "verified_at": 1778953374.1235523,
+      "verified_at": 1778958526.1396182,
       "provider": "",
       "error": "HTTP 402: A positive credit balance is required to use this model. Please navigate to https://api.together.ai/settings/billing to add additional credits.",
       "rate_limited_count": 0,
@@ -8467,7 +8467,7 @@
     },
     "pixverse/pixverse-v6": {
       "status": "failed",
-      "verified_at": 1778953363.0677607,
+      "verified_at": 1778958515.321701,
       "provider": "",
       "error": "HTTP 402: A positive credit balance is required to use this model. Please navigate to https://api.together.ai/settings/billing to add additional credits.",
       "rate_limited_count": 0,
@@ -8479,7 +8479,7 @@
     },
     "xai/grok-imagine-image-pro": {
       "status": "failed",
-      "verified_at": 1778953370.5046968,
+      "verified_at": 1778958522.522859,
       "provider": "",
       "error": "HTTP 402: A positive credit balance is required to use this model. Please navigate to https://api.together.ai/settings/billing to add additional credits.",
       "rate_limited_count": 0,
@@ -8491,10 +8491,10 @@
     },
     "alibaba/happyhorse-1.0-t2v": {
       "status": "unknown",
-      "verified_at": 1778957245.0063436,
+      "verified_at": 1778967983.7242222,
       "provider": "together",
       "error": null,
-      "rate_limited_count": 11,
+      "rate_limited_count": 15,
       "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
@@ -8503,10 +8503,10 @@
     },
     "alibaba/happyhorse-1.0-i2v": {
       "status": "unknown",
-      "verified_at": 1778957247.6609387,
+      "verified_at": 1778967986.323239,
       "provider": "together",
       "error": null,
-      "rate_limited_count": 11,
+      "rate_limited_count": 15,
       "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
@@ -8515,10 +8515,10 @@
     },
     "google/gemma-3-27b-pt": {
       "status": "unknown",
-      "verified_at": 1778957250.3288233,
+      "verified_at": 1778967988.8946676,
       "provider": "together",
       "error": null,
-      "rate_limited_count": 11,
+      "rate_limited_count": 15,
       "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
@@ -8527,10 +8527,10 @@
     },
     "meta-llama/Llama-2-7b-chat-hf": {
       "status": "unknown",
-      "verified_at": 1778957253.0042632,
+      "verified_at": 1778967991.5321655,
       "provider": "together",
       "error": null,
-      "rate_limited_count": 11,
+      "rate_limited_count": 15,
       "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
@@ -8539,10 +8539,10 @@
     },
     "meta-llama/Llama-3.1-405B-Instruct": {
       "status": "unknown",
-      "verified_at": 1778957255.5831213,
+      "verified_at": 1778967994.1349769,
       "provider": "together",
       "error": null,
-      "rate_limited_count": 11,
+      "rate_limited_count": 15,
       "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
@@ -8551,7 +8551,7 @@
     },
     "openai/gpt-3.5-turbo-0613": {
       "status": "failed",
-      "verified_at": 1778953377.5060298,
+      "verified_at": 1778958529.563833,
       "provider": "",
       "error": "HTTP 402 (code=402): Insufficient credits. This account never purchased credits. Make sure your key is on the correct account or org, and if so, purchase more at https://openrouter.ai/settings/credits",
       "rate_limited_count": 0,
@@ -8563,10 +8563,10 @@
     },
     "openai/gpt-3.5-turbo-instruct": {
       "status": "unknown",
-      "verified_at": 1778957258.3144171,
+      "verified_at": 1778967996.9846134,
       "provider": "openai",
       "error": null,
-      "rate_limited_count": 8,
+      "rate_limited_count": 12,
       "rate_limited_at": null,
       "probe_errors": {
         "openrouter": "HTTP 402",
@@ -8600,7 +8600,7 @@
     },
     "mistralai/mistral-7b-instruct-v0.1": {
       "status": "failed",
-      "verified_at": 1778953380.9359424,
+      "verified_at": 1778958533.002257,
       "provider": "",
       "error": "HTTP 402 (code=402): Insufficient credits. This account never purchased credits. Make sure your key is on the correct account or org, and if so, purchase more at https://openrouter.ai/settings/credits",
       "rate_limited_count": 0,
@@ -8612,10 +8612,10 @@
     },
     "intfloat/multilingual-e5-large-instruct": {
       "status": "unknown",
-      "verified_at": 1778957266.5245194,
+      "verified_at": 1778968005.6879718,
       "provider": "together",
       "error": null,
-      "rate_limited_count": 8,
+      "rate_limited_count": 12,
       "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
@@ -8623,12 +8623,12 @@
       "previously_available": false
     },
     "nvidia/parakeet-tdt-0.6b-v3": {
-      "status": "unknown",
-      "verified_at": 1778957269.616054,
+      "status": "rate_limited",
+      "verified_at": 1778969572.4895222,
       "provider": "together",
-      "error": null,
-      "rate_limited_count": 8,
-      "rate_limited_at": null,
+      "error": "HTTP 429 (rate limit)",
+      "rate_limited_count": 3,
+      "rate_limited_at": 1778969572.4895222,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
       },
@@ -8636,10 +8636,10 @@
     },
     "cartesia/sonic-3": {
       "status": "unknown",
-      "verified_at": 1778957272.1551642,
+      "verified_at": 1778968008.8577435,
       "provider": "together",
       "error": null,
-      "rate_limited_count": 7,
+      "rate_limited_count": 11,
       "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
@@ -8648,10 +8648,10 @@
     },
     "cartesia/sonic-2": {
       "status": "unknown",
-      "verified_at": 1778957274.6913283,
+      "verified_at": 1778968011.4405906,
       "provider": "together",
       "error": null,
-      "rate_limited_count": 8,
+      "rate_limited_count": 12,
       "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
@@ -8660,10 +8660,10 @@
     },
     "deepgram/aura-2": {
       "status": "unknown",
-      "verified_at": 1778957277.244535,
+      "verified_at": 1778968014.0553656,
       "provider": "together",
       "error": null,
-      "rate_limited_count": 7,
+      "rate_limited_count": 11,
       "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
@@ -8672,10 +8672,10 @@
     },
     "deepgram/flux": {
       "status": "unknown",
-      "verified_at": 1778957279.8311448,
+      "verified_at": 1778968016.6417913,
       "provider": "together",
       "error": null,
-      "rate_limited_count": 9,
+      "rate_limited_count": 13,
       "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
@@ -8684,10 +8684,10 @@
     },
     "deepgram/nova-3-en": {
       "status": "unknown",
-      "verified_at": 1778957282.382211,
+      "verified_at": 1778968019.2367132,
       "provider": "together",
       "error": null,
-      "rate_limited_count": 9,
+      "rate_limited_count": 13,
       "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
@@ -8696,10 +8696,10 @@
     },
     "rime-labs/rime-arcana-v3-turbo": {
       "status": "unknown",
-      "verified_at": 1778957284.9460359,
+      "verified_at": 1778968021.8147695,
       "provider": "together",
       "error": null,
-      "rate_limited_count": 10,
+      "rate_limited_count": 14,
       "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
@@ -8708,10 +8708,10 @@
     },
     "deepgram/nova-3-multi": {
       "status": "unknown",
-      "verified_at": 1778957287.4762478,
+      "verified_at": 1778968024.4270985,
       "provider": "together",
       "error": null,
-      "rate_limited_count": 8,
+      "rate_limited_count": 12,
       "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
@@ -8720,10 +8720,10 @@
     },
     "minimax/speech-2.6-turbo": {
       "status": "unknown",
-      "verified_at": 1778957290.0596564,
+      "verified_at": 1778968027.029015,
       "provider": "together",
       "error": null,
-      "rate_limited_count": 7,
+      "rate_limited_count": 11,
       "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
@@ -8781,10 +8781,10 @@
     },
     "cartesia/sonic": {
       "status": "unknown",
-      "verified_at": 1778957292.6333563,
+      "verified_at": 1778968029.6492443,
       "provider": "together",
       "error": null,
-      "rate_limited_count": 11,
+      "rate_limited_count": 15,
       "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
@@ -8793,10 +8793,10 @@
     },
     "Qwen/Qwen3-Next-80B-A3B-Instruct-FP8": {
       "status": "unknown",
-      "verified_at": 1778957295.1539395,
+      "verified_at": 1778968032.2523837,
       "provider": "together",
       "error": null,
-      "rate_limited_count": 12,
+      "rate_limited_count": 16,
       "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
@@ -8805,10 +8805,10 @@
     },
     "rime-labs/rime-arcana-v2": {
       "status": "unknown",
-      "verified_at": 1778957297.7800806,
+      "verified_at": 1778968034.857232,
       "provider": "together",
       "error": null,
-      "rate_limited_count": 11,
+      "rate_limited_count": 15,
       "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
@@ -8817,10 +8817,10 @@
     },
     "rime-labs/rime-arcana-v3": {
       "status": "unknown",
-      "verified_at": 1778957300.38375,
+      "verified_at": 1778968037.5168009,
       "provider": "together",
       "error": null,
-      "rate_limited_count": 11,
+      "rate_limited_count": 15,
       "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
@@ -8829,10 +8829,10 @@
     },
     "rime-labs/rime-mist-v2": {
       "status": "unknown",
-      "verified_at": 1778957302.9921489,
+      "verified_at": 1778968040.2017858,
       "provider": "together",
       "error": null,
-      "rate_limited_count": 11,
+      "rate_limited_count": 15,
       "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
@@ -8945,10 +8945,10 @@
     },
     "Qwen/Qwen3-235B-A22B-Instruct-2507-FP8": {
       "status": "unknown",
-      "verified_at": 1778957332.8375587,
+      "verified_at": 1778968050.5189316,
       "provider": "together",
       "error": null,
-      "rate_limited_count": 16,
+      "rate_limited_count": 20,
       "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
@@ -8956,10 +8956,10 @@
       "previously_available": false
     },
     "meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8": {
-      "status": "unknown",
-      "verified_at": 1778956180.115226,
+      "status": "temporarily_unavailable",
+      "verified_at": 1778969582.6573899,
       "provider": "together",
-      "error": null,
+      "error": "HTTP 503: Service unavailable",
       "rate_limited_count": 0,
       "rate_limited_at": null,
       "probe_errors": {
@@ -8981,10 +8981,10 @@
     },
     "meta-llama/Llama-3.2-3B-Instruct": {
       "status": "unknown",
-      "verified_at": 1778957335.449814,
+      "verified_at": 1778968053.111131,
       "provider": "together",
       "error": null,
-      "rate_limited_count": 13,
+      "rate_limited_count": 17,
       "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
@@ -8993,10 +8993,10 @@
     },
     "google/medgemma-27b-text-it": {
       "status": "unknown",
-      "verified_at": 1778957337.9718907,
+      "verified_at": 1778968055.7719827,
       "provider": "together",
       "error": null,
-      "rate_limited_count": 13,
+      "rate_limited_count": 17,
       "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
@@ -9005,10 +9005,10 @@
     },
     "Qwen/Qwen3-32B": {
       "status": "unknown",
-      "verified_at": 1778957340.4930556,
+      "verified_at": 1778968058.404355,
       "provider": "together",
       "error": null,
-      "rate_limited_count": 11,
+      "rate_limited_count": 15,
       "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
@@ -9029,7 +9029,7 @@
     },
     "mixedbread-ai/mxbai-rerank-large-v2": {
       "status": "unknown",
-      "verified_at": 1778957372.8156357,
+      "verified_at": 1778968090.7718472,
       "provider": "",
       "error": null,
       "rate_limited_count": 0,
@@ -9039,10 +9039,10 @@
     },
     "google/gemma-3-1b-pt": {
       "status": "unknown",
-      "verified_at": 1778957375.3722887,
+      "verified_at": 1778968093.4570084,
       "provider": "together",
       "error": null,
-      "rate_limited_count": 10,
+      "rate_limited_count": 14,
       "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
@@ -9051,10 +9051,10 @@
     },
     "Qwen/Qwen2.5-32B-Instruct": {
       "status": "unknown",
-      "verified_at": 1778957381.2625387,
+      "verified_at": 1778968096.0578003,
       "provider": "together",
       "error": null,
-      "rate_limited_count": 10,
+      "rate_limited_count": 14,
       "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
@@ -9063,10 +9063,10 @@
     },
     "Qwen/Qwen2-72B-Instruct": {
       "status": "unknown",
-      "verified_at": 1778957385.9539728,
+      "verified_at": 1778968098.7071733,
       "provider": "together",
       "error": null,
-      "rate_limited_count": 10,
+      "rate_limited_count": 14,
       "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
@@ -9075,10 +9075,10 @@
     },
     "pearl-ai/gemma-4-31b-it": {
       "status": "unknown",
-      "verified_at": 1778957389.1320333,
+      "verified_at": 1778968101.8537014,
       "provider": "together",
       "error": null,
-      "rate_limited_count": 10,
+      "rate_limited_count": 14,
       "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
@@ -9087,10 +9087,10 @@
     },
     "alibaba/happyhorse-1.0-r2v": {
       "status": "unknown",
-      "verified_at": 1778957391.6829975,
+      "verified_at": 1778968104.4819212,
       "provider": "together",
       "error": null,
-      "rate_limited_count": 10,
+      "rate_limited_count": 14,
       "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
@@ -9099,10 +9099,10 @@
     },
     "allenai/Molmo-7B-D-0924": {
       "status": "unknown",
-      "verified_at": 1778957395.7109323,
+      "verified_at": 1778968107.0626738,
       "provider": "together",
       "error": null,
-      "rate_limited_count": 10,
+      "rate_limited_count": 14,
       "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
@@ -9111,10 +9111,10 @@
     },
     "google/gemma-3-27b-it-lora": {
       "status": "unknown",
-      "verified_at": 1778957398.2538128,
+      "verified_at": 1778968109.6503465,
       "provider": "together",
       "error": null,
-      "rate_limited_count": 10,
+      "rate_limited_count": 14,
       "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
@@ -9123,10 +9123,10 @@
     },
     "Qwen/Qwen3-14B": {
       "status": "unknown",
-      "verified_at": 1778957400.808129,
+      "verified_at": 1778968112.2409933,
       "provider": "together",
       "error": null,
-      "rate_limited_count": 10,
+      "rate_limited_count": 14,
       "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
@@ -9135,10 +9135,10 @@
     },
     "BAAI/bge-base-en-v1.5": {
       "status": "unknown",
-      "verified_at": 1778957403.362468,
+      "verified_at": 1778968114.8365266,
       "provider": "together",
       "error": null,
-      "rate_limited_count": 10,
+      "rate_limited_count": 14,
       "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
@@ -9147,10 +9147,10 @@
     },
     "rime-labs/rime-mist-v3": {
       "status": "unknown",
-      "verified_at": 1778957405.9300349,
+      "verified_at": 1778968117.4488978,
       "provider": "together",
       "error": null,
-      "rate_limited_count": 10,
+      "rate_limited_count": 14,
       "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"
@@ -9159,10 +9159,10 @@
     },
     "rime-labs/rime-mist-v3-omni": {
       "status": "unknown",
-      "verified_at": 1778957408.5203602,
+      "verified_at": 1778968120.0478199,
       "provider": "together",
       "error": null,
-      "rate_limited_count": 10,
+      "rate_limited_count": 14,
       "rate_limited_at": null,
       "probe_errors": {
         "together": "HTTP 429 (rate limit)"

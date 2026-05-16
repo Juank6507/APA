@@ -336,6 +336,24 @@ class GeneratorAgent:
             )
 
             if not llm_result.get("success"):
+                # FASE 2: Propagar señal split_task si viene del router
+                if llm_result.get("action_required") == "split_task":
+                    logger.warning(f"Contexto excedido sin alternativa para tarea {task.get('id')}: se requiere dividir")
+                    return {
+                        "task_id": task.get("id"),
+                        "code": "",
+                        "filename": normalize_filename(task.get("name", "")),
+                        "is_valid_syntax": False,
+                        "model_used": llm_result.get("model_used", ""),
+                        "provider_used": llm_result.get("provider_used", ""),
+                        "success": False,
+                        "error": llm_result.get("error", "LLM call failed"),
+                        "action_required": "split_task",
+                        "error_type": llm_result.get("error_type", "context_exceeded_no_fallback"),
+                        "tokens_needed": llm_result.get("tokens_needed", 0),
+                        "max_available_context": llm_result.get("max_available_context", 0),
+                        "split_message": llm_result.get("message", "")
+                    }
                 logger.error(f"LLM call failed: {llm_result.get('error')}")
                 return {
                     "task_id": task.get("id"),
@@ -426,6 +444,22 @@ class GeneratorAgent:
         gen_result = self.generate(task, custom_prompt=current_prompt, project_id=project_id, language=language)
 
         if not gen_result["success"]:
+            # FASE 2: Propagar señal split_task desde generate() hacia el orquestador
+            if gen_result.get("action_required") == "split_task":
+                return {
+                    "task_id": task["id"],
+                    "code": "",
+                    "filename": normalize_filename(task.get("name", "")),
+                    "is_valid_syntax": False,
+                    "model_used": gen_result.get("model_used"),
+                    "provider_used": gen_result.get("provider_used"),
+                    "success": False,
+                    "action_required": "split_task",
+                    "error_type": gen_result.get("error_type", "context_exceeded_no_fallback"),
+                    "tokens_needed": gen_result.get("tokens_needed", 0),
+                    "max_available_context": gen_result.get("max_available_context", 0),
+                    "split_message": gen_result.get("split_message", "")
+                }
             return {
                 "task_id": task["id"],
                 "code": "",

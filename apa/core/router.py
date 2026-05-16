@@ -1,19 +1,26 @@
 # apa/core/router.py
-# v6.1 — ESCALADO FLUIDO + CONTEXTO MÍNIMO + RE-ESCALADO DINÁMICO.
+# v6.2 — DETECCIÓN REACTIVA DE CONTEXTO EXCEDIDO + SEÑAL SPLIT_TASK.
 #
-#         El sistema cuantifica cada tarea (tokens necesarios), verifica si
-#         el modelo seleccionado tiene capacidad suficiente, y si no,
-#         des-escala al siguiente modelo en el ranking que sí pueda.
-#         Tras completar la tarea, re-escala al modelo anterior.
+#         v6.2: Cuando un modelo devuelve error 413 o equivalentes de
+#         contexto excedido, el router detecta que NO es un fallo del
+#         modelo sino del tamaño del prompt. Busca automáticamente un
+#         modelo con más capacidad de contexto y reintenta sin consumir
+#         intentos. Si no hay modelo suficientemente grande, devuelve
+#         una señal explícita "split_task" para que el planificador o
+#         el agente desglosen la tarea en partes más pequeñas.
 #
-#         v6.1: try_re_escalate() verifica antes de cada tarea si un modelo
-#         con mejor ranking está ahora disponible (ej: salió de rate limit)
-#         y re-escala automáticamente. Ya no solo después de la integración.
+#         Esto resuelve el problema donde gpt-4o (8K contexto) recibe
+#         una tarea de ensamblado de 15K+ tokens y APA se quedaba
+#         bloqueado, malgastando 3 intentos reales en golpear la
+#         misma pared.
 #
-#         Esto permite un flujo natural: planificación con el mejor modelo
-#         (poco contexto), ensamblado con un modelo de mayor ventana
-#         (mucho contexto), y retorno automático al mejor modelo en cuanto
-#         esté disponible.
+# CAMBIOS v6.2 vs v6.1:
+#   - NUEVO: _handle_context_exceeded() — busca modelo más grande y reintenta
+#   - NUEVO: Integración en call_llm() — contexto excedido no consume intentos
+#   - NUEVO: Señal "split_task" cuando ningún modelo tiene contexto suficiente
+#   - NUEVO: model_health.is_context_exceeded() — detección 413 + señales 400
+#   - NUEVO: model_health._classify_error() categoría "context_exceeded"
+#   - MEJORADO: model_health.report_http_status() 413 → temporarily_unavailable
 #
 # CAMBIOS v6.1 vs v6.0:
 #   - NUEVO: try_re_escalate(task_size) — verifica si un modelo mejor está
@@ -532,6 +539,168 @@ def _estimate_cost_usd(
         return round((tokens_input + tokens_output) * per_token, 6)
     except Exception:
         return 0.0
+
+
+# ============================================================================
+# v6.2: Manejo reactivo de contexto excedido
+# ============================================================================
+
+def _handle_context_exceeded(
+    task_type: str,
+    system_prompt: str,
+    user_prompt: str,
+    failed_model_id: str,
+    max_tokens: int = 2000,
+    temperature: float = 0.1,
+) -> Dict[str, Any]:
+    """v6.2: Reacciona a un error de contexto excedido.
+
+    Cuando un modelo dice "no me cabe", esta función:
+    1. Calcula qué tan grande es el prompt completo
+    2. Busca un modelo con más capacidad de contexto
+    3. Si lo encuentra, reintenta la llamada con ese modelo
+    4. Si no lo encuentra, devuelve una señal clara pidiendo desglose
+
+    No cuenta como intento fallido — es como cambiar de buzón.
+    """
+    full_prompt = system_prompt + user_prompt
+    prompt_tokens = _estimate_tokens(full_prompt)
+    required_context = int((prompt_tokens + max_tokens) * 1.30)
+
+    logger.info(
+        f"_handle_context_exceeded: prompt ~{prompt_tokens} tokens, "
+        f"se necesita contexto >= {required_context}. "
+        f"Modelo que falló: {failed_model_id}"
+    )
+
+    # Buscar modelo con suficiente contexto en el pool
+    try:
+        all_entries = _global_pool.get_all_entries()
+        candidates = [
+            e for e in all_entries
+            if e.context_length >= required_context
+            and e.model_id != failed_model_id
+            and e.health_status in ("available", "unknown")
+        ]
+        # Ordenar por score (mejor primero)
+        candidates.sort(key=lambda e: e.composite_score, reverse=True)
+    except Exception as e:
+        logger.warning(f"_handle_context_exceeded: error buscando candidatos: {e}")
+        candidates = []
+
+    if candidates:
+        best = candidates[0]
+        logger.info(
+            f"_handle_context_exceeded: encontrado modelo más grande: "
+            f"{best.model_id} (contexto: {best.context_length}, "
+            f"score: {best.composite_score:.1f})"
+        )
+
+        # Apilar el modelo que falló para re-escalado futuro
+        try:
+            for e2 in _global_pool.get_all_entries():
+                if e2.model_id == failed_model_id:
+                    _push_model_to_stack(e2)
+                    break
+        except Exception:
+            pass
+
+        # Intentar la llamada con el modelo más grande
+        try:
+            from core.providers import provider_manager
+
+            messages = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ]
+
+            _, base_id = provider_manager.parse_prefixed_id(best.model_id)
+            if base_id is None or base_id == best.model_id:
+                base_id = best.model_id
+
+            result = None
+            if best.provider in provider_manager.providers:
+                provider = provider_manager.providers[best.provider]
+                translated_id = provider_manager.translate_model_id(base_id, best.provider)
+                try:
+                    result = provider.call(translated_id, messages, max_tokens, temperature)
+                    if result.get("success"):
+                        result["provider"] = best.provider
+                except Exception as e:
+                    logger.debug(f"_handle_context_exceeded: provider {best.provider} falló: {e}")
+                    result = None
+
+            if result is None or not result.get("success"):
+                result = provider_manager.call_with_fallback(base_id, messages, max_tokens, temperature)
+
+            if result.get("success"):
+                _sync_health_after_call(best.model_id, best.provider, True)
+                logger.info(
+                    f"_handle_context_exceeded: éxito con {best.model_id} "
+                    f"(contexto: {best.context_length})"
+                )
+                return {
+                    **result,
+                    "attempts": 1,
+                    "context_scaled": True,
+                    "original_model": failed_model_id,
+                    "scaled_model": best.model_id,
+                }
+            else:
+                logger.warning(
+                    f"_handle_context_exceeded: {best.model_id} también falló "
+                    f"({result.get('error', 'unknown')})"
+                )
+                # El modelo más grande también falló — devolver señal de desglose
+                pass
+
+        except Exception as e:
+            logger.warning(f"_handle_context_exceeded: error reintentando: {e}")
+            pass
+
+    # No se encontró modelo más grande o todos fallaron → señal de desglose
+    # Buscar el modelo con mayor contexto disponible para informar
+    max_available_context = 0
+    if candidates:
+        max_available_context = max(e.context_length for e in candidates)
+    else:
+        try:
+            all_entries = _global_pool.get_all_entries()
+            if all_entries:
+                max_available_context = max(e.context_length for e in all_entries)
+        except Exception:
+            pass
+
+    logger.warning(
+        f"_handle_context_exceeded: sin modelo con contexto suficiente. "
+        f"Necesario: {required_context}, Disponible: {max_available_context}. "
+        f"Señal: split_task"
+    )
+
+    return {
+        "content": "",
+        "model_used": failed_model_id,
+        "provider_used": None,
+        "success": False,
+        "attempts": 0,
+        "error": "context_exceeded_no_fallback",
+        "error_type": "context_exceeded_no_fallback",
+        "tokens_needed": required_context,
+        "max_available_context": max_available_context,
+        "action_required": "split_task",
+        "message": (
+            f"La tarea requiere ~{required_context} tokens de contexto. "
+            f"El modelo más grande disponible tiene {max_available_context}. "
+            f"Desglose la tarea en partes más pequeñas."
+        ),
+        "tokens_input": prompt_tokens,
+        "tokens_output": 0,
+        "latency_ms": 0,
+        "cost_usd": 0.0,
+        "arena_score": None,
+        "provider": "",
+        "http_status": 413,
+    }
 
 
 # ============================================================================
@@ -1530,6 +1699,34 @@ def call_llm(
                     f"'{provider_name}' marcados payment_required]"
                 )
                 continue  # NO incrementa real_attempt
+
+            # v6.2: Contexto excedido — no cuenta como intento real.
+            # El modelo funciona, pero el prompt es demasiado grande.
+            # Intentar con un modelo más grande; si no hay, devolver señal
+            # de desglose (split_task) sin consumir intentos.
+            http_code = result.get("http_status") or 0
+            is_ctx_exceeded = (
+                error_type_classified == "context_exceeded"
+                or model_health.is_context_exceeded(http_code, error_str)
+            )
+            if is_ctx_exceeded:
+                logger.info(
+                    f"call_llm: contexto excedido en {model_id} "
+                    f"(http={http_code}, type={error_type_classified}) — "
+                    f"buscando modelo más grande..."
+                )
+                ctx_result = _handle_context_exceeded(
+                    task_type=task_type,
+                    system_prompt=system_prompt,
+                    user_prompt=user_prompt,
+                    failed_model_id=model_id,
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                )
+                # Devolver inmediatamente — el resultado ya contiene:
+                # - éxito si encontró modelo más grande
+                # - señal split_task si no encontró
+                return ctx_result
 
             # Contar como intento real
             real_attempt += 1
