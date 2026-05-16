@@ -1,4 +1,16 @@
 # apa/core/pool.py
+# v1.6 — Escalado fluido: get_best_for_context() encuentra el mejor
+#         modelo con capacidad suficiente para una tarea cuantificada.
+#         exclude_entry permite omitir un modelo (para de-escalado).
+#         Usado por router.py v6.0 para seleccionar modelo según tamaño.
+#
+# CAMBIOS v1.6 vs v1.5:
+#   - NUEVO: get_best_for_context(task_type, required_context, exclude_entry)
+#     Retorna el mejor modelo ranqueado que tenga context_length >= required_context.
+#     Si exclude_entry se proporciona, ese modelo se salta (de-escalado).
+#     Si ningún modelo tiene suficiente contexto, retorna el de mayor contexto.
+#   - NUEVO: get_context_report() — resumen de capacidades de contexto del pool.
+#
 # v1.5 — free_first ranking: get_ranked_entries(free_first=True)
 #         ordena modelos gratuitos ANTES que de pago cuando no hay
 #         modelos verificados (unknown status). Esto resuelve el
@@ -454,7 +466,112 @@ class Pool:
             if entry:
                 entry.apa_score = score
 
-    # --- Consultas de ranking ---
+    # --- Consultas de ranking y escalado ---
+
+    def get_best_for_context(
+        self,
+        task_type: Optional[str] = None,
+        required_context: int = 0,
+        exclude_entry: Optional[Tuple[str, str]] = None,
+    ) -> Optional[PoolEntry]:
+        """v1.6: Encuentra el mejor modelo con capacidad suficiente.
+
+        Escalado fluido: dada una tarea cuantificada (required_context tokens),
+        retorna el mejor modelo ranqueado que pueda manejarla.
+
+        Si exclude_entry se proporciona (composite key del modelo que no
+        puede manejar la tarea), se salta ese modelo para buscar el siguiente
+        en el ranking. Esto es el mecanismo de de-escalado.
+
+        Flujo:
+        1. Obtener todos los candidatos ranqueados (sin filtro de contexto)
+        2. Filtrar por context_length >= required_context
+        3. Excluir exclude_entry si se proporciona
+        4. Retornar el primero (mejor ranqueado)
+        5. Si ninguno tiene suficiente contexto, retornar el de mayor contexto
+
+        Args:
+            task_type: Tipo de tarea (para scoring por categoría)
+            required_context: Tokens necesarios estimados
+            exclude_entry: Composite key (provider, model_id) a excluir
+
+        Returns:
+            PoolEntry o None si el pool está vacío.
+        """
+        # Limpiar estados expirados
+        now = time.time()
+        with self._lock:
+            for entry in self._entries.values():
+                if entry.health_status == "temporarily_unavailable" and entry.verified_at:
+                    if now - entry.verified_at >= 60:
+                        entry.health_status = "unknown"
+
+        # Obtener todos los candidatos excluyendo los que no funcionan
+        exclude_statuses = {"payment_required", "failed"}
+        with self._lock:
+            all_candidates = [
+                e for e in self._entries.values()
+                if e.health_status not in exclude_statuses
+            ]
+
+        if not all_candidates:
+            return None
+
+        # Excluir la entrada especificada (de-escalado)
+        if exclude_entry:
+            all_candidates = [
+                e for e in all_candidates
+                if e.composite_key != exclude_entry
+            ]
+
+        # Ordenar por score (el mejor primero)
+        all_candidates.sort(key=lambda e: e.task_score(task_type), reverse=True)
+
+        # Buscar el primero con capacidad suficiente
+        for entry in all_candidates:
+            if entry.context_length >= required_context:
+                return entry
+
+        # Ninguno tiene suficiente contexto — retornar el de mayor contexto
+        all_candidates.sort(key=lambda e: e.context_length, reverse=True)
+        if exclude_entry:
+            all_candidates = [
+                e for e in all_candidates
+                if e.composite_key != exclude_entry
+            ]
+        return all_candidates[0] if all_candidates else None
+
+    def get_context_report(self) -> Dict[str, Any]:
+        """v1.6: Resumen de capacidades de contexto del pool.
+
+        Retorna información sobre la distribución de context_length
+        de los modelos disponibles, útil para diagnosticar por qué
+        un modelo fue de-escalado.
+        """
+        with self._lock:
+            entries = list(self._entries.values())
+
+        if not entries:
+            return {"total": 0, "available": 0, "contexts": {}}
+
+        available = [e for e in entries if e.health_status == "available"]
+        contexts = {}
+        for e in entries:
+            ctx = e.context_length
+            key = f"{ctx}_{'available' if e.health_status == 'available' else e.health_status}"
+            if key not in contexts:
+                contexts[key] = {"count": 0, "context_length": ctx, "status": e.health_status, "examples": []}
+            contexts[key]["count"] += 1
+            if len(contexts[key]["examples"]) < 3:
+                contexts[key]["examples"].append(e.model_id)
+
+        return {
+            "total": len(entries),
+            "available": len(available),
+            "max_context": max(e.context_length for e in entries) if entries else 0,
+            "min_context": min(e.context_length for e in entries) if entries else 0,
+            "contexts": contexts,
+        }
 
     def get_ranked_entries(
         self,

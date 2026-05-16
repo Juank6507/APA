@@ -1,12 +1,20 @@
 # apa/agents/semi_auto_agent.py
 """
-SemiAutoAgent v3.0 — Agente semi-autónomo que orquesta el pipeline
+SemiAutoAgent v3.2 — Agente semi-autónomo que orquesta el pipeline
 Planificador → Codificador → Integrador usando call_llm().
+
+CAMBIOS v3.2:
+  - P2: El integrador recibe FIRMAS del archivo (no el completo).
+    Se extraen clases, funciones, métodos, argumentos y retornos usando
+    ast + la sección objetivo concreta. Esto reduce el contexto ~70%.
+  - P3: try_re_escalate() antes de cada fase (planificación, codificación,
+    integración). Si un modelo con mejor ranking está disponible,
+    se re-escala automáticamente.
 
 CAMBIO PRINCIPAL v3.0:
   Reemplaza el Ensamblador mecánico (anclas, indentación, parseo AST)
   por un Integrador inteligente (LLM) que recibe:
-  1. El archivo original completo
+  1. Las firmas del archivo + sección objetivo (v3.2: contexto mínimo)
   2. La especificación del Planificador
   3. El código del Codificador
   Y produce el archivo final integrado.
@@ -43,8 +51,9 @@ from enum import Enum
 # Asegurar que apa.core es importable
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-from core.router import call_llm
+from core.router import call_llm, re_escalate, try_re_escalate, get_scaling_state, estimate_task_size
 from core.assembly_validator import AssemblyValidator
+from core.code_signatures import build_integrator_context, extract_signatures, count_tokens_estimate
 
 logger = logging.getLogger(__name__)
 
@@ -595,6 +604,17 @@ class SemiAutoAgent:
         self._log.append(f"Planificación: {user_prompt[:80]}")
         
         try:
+            # v3.2 (P3): Intentar re-escalar antes de planificar
+            try:
+                restored = try_re_escalate(task_size=estimate_task_size(PLANIFICADOR_SYSTEM_PROMPT, "", 3000))
+                if restored:
+                    self._log.append(
+                        f"[ESCALADO] Re-escalado dinámico a {restored.get('model_id', '?')} "
+                        f"antes de planificación"
+                    )
+            except Exception as e:
+                logger.debug(f"try_re_escalate() antes de planificación: {e}")
+
             self._report(on_progress, "planificador", "Consultando Planificador...")
             
             # Obtener contenido del archivo objetivo si existe
@@ -784,8 +804,15 @@ class SemiAutoAgent:
                         task.rejection_feedback = f"SyntaxError en el código anterior: {val.get('output', '')[:500]}"
                         # Reintentar automáticamente
                         task.status = TaskStatus.PENDING
-                        # Programar reintento
-                        self.root_after_safe(0, lambda: self.execute_next(on_progress, on_complete))
+                        # v3.1: Programar reintento con Timer (fix bug: root_after_safe no existe)
+                        def _retry():
+                            try:
+                                self.execute_next(on_progress, on_complete)
+                            except Exception:
+                                pass
+                        retry_timer = threading.Timer(1.0, _retry)
+                        retry_timer.daemon = True
+                        retry_timer.start()
                         return
                     else:
                         task.status = TaskStatus.AWAITING_APPROVAL  # Pausar para intervención humana
@@ -925,6 +952,18 @@ class SemiAutoAgent:
         result.script_name = task.script
         
         try:
+            # v3.2 (P3): Intentar re-escalar antes de codificar
+            try:
+                coder_sys = CODIFICADOR_SYSTEM_PROMPT
+                restored = try_re_escalate(task_size=estimate_task_size(coder_sys, task.planner_output, 4000))
+                if restored:
+                    self._log.append(
+                        f"[ESCALADO] Re-escalado dinámico a {restored.get('model_id', '?')} "
+                        f"antes de codificación {task.task_id}"
+                    )
+            except Exception as e:
+                logger.debug(f"try_re_escalate() antes de codificación: {e}")
+
             # ─── ETAPA 2: Llamar al Codificador ───
             self._report(on_progress, "codificador", 
                          f"Consultando Codificador para {task.task_id}...")
@@ -981,12 +1020,60 @@ class SemiAutoAgent:
                          f"Integrando {task.task_id}...")
             self._log.append(f"[INTEGRADOR] {task.task_id} — Integrando código en {task.script}...")
 
+            # v3.2 (P3): Intentar re-escalar antes de integrar
+            # (aunque la integración suele necesitar mucho contexto,
+            # si el mejor modelo tiene suficiente, usarlo)
+            try:
+                integ_sys = _get_integrador_prompts()["system"]
+                coder_code = self._extract_python_code(coder_output)
+                restored = try_re_escalate(task_size=estimate_task_size(integ_sys, task.planner_output + coder_code, 8000))
+                if restored:
+                    self._log.append(
+                        f"[ESCALADO] Re-escalado dinámico a {restored.get('model_id', '?')} "
+                        f"antes de integración {task.task_id}"
+                    )
+            except Exception as e:
+                logger.debug(f"try_re_escalate() antes de integración: {e}")
+
             integrator_prompts = _get_integrador_prompts()
+
+            # v3.2 (P2): Usar contexto mínimo — firmas + sección objetivo
+            # en lugar del archivo completo. Esto reduce el consumo de
+            # contexto del integrador en ~70%.
+            coder_code = self._extract_python_code(coder_output)
+            if original_content and len(original_content) > 2000:
+                # Extraer el nombre de la función/clase objetivo del parser
+                target_name = ""
+                parsed_spec = V3PlanParser.parse_single(task.planner_output)
+                # Buscar nombre en la especificación
+                for line in task.planner_output.split("\n"):
+                    match = re.search(r'(?:def|class)\s+(\w+)', line)
+                    if match:
+                        target_name = match.group(1)
+                        break
+
+                # Construir contexto mínimo
+                integrator_context = build_integrator_context(
+                    original_content,
+                    target_name=target_name,
+                    surrounding_lines=15,
+                )
+                tokens_orig = count_tokens_estimate(original_content)
+                tokens_min = count_tokens_estimate(integrator_context)
+                self._log.append(
+                    f"[INTEGRADOR] {task.task_id} — Contexto mínimo: "
+                    f"~{tokens_orig} tokens → ~{tokens_min} tokens "
+                    f"({100 - int(tokens_min / tokens_orig * 100) if tokens_orig > 0 else 0}% reducción)"
+                )
+            else:
+                # Archivo pequeño o nuevo — enviar completo
+                integrator_context = original_content if original_content else "# (archivo nuevo)"
+
             integrator_user_prompt = integrator_prompts["user_template"].format(
                 script_name=task.script,
-                original_content=original_content if original_content else "# (archivo nuevo)",
+                original_content=integrator_context,
                 planner_specification=task.planner_output,
-                coder_code=self._extract_python_code(coder_output),
+                coder_code=coder_code,
             )
 
             # Si es un reintento, añadir contexto de corrección
@@ -1024,6 +1111,29 @@ class SemiAutoAgent:
 
             self._log.append(f"[INTEGRADOR] OK — modelo: {result.model_used_integrator}")
             self._report(on_progress, "integrador", f"Código integrado (modelo: {result.model_used_integrator})")
+
+            # v3.1/v3.2: RE-ESCALADO — si el integrador usó un modelo de-escalado
+            # (porque la tarea era grande), volver al modelo superior para
+            # la siguiente tarea de planificación que necesite el mejor modelo.
+            # v3.2: También intenta re-escalar dinámicamente si un mejor modelo
+            # está disponible ahora (salió de rate limit, fue verificado, etc.)
+            try:
+                # Primero: re-escalado estándar (desapilar)
+                restored = re_escalate()
+                if restored:
+                    self._log.append(
+                        f"[ESCALADO] Re-escalado a {restored.get('model_id', '?')} "
+                        f"tras ensamblado con {result.model_used_integrator}"
+                    )
+                # Segundo: re-escalado dinámico si hay uno aún mejor disponible
+                restored_dyn = try_re_escalate()
+                if restored_dyn:
+                    self._log.append(
+                        f"[ESCALADO] Re-escalado dinámico a "
+                        f"{restored_dyn.get('model_id', '?')} — mejor modelo disponible"
+                    )
+            except Exception as e:
+                logger.debug(f"re_escalate() después de integración: {e}")
 
             # ─── ETAPA 4: Validar ───
             self._report(on_progress, "validador", "Validando código integrado...")
@@ -1083,6 +1193,16 @@ class SemiAutoAgent:
         result.log.append(f"Inicio: {user_prompt[:80]}")
 
         try:
+            # v3.2 (P3): Intentar re-escalar antes de planificar (run)
+            try:
+                restored = try_re_escalate(task_size=estimate_task_size(PLANIFICADOR_SYSTEM_PROMPT, "", 3000))
+                if restored:
+                    result.log.append(
+                        f"[ESCALADO] Re-escalado dinámico a {restored.get('model_id', '?')}"
+                    )
+            except Exception:
+                pass
+
             # ─── ETAPA 1: Llamar al Planificador ───
             self._report(on_progress, "planificador", "Consultando Planificador...")
             

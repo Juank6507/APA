@@ -1,4 +1,34 @@
 # apa/core/router.py
+# v6.1 — ESCALADO FLUIDO + CONTEXTO MÍNIMO + RE-ESCALADO DINÁMICO.
+#
+#         El sistema cuantifica cada tarea (tokens necesarios), verifica si
+#         el modelo seleccionado tiene capacidad suficiente, y si no,
+#         des-escala al siguiente modelo en el ranking que sí pueda.
+#         Tras completar la tarea, re-escala al modelo anterior.
+#
+#         v6.1: try_re_escalate() verifica antes de cada tarea si un modelo
+#         con mejor ranking está ahora disponible (ej: salió de rate limit)
+#         y re-escala automáticamente. Ya no solo después de la integración.
+#
+#         Esto permite un flujo natural: planificación con el mejor modelo
+#         (poco contexto), ensamblado con un modelo de mayor ventana
+#         (mucho contexto), y retorno automático al mejor modelo en cuanto
+#         esté disponible.
+#
+# CAMBIOS v6.1 vs v6.0:
+#   - NUEVO: try_re_escalate(task_size) — verifica si un modelo mejor está
+#     disponible antes de cada tarea y re-escala si es posible.
+#
+# CAMBIOS v6.0 vs v5.7:
+#   - NUEVO: estimate_task_size() — cuantifica tokens necesarios para una tarea
+#   - NUEVO: _model_stack — pila de modelos para re-escalado
+#   - NUEVO: re_escalate() — retorna al modelo anterior en la pila
+#   - NUEVO: get_scaling_state() — estado del escalado para monitorización
+#   - MODIFICADO: call_llm() — ahora verifica aptitud del modelo vs tamaño
+#     de tarea y des-escala automáticamente si no cabe
+#   - MODIFICADO: select_model_entry() — acepta required_context opcional
+#   - NUEVO: _select_model_for_context() — selección con awareness de contexto
+#
 # v5.7 — CRITICAL FIX: free-first selection for unknown models (D-1b/D-2b).
 #         select_model_entry() PASO 2 ahora usa free_first=True para
 #         preferir modelos gratuitos (GitHub, Groq, OpenRouter) sobre
@@ -123,7 +153,7 @@ import os
 import time
 import json
 import logging
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Tuple
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from config.settings import settings
 import requests
@@ -131,6 +161,276 @@ from core.normalizer import normalize_model_id
 from core.llm_cache import LLMCache
 from core import model_health
 from core.pool import PoolEntry, HealthStatus, pool as _global_pool
+
+# ============================================================================
+# v6.0: PILA DE MODELOS — escalado y des-escalado fluido
+# ============================================================================
+# La pila guarda el historial de modelos usados. Cuando se des-escala
+# (el mejor modelo no tiene capacidad suficiente), se apila el modelo
+# original. Después de completar la tarea, re_escalate() desapila y
+# restaura el modelo anterior.
+#
+# Flujo típico en el pipeline APA:
+#   1. Planificación → mejor modelo (gpt-4o, 8K contexto) → funciona
+#   2. Ensamblado → gpt-4o no tiene capacidad → des-escala a gemini (1M)
+#   3. Después del ensamblado → re_escalate() → vuelve a gpt-4o
+#   4. Siguiente planificación → gpt-4o → funciona
+_model_stack: List[Dict[str, Any]] = []
+_scaling_log: List[Dict[str, Any]] = []  # Registro de eventos de escalado
+# Margen de seguridad: si la tarea ocupa más del 80% del contexto,
+# se considera riesgo de desbordamiento y se prefiere des-escalar.
+_CONTEXT_SAFETY_MARGIN = 0.80
+
+
+def estimate_task_size(
+    system_prompt: str,
+    user_prompt: str,
+    max_tokens: int = 2000,
+) -> int:
+    """v6.0: Cuantifica los tokens necesarios para una tarea.
+
+    Estima el total de tokens que ocupará la llamada al modelo:
+    - Tokens del system_prompt
+    - Tokens del user_prompt
+    - Tokens de respuesta solicitados (max_tokens)
+    - Margen interno del modelo (overhead de formato)
+
+    Se usa una estimación conservadora de ~4 caracteres por token,
+    más un 10% de margen para overhead del protocolo.
+
+    Retorna: número estimado de tokens totales necesarios.
+    """
+    input_tokens = _estimate_tokens(system_prompt) + _estimate_tokens(user_prompt)
+    # Margen del 10% para overhead (formato JSON, metadatos, etc.)
+    total = int((input_tokens + max_tokens) * 1.10)
+    return max(total, max_tokens + 100)  # Mínimo absoluto
+
+
+def get_scaling_state() -> Dict[str, Any]:
+    """v6.0: Retorna el estado actual del sistema de escalado.
+
+    Incluye: modelo actual, pila de modelos, historial de eventos,
+    y capacidad del modelo activo vs tarea actual.
+    """
+    current = _model_stack[-1] if _model_stack else None
+    return {
+        "current_model": current,
+        "stack_depth": len(_model_stack),
+        "scaling_events": len(_scaling_log),
+        "recent_events": _scaling_log[-5:] if _scaling_log else [],
+    }
+
+
+def re_escalate() -> Optional[Dict[str, Any]]:
+    """v6.0: Retorna al modelo anterior en la pila de escalado.
+
+    Después de que un modelo de-escalado completa una tarea (por ejemplo,
+    un ensamblado grande), esta función restaura el modelo superior que
+    se guardó cuando se produjo el des-escalado.
+
+    Si la pila está vacía (no hay des-escalado previo), no hace nada.
+
+    Retorna: información del modelo restaurado, o None si no había pila.
+    """
+    if len(_model_stack) <= 1:
+        # No hay modelo anterior al que volver
+        return None
+
+    # Desapilar el modelo actual (el de-escalado)
+    current = _model_stack.pop()
+    restored = _model_stack[-1] if _model_stack else None
+
+    if restored:
+        event = {
+            "type": "re_escalate",
+            "from_model": current.get("model_id", ""),
+            "from_provider": current.get("provider", ""),
+            "to_model": restored.get("model_id", ""),
+            "to_provider": restored.get("provider", ""),
+            "from_context": current.get("context_length", 0),
+            "to_context": restored.get("context_length", 0),
+            "timestamp": time.time(),
+        }
+        _scaling_log.append(event)
+        logger.info(
+            f"RE-ESCALADO: {event['from_model']} ({event['from_context']} tokens) "
+            f"→ {event['to_model']} ({event['to_context']} tokens)"
+        )
+        return restored
+
+    return None
+
+
+def try_re_escalate(task_size: int = 0) -> Optional[Dict[str, Any]]:
+    """v6.1: Verifica si un modelo con mejor ranking está disponible y re-escala.
+
+    A diferencia de re_escalate() que siempre desapila al modelo anterior,
+    try_re_escalate() verifica primero si el modelo anterior (o uno aún mejor)
+    está disponible Y tiene suficiente contexto para la tarea actual.
+
+    Casos de uso:
+    - Antes de una tarea de planificación: el mejor modelo puede haber
+      salido de rate limit y estar disponible de nuevo.
+    - Antes de una tarea de codificación: un modelo verificado puede
+      haber sido probado mientras tanto y estar listo.
+    - Después de una tarea de integración: ya no se necesita un modelo
+      con gran ventana, se puede volver al mejor ranking.
+
+    Si no estamos de-escalados (pila vacía o un solo modelo), no hace nada.
+
+    Args:
+        task_size: Tokens estimados que necesita la tarea. Si > 0, verifica
+                   que el modelo de destino tenga contexto suficiente.
+
+    Returns:
+        Información del modelo restaurado, o None si no se re-escaló.
+    """
+    if len(_model_stack) <= 1:
+        return None
+
+    # El modelo al que queríamos volver está en la posición 0 (el primero
+    # que se apiló, el mejor modelo antes del primer de-escalado)
+    original_model = _model_stack[0]
+    original_provider = original_model.get("provider", "")
+    original_model_id = original_model.get("model_id", "")
+
+    # Verificar si ese modelo está disponible en el pool
+    entry = _global_pool.get_entry(original_provider, original_model_id)
+    if entry is None:
+        return None
+
+    # Verificar si está disponible (no rate_limited, no failed, etc.)
+    if entry.health_status not in ("available", "unknown"):
+        return None
+
+    # Si se especificó tamaño de tarea, verificar contexto
+    if task_size > 0 and entry.context_length < int(task_size * _CONTEXT_SAFETY_MARGIN):
+        return None
+
+    # Verificar que tiene mejor ranking que el modelo actual
+    current = _model_stack[-1]
+    current_score = current.get("score", 0)
+    original_score = original_model.get("score", 0)
+
+    if original_score <= current_score:
+        # El modelo original no es mejor — buscar si hay otro mejor disponible
+        return None
+
+    # Re-escalar: desapilar todo hasta volver al original
+    # y registrar el evento
+    events = []
+    while len(_model_stack) > 1:
+        popped = _model_stack.pop()
+
+    restored = _model_stack[-1] if _model_stack else None
+    if restored:
+        event = {
+            "type": "try_re_escalate",
+            "from_model": current.get("model_id", ""),
+            "from_provider": current.get("provider", ""),
+            "to_model": restored.get("model_id", ""),
+            "to_provider": restored.get("provider", ""),
+            "from_score": current_score,
+            "to_score": original_score,
+            "from_context": current.get("context_length", 0),
+            "to_context": restored.get("context_length", 0),
+            "task_size": task_size,
+            "trigger": "better_model_available",
+            "timestamp": time.time(),
+        }
+        _scaling_log.append(event)
+        logger.info(
+            f"RE-ESCALADO DINÁMICO: {event['from_model']} "
+            f"(score: {event['from_score']:.1f}) → {event['to_model']} "
+            f"(score: {event['to_score']:.1f}) — modelo mejor disponible"
+        )
+        return restored
+
+    return None
+
+
+def _push_model_to_stack(entry: PoolEntry) -> None:
+    """v6.0: Guarda un modelo en la pila de escalado.
+
+    Solo se apila si es diferente al modelo actual (evita duplicados).
+    """
+    if not _model_stack:
+        _model_stack.append({
+            "model_id": entry.model_id,
+            "provider": entry.provider,
+            "context_length": entry.context_length,
+            "score": entry.composite_score,
+            "pushed_at": time.time(),
+        })
+        return
+
+    current = _model_stack[-1]
+    if current["model_id"] != entry.model_id or current["provider"] != entry.provider:
+        _model_stack.append({
+            "model_id": entry.model_id,
+            "provider": entry.provider,
+            "context_length": entry.context_length,
+            "score": entry.composite_score,
+            "pushed_at": time.time(),
+        })
+
+
+def _select_model_for_context(
+    task_type: str,
+    required_context: int,
+    original_entry: PoolEntry,
+) -> Optional[PoolEntry]:
+    """v6.0: Encuentra un modelo alternativo con suficiente capacidad.
+
+    Cuando el mejor modelo no tiene contexto suficiente para la tarea,
+    esta función busca el siguiente modelo en el ranking que sí pueda
+    manejarla. Excluye el modelo original para forzar el des-escalado.
+
+    El modelo retornado es el MEJOR RANQUEADO que tiene capacidad suficiente.
+    Si ningún modelo tiene suficiente contexto, retorna el de mayor ventana.
+
+    Retorna: PoolEntry alternativo o None si no hay opciones.
+    """
+    exclude_key = (original_entry.provider, original_entry.model_id)
+    alternative = _global_pool.get_best_for_context(
+        task_type=task_type,
+        required_context=required_context,
+        exclude_entry=exclude_key,
+    )
+
+    if alternative is None:
+        return None
+
+    # Registrar evento de des-escalado
+    event = {
+        "type": "de_scale",
+        "from_model": original_entry.model_id,
+        "from_provider": original_entry.provider,
+        "to_model": alternative.model_id,
+        "to_provider": alternative.provider,
+        "from_context": original_entry.context_length,
+        "to_context": alternative.context_length,
+        "from_score": original_entry.composite_score,
+        "to_score": alternative.composite_score,
+        "required_context": required_context,
+        "timestamp": time.time(),
+    }
+    _scaling_log.append(event)
+
+    logger.info(
+        f"DE-ESCALADO: {event['from_model']} (score: {event['from_score']:.1f}, "
+        f"contexto: {event['from_context']}) → {event['to_model']} "
+        f"(score: {event['to_score']:.1f}, contexto: {event['to_context']}). "
+        f"Tarea requiere ~{required_context} tokens."
+    )
+
+    # Apilar el modelo original para re-escalado futuro
+    _push_model_to_stack(original_entry)
+
+    return alternative
+
+
+# v5.2: Guard contra recursión circular select_model_entry ↔ select_model
 
 # ============================================================================
 # Logging setup — production-ready
@@ -588,8 +888,17 @@ _MIN_CONTEXT_LENGTH = {
 _in_select_model_entry = False
 
 
-def select_model_entry(task_type: str, quality_mode: str = None) -> Optional[PoolEntry]:
+def select_model_entry(
+    task_type: str,
+    quality_mode: str = None,
+    required_context: int = 0,
+) -> Optional[PoolEntry]:
     """Selecciona el mejor modelo para una tarea, retornando PoolEntry.
+
+    v6.0: Ahora acepta required_context para escalado fluido.
+    Si se proporciona un tamaño de tarea, verifica que el modelo
+    seleccionado tenga capacidad suficiente. Si no, des-escala
+    automáticamente al siguiente modelo que pueda manejarla.
 
     D-1/D-2: Sin free_first bias — el ranking puro decide.
     P-1: Retorna PoolEntry con composite key (provider, model_id).
@@ -600,7 +909,8 @@ def select_model_entry(task_type: str, quality_mode: str = None) -> Optional[Poo
     1. Poblar pool lazy si está vacío (populate_pool)
     2. Buscar entries available (verified) en el pool
     3. Si no hay verified, buscar unknown/rate_limited
-    4. Fallback a método clásico (probing activo) — SIN recursión
+    4. v6.0: Si required_context > 0, verificar aptitud y des-escalar si hace falta
+    5. Fallback a método clásico (probing activo) — SIN recursión
 
     v5.2 FIX: PASO 3 usa guard _in_select_model_entry para evitar
     que select_model() delegue de vuelta a select_model_entry()
@@ -625,6 +935,26 @@ def select_model_entry(task_type: str, quality_mode: str = None) -> Optional[Poo
 
         if ranked:
             best = ranked[0]
+
+            # v6.0: Verificar aptitud del modelo vs tamaño de tarea
+            if required_context > 0 and best.context_length < required_context:
+                logger.info(
+                    f"select_model_entry({task_type}): {best.model_id} tiene "
+                    f"contexto {best.context_length} pero tarea necesita "
+                    f"{required_context} — buscando alternativa con más capacidad..."
+                )
+                alternative = _select_model_for_context(task_type, required_context, best)
+                if alternative:
+                    return alternative
+                # Si no hay alternativa, continuar con el mejor disponible
+                # (el modelo puede manejarlo truncando o puede que la estimación
+                # sea conservadora)
+                logger.warning(
+                    f"select_model_entry({task_type}): no hay modelo con "
+                    f"suficiente contexto ({required_context}), usando "
+                    f"{best.model_id} ({best.context_length}) como último recurso"
+                )
+
             logger.info(f"select_model_entry({task_type}): {best.model_id} "
                        f"via {best.provider} (score: {best.composite_score:.1f}, VERIFIED)")
             return best
@@ -985,7 +1315,9 @@ def call_llm(
 
             # v5.1: Usar select_model_entry() para obtener PoolEntry
             # con provider directo (no call_with_fallback ciego)
-            entry = select_model_entry(task_type)
+            # v6.0: Cuantificar tarea y seleccionar modelo con awareness de contexto
+            task_size = estimate_task_size(system_prompt, user_prompt, max_tokens)
+            entry = select_model_entry(task_type, required_context=task_size)
             if entry is None:
                 attempt_elapsed = int((time.time() - attempt_start_time) * 1000)
                 # v5.3: Registrar fallo (no se pudo seleccionar modelo)

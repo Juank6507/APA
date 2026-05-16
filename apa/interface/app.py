@@ -17,10 +17,9 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from config.settings import settings
 from core.orchestrator import Orchestrator
 from core.project_reader import ProjectReader
-from core.router import call_llm
-from core.usage_tracker import UsageTracker
-from core.price_estimator import estimate_price, estimate_price_details
-from mcp.server import NASConnector
+from core.router import call_llm, get_scaling_state
+from core.pool import pool as _global_pool
+from core.pipeline_state import PipelineStateManager
 
 from fastapi import FastAPI, HTTPException, BackgroundTasks, Request
 from fastapi.responses import HTMLResponse, Response, StreamingResponse, JSONResponse
@@ -814,6 +813,83 @@ async def stream_events(project_id: str, request: Request):
             "X-Accel-Buffering": "no"
         }
     )
+
+
+@app.get("/scaling/state")
+async def scaling_state_endpoint() -> JSONResponse:
+    """v6.0: Estado del sistema de escalado fluido.
+
+    Retorna información sobre la pila de modelos, eventos de
+    de-escalado/re-escalado, y capacidad del modelo activo.
+    """
+    try:
+        state = get_scaling_state()
+        return JSONResponse(content=state)
+    except Exception as e:
+        logger.error(f"Error en /scaling/state: {e}")
+        return JSONResponse(content={"error": str(e)})
+
+
+@app.get("/pool/context-report")
+async def pool_context_report() -> JSONResponse:
+    """v6.0: Reporte de capacidades de contexto del pool.
+
+    Muestra la distribución de context_length de los modelos disponibles,
+    útil para entender por qué un modelo fue de-escalado.
+    """
+    try:
+        report = _global_pool.get_context_report()
+        return JSONResponse(content=report)
+    except Exception as e:
+        logger.error(f"Error en /pool/context-report: {e}")
+        return JSONResponse(content={"error": str(e)})
+
+
+@app.get("/pipeline/states")
+async def pipeline_states() -> JSONResponse:
+    """v6.0: Lista todos los pipelines con estado guardado.
+
+    Muestra pipelines que pueden reanudarse después de una
+    interrupción.
+    """
+    try:
+        manager = PipelineStateManager()
+        states = manager.list_states()
+        return JSONResponse(content={"pipelines": states, "total": len(states)})
+    except Exception as e:
+        logger.error(f"Error en /pipeline/states: {e}")
+        return JSONResponse(content={"error": str(e)})
+
+
+@app.get("/pipeline/retry/{project_id}")
+async def pipeline_retry(project_id: str) -> JSONResponse:
+    """v6.0: Reanuda un pipeline interrumpido.
+
+    Carga el estado guardado y notifica al sistema que debe
+    reanudar la ejecución desde el último punto.
+    """
+    try:
+        manager = PipelineStateManager()
+        state = manager.load(project_id)
+        if state is None:
+            raise HTTPException(status_code=404, detail="Pipeline no encontrado")
+
+        if state.phase in ("completed", "cancelled"):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Pipeline en estado '{state.phase}', no se puede reanudar"
+            )
+
+        return JSONResponse(content={
+            "project_id": state.project_id,
+            "phase": state.phase,
+            "current_task_index": state.current_task_index,
+        })
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error en /pipeline/retry: {e}")
+        return JSONResponse(content={"error": str(e)})
 
 
 @app.get("/download/{filename}")

@@ -1834,7 +1834,7 @@ class App:
         if agent.state.value == "awaiting_approval":
             # Tarea ejecutada — esperar decisión del Director
             self._auto_status(
-                f"Tarea {task.task_id} ejecutada — APROBAR o RECHAZAR",
+                f"Tarea {task.task_id} ejecutada — revisa y APROBAR o RECHAZAR",
                 color="#fbbf24"
             )
             self.auto_approve_btn.config(state="normal")
@@ -1860,6 +1860,10 @@ class App:
                     self._auto_log("ok", f"Validación OK: {val.get('output', '')[:200]}")
                 else:
                     self._auto_log("error", f"Validación FALLIDA: {val.get('output', '')[:300]}")
+
+            # ── Enviar resultado automáticamente al tab Ensamblador ──
+            # para que el Director pueda revisar visualmente el código antes de aprobar
+            self._auto_send_to_assembler_with_diff(task, agent, result)
 
         elif agent.state.value == "planned":
             # Tarea fallida después de reintentos, pero hay más tareas
@@ -2077,29 +2081,93 @@ class App:
             self._auto_log(stage, message)
         self.root.after(0, _update)
 
+    def _auto_send_to_assembler_with_diff(self, task, agent, result=None):
+        """Envía el resultado al tab Ensamblador con diff visual de cambios.
+
+        Carga el contenido ORIGINAL del archivo como baseline para que los
+        cambios nuevos aparezcan resaltados en rojo, permitiendo al Director
+        revisar visualmente exactamente qué se añadió/modificó antes de aprobar.
+
+        Args:
+            task: TaskInfo de la tarea completada
+            agent: SemiAutoAgent que ejecutó la tarea
+            result: SemiAutoResult con métricas (opcional)
+        """
+        if not task:
+            return
+
+        # Cargar contenido ORIGINAL del archivo (antes de la integración)
+        original_content = ""
+        if task.script and agent.project_root:
+            try:
+                file_path = agent._resolve_file(task.script)
+                if file_path and os.path.exists(file_path):
+                    with open(file_path, 'r', encoding='utf-8') as f:
+                        original_content = f.read()
+            except Exception:
+                pass
+
+        # Llenar panel del Planificador con la especificación
+        self.asm_input.delete("1.0", tk.END)
+        self.asm_input.insert("1.0", task.planner_output or "")
+
+        # Llenar panel del Codificador con el código generado
+        self.asm_coder_input.delete("1.0", tk.END)
+        self.asm_coder_input.insert("1.0", task.coder_output or "")
+
+        # Cargar contenido ensamblado en el panel de resultado
+        if task.assembled_content:
+            # Establecer el ORIGINAL como baseline para que el diff resalte
+            # solo lo que cambió (las líneas nuevas aparecen en rojo)
+            self.asm_baseline_content = original_content if original_content else task.assembled_content
+            self.asm_original_content = task.assembled_content
+            self.asm_replaced_lines = set()  # Limpiar líneas reemplazadas previas
+            self._asm_set_view(task.assembled_content)
+
+            # Actualizar barra de estado del ensamblador
+            if task.script:
+                self.asm_status_lbl.config(
+                    text=f"Tarea {task.task_id} → {task.script}  |  Revisa y APROBA o RECHAZA",
+                    foreground="#fbbf24"
+                )
+                model_info = getattr(result, 'model_used_integrator', '') if result else ''
+                self.asm_parsed_lbl.config(
+                    text=f"Script: {task.script}  |  Modelo: {model_info or '?'}",
+                    foreground="#4ade80"
+                )
+                self.asm_file_path.set(task.script)
+
+            # Mostrar resultado de validación en el panel de output
+            if task.validation_result:
+                val = task.validation_result
+                val_output = val.get("output", "")[:300]
+                self.asm_output.config(state="normal")
+                self.asm_output.delete("1.0", tk.END)
+                self.asm_output.insert("1.0", val_output)
+                self.asm_output.config(state="disabled")
+
+                if val.get("returncode") == 0:
+                    self.asm_syntax_lbl.config(
+                        text="Validación: OK — imports correctos",
+                        foreground="#4ade80"
+                    )
+                else:
+                    self.asm_syntax_lbl.config(
+                        text=f"Validación: ERROR (rc={val.get('returncode', '?')})",
+                        foreground="#f87171"
+                    )
+
+        # Cambiar automáticamente al tab Ensamblador
+        self.notebook.select(self.tab_assembler)
+        self._auto_log("ok", "Resultado enviado al Ensamblador — revisa los cambios resaltados en rojo")
+
     def _auto_send_to_assembler(self):
         """Envia los outputs del agente al tab Ensamblador para revision manual."""
         if not self._auto_agent or not self._auto_agent.current_task:
             return
 
         task = self._auto_agent.current_task
-
-        # Llenar paneles del Ensamblador
-        self.asm_input.delete("1.0", tk.END)
-        self.asm_input.insert("1.0", task.planner_output)
-
-        self.asm_coder_input.delete("1.0", tk.END)
-        self.asm_coder_input.insert("1.0", task.coder_output or "")
-
-        # Cargar contenido ensamblado
-        if task.assembled_content:
-            self.asm_original_content = task.assembled_content
-            self.asm_baseline_content = task.assembled_content
-            self._asm_set_view(task.assembled_content)
-
-        # Cambiar al tab Ensamblador
-        self.notebook.select(self.tab_assembler)
-        self._auto_status("Output enviado al Ensamblador para revisión manual.")
+        self._auto_send_to_assembler_with_diff(task, self._auto_agent)
 
     def _auto_log(self, tag, message):
         """Añade un mensaje al log en tiempo real."""
