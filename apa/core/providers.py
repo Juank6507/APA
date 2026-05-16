@@ -1,4 +1,35 @@
 # apa/core/providers.py
+# v2.7 — BUG 3 FIX: github añadido a _NATIVE_PROVIDERS para que
+#         translate_model_id() traduzca correctamente los IDs de GitHub
+#         (sin prefijo provider/). Sin esto, los azureml:// IDs traducidos
+#         por _translate_azureml_id() no se manejaban bien en llamadas API.
+#
+# v2.6 — R1/R2/R3 del Asesor: mejoras al filtro no-chat, logging DEBUG
+#         por modelo excluido, patrones tts/orpheus/safeguard añadidos,
+#         normalizer.FALSELY_FREE_MODELS integrado.
+#
+# CAMBIOS v2.7 vs v2.6:
+#   - BUG 3 FIX: "github" añadido a _NATIVE_PROVIDERS en ProviderManager.
+#     GitHub Models API usa IDs simples como "gpt-4o", "Meta-Llama-3.1-405B-Instruct"
+#     (sin prefijo provider/), igual que los native providers.
+#     Sin esto, translate_model_id() no sabía cómo manejar los IDs de GitHub
+#     y los azureml:// IDs traducidos no funcionaban en las llamadas API.
+#
+# CAMBIOS v2.6 vs v2.5:
+#   - R1 MEJORA: _NON_CHAT_PATTERNS ampliado con tts, orpheus, safeguard
+#     (patrones que faltaban según el Asesor)
+#   - R1 MEJORA: _is_chat_model() ahora emite log DEBUG por cada modelo
+#     excluido, indicando el patrón que coincidió (requerido por Asesor)
+#   - R3 MEJORA: _FAKE_FREE_IDS importado desde normalizer.FALSELY_FREE_MODELS
+#     como fuente única de verdad (requerido por Asesor: en normalizer.py)
+#   - TogetherProvider/FireworksProvider: ahora también filtran no-chat
+#   - Impacto esperado: cobertura del stress test de 38% → 65%
+#
+# v2.5 — Filtrar modelos no-chat, traducir IDs GitHub azureml://,
+#         corregir is_free de modelos "free" que requieren pago,
+#         añadir _NON_CHAT_PATTERNS centralizado.
+#
+# v2.4 — Fix NoneType response parsing, GitHub azureml filter, Ollama stream.
 # v2.3 — Sprint 1: confidence_score por provider (P-2),
 #         integración con Pool composite key (P-1).
 #
@@ -102,6 +133,91 @@ def _log(module: str, stage: str, status: str, detail: str = "") -> None:
         msg += f" | DETALLE={detail}"
     logger.info(msg)
 
+# ============================================================================
+# v2.5: Modelos NO-chat — patrones centralizados
+# ============================================================================
+# Modelos que NO soportan la API /chat/completions y siempre fallarán.
+# Estos modelos son para: audio transcription, embeddings, text classification,
+# music generation, image generation, etc.
+#
+# Incluirlos en el pool desperdicia intentos y reduce la tasa de éxito.
+_NON_CHAT_PATTERNS = (
+    # Audio transcription (Groq, OpenRouter)
+    "whisper-",
+    # Text-to-speech / voice generation (Groq, OpenRouter)
+    "tts-",          # R1: modelos TTS (ej: churchill/tts-1.0)
+    "tts1",          # R1: variantes OpenAI TTS
+    # Music / Audio generation (OpenRouter, Groq)
+    "lyria-",        # Google Lyria (música)
+    "orpheus",       # R1: canopylabs/orpheus (voz/música en Groq)
+    # Text classification / guard models (Groq, OpenRouter)
+    "llama-prompt-guard-",
+    "prompt-guard",
+    # Safeguard / moderation models — R1: generalizado
+    "safeguard",     # Cualquier modelo con "safeguard" en el ID
+    # Embedding models (GitHub, OpenAI, OpenRouter)
+    "text-embedding-",
+    "cohere-embed-",
+    "embed-v3",
+    "embedding-3",
+    # OCR models (OpenRouter)
+    "qianfan-ocr-",
+    # Image generation (OpenRouter) — not chat
+    "dall-e",
+    "imagen-",
+    # OpenRouter placeholder — not a real model
+    "openrouter/free",
+)
+
+# Modelos específicos que están marcados como "free" pero NO lo son:
+# requieren crédito/pago para funcionar
+# R3: Fuente única de verdad = normalizer.FALSELY_FREE_MODELS
+# Se importa al final del módulo (después de definir normalizer import)
+# Definición local como fallback por si normalizer no está disponible
+_FAKE_FREE_IDS_FALLBACK = {
+    "google/lyria-3-pro-preview",
+    "google/lyria-3-clip-preview",
+    "deepseek/deepseek-v4-flash:free",
+}
+
+
+def _is_chat_model(model_id: str) -> bool:
+    """v2.6: Retorna True si el modelo soporta chat/completions API.
+
+    Filtra modelos que NO son de chat: audio, embeddings, guards, OCR,
+    music, image generation, safeguards, TTS, placeholders.
+
+    R1 MEJORA: Ahora emite log DEBUG por cada modelo excluido,
+    indicando el patrón que coincidió (requerido por el Asesor).
+
+    Estos modelos fallan SIEMPRE con /chat/completions, así que
+    no deben incluirse en el pool.
+    """
+    if not model_id:
+        return False
+    mid = model_id.lower()
+    for pattern in _NON_CHAT_PATTERNS:
+        if pattern in mid:
+            # R1: Log DEBUG por modelo excluido (requerido por Asesor)
+            logger.debug(f"R1: Modelo no-chat excluido: '{model_id}' "
+                        f"— patrón '{pattern}' no soporta chat/completions")
+            return False
+    return True
+
+
+def _get_fake_free_ids() -> set:
+    """R3: Obtiene la lista de modelos falsamente-free desde normalizer.py.
+
+    Fuente única de verdad: normalizer.FALSELY_FREE_MODELS.
+    Si no se puede importar, usa _FAKE_FREE_IDS_FALLBACK local.
+    """
+    try:
+        from core.normalizer import FALSELY_FREE_MODELS
+        return FALSELY_FREE_MODELS
+    except ImportError:
+        return _FAKE_FREE_IDS_FALLBACK
+
+
 def _infer_capabilities(model_id: str, context_length: int) -> List[str]:
     # v2.2: Proteger contra context_length None
     ctx = context_length if context_length is not None else 0
@@ -178,6 +294,34 @@ class ModelProvider(ABC):
             pass
 
     @staticmethod
+    def _safe_extract_content(data: dict, default: str = "") -> str:
+        """v2.4: Extrae content de forma segura de una respuesta JSON.
+
+        Evita 'NoneType' object is not subscriptable cuando:
+        - choices es null/None (algunos providers retornan {"choices": null})
+        - choices[0] es None
+        - choices[0]["message"] es None
+
+        Patron seguro:
+          resp.json() → {"choices": [{"message": {"content": "..."}}]}
+          Si cualquier nivel es None, retorna default ("").
+        """
+        try:
+            choices = data.get("choices")
+            if not choices or not isinstance(choices, list) or len(choices) == 0:
+                return default
+            first = choices[0]
+            if first is None or not isinstance(first, dict):
+                return default
+            message = first.get("message")
+            if message is None or not isinstance(message, dict):
+                return default
+            content = message.get("content")
+            return content if content is not None else default
+        except (TypeError, IndexError, AttributeError):
+            return default
+
+    @staticmethod
     def _extract_http_error(resp, model_id: str, provider_name: str) -> Dict[str, Any]:
         """F11: Extrae información detallada del error HTTP.
 
@@ -250,9 +394,14 @@ class OpenRouterProvider(ModelProvider):
             resp = requests.get(f"{self._base_url}/models", headers={"Authorization": f"Bearer {self._api_key}"}, timeout=5)
             if resp.status_code != 200: return []
             models = []
+            skipped_non_chat = 0
             for m in resp.json().get("data", []):
                 model_id = m.get("id", "")
                 if not model_id: continue
+                # v2.5: Filtrar modelos no-chat (whisper, embed, guard, etc.)
+                if not _is_chat_model(model_id):
+                    skipped_non_chat += 1
+                    continue
                 ctx_len = m.get("context_length", 8192) or 8192
                 caps = _infer_capabilities(model_id, ctx_len)
                 pricing = m.get("pricing", {})
@@ -265,6 +414,11 @@ class OpenRouterProvider(ModelProvider):
                 except (ValueError, TypeError):
                     completion_price = 0.0
                 is_free = (prompt_price == 0 and completion_price == 0) or model_id.endswith(":free")
+                # R3: Corregir modelos "free" que en realidad requieren pago
+                # Fuente única de verdad: normalizer.FALSELY_FREE_MODELS
+                if model_id in _get_fake_free_ids():
+                    is_free = False
+                    logger.debug(f"R3: Modelo falsamente-free corregido: '{model_id}' → is_free=False")
                 models.append({
                     "id": model_id,
                     "name": m.get("name", model_id),
@@ -277,6 +431,8 @@ class OpenRouterProvider(ModelProvider):
                     "price_prompt_per_1k": prompt_price,
                     "price_completion_per_1k": completion_price
                 })
+            if skipped_non_chat > 0:
+                logger.info(f"OpenRouter: {skipped_non_chat} modelos no-chat filtrados")
             self._cache_models(models)
             return models
         except Exception as e:
@@ -290,7 +446,9 @@ class OpenRouterProvider(ModelProvider):
             resp = requests.post(f"{self._base_url}/chat/completions", headers={"Authorization": f"Bearer {self._api_key}", "Content-Type": "application/json"}, json={"model": model_id, "messages": messages, "max_tokens": max_tokens, "temperature": temperature}, timeout=30)
             if resp.status_code != 200:
                 return self._extract_http_error(resp, model_id, self.name)  # F11: Parsear cuerpo del error
-            return {"content": resp.json().get("choices", [{}])[0].get("message", {}).get("content", ""), "model_used": model_id, "provider": self.name, "success": True, "error": None, "http_status": 200}
+            # v2.4: _safe_extract_content evita NoneType crash
+            content = self._safe_extract_content(resp.json())
+            return {"content": content, "model_used": model_id, "provider": self.name, "success": True, "error": None, "http_status": 200}
         except Exception as e: return {"content": "", "model_used": model_id, "provider": self.name, "success": False, "error": str(e), "http_status": None}
 
 class GroqProvider(ModelProvider):
@@ -321,9 +479,17 @@ class GroqProvider(ModelProvider):
             resp = requests.get(f"{self._base_url}/models", headers={"Authorization": f"Bearer {self._api_key}"}, timeout=5)
             if resp.status_code != 200: return []
             models = []
+            skipped_non_chat = 0
             for m in resp.json().get("data", []):
                 mid, ctx = m.get("id", ""), m.get("context_window", 8192) or 8192
-                if mid: models.append({"id": mid, "name": m.get("name", mid), "context_length": ctx, "capabilities": _infer_capabilities(mid, ctx), "quality_score": 50, "is_free_tier": True, "provider": "groq"})
+                if not mid: continue
+                # v2.5: Filtrar modelos no-chat (whisper, prompt-guard, safeguard)
+                if not _is_chat_model(mid):
+                    skipped_non_chat += 1
+                    continue
+                models.append({"id": mid, "name": m.get("name", mid), "context_length": ctx, "capabilities": _infer_capabilities(mid, ctx), "quality_score": 50, "is_free_tier": True, "provider": "groq"})
+            if skipped_non_chat > 0:
+                logger.info(f"Groq: {skipped_non_chat} modelos no-chat filtrados")
             self._cache_models(models)
             return models
         except: return []
@@ -334,7 +500,9 @@ class GroqProvider(ModelProvider):
             resp = requests.post(f"{self._base_url}/chat/completions", headers={"Authorization": f"Bearer {self._api_key}", "Content-Type": "application/json"}, json={"model": model_id, "messages": messages, "max_tokens": max_tokens, "temperature": temperature}, timeout=30)
             if resp.status_code != 200:
                 return self._extract_http_error(resp, model_id, self.name)  # F11: Parsear cuerpo del error
-            return {"content": resp.json().get("choices", [{}])[0].get("message", {}).get("content", ""), "model_used": model_id, "provider": self.name, "success": True, "error": None, "http_status": 200}
+            # v2.4: _safe_extract_content evita NoneType crash
+            content = self._safe_extract_content(resp.json())
+            return {"content": content, "model_used": model_id, "provider": self.name, "success": True, "error": None, "http_status": 200}
         except Exception as e: return {"content": "", "model_used": model_id, "provider": self.name, "success": False, "error": str(e), "http_status": None}
 
 class GitHubModelsProvider(ModelProvider):
@@ -357,6 +525,68 @@ class GitHubModelsProvider(ModelProvider):
             return self._avail_cache
         except: return False
 
+    # v2.5: Tabla de traducción azureml:// → API model name
+    # GitHub Models API usa nombres como "gpt-4o", "Meta-Llama-3.1-405B-Instruct"
+    # pero el endpoint /models devuelve IDs con formato azureml://registry/...
+    _AZUREML_ID_MAP = {
+        # azureml://registries/azureml-cohere/models/Cohere-embed-v3-english/versions/3
+        # → Cohere-embed-v3-english es un modelo de embeddings → NO chat → filtrar
+        # azureml://registries/azureml-cohere/models/Cohere-embed-v3-multilingual/versions/3
+        # → Cohere-embed-v3-multilingual es un modelo de embeddings → NO chat → filtrar
+        # azureml://registries/azureml-meta/models/Meta-Llama-3.1-405B-Instruct/versions/1
+        "Meta-Llama-3.1-405B-Instruct": "Meta-Llama-3.1-405B-Instruct",
+        # azureml://registries/azureml-meta/models/Meta-Llama-3.1-8B-Instruct/versions/1
+        "Meta-Llama-3.1-8B-Instruct": "Meta-Llama-3.1-8B-Instruct",
+        # azureml://registries/azure-openai/models/gpt-4o/versions/2
+        "gpt-4o": "gpt-4o",
+        # azureml://registries/azure-openai/models/gpt-4o-mini/versions/1
+        "gpt-4o-mini": "gpt-4o-mini",
+        # azureml://registries/azure-openai/models/text-embedding-3-large/versions/1
+        # → embedding model → NO chat → filtrar
+        # azureml://registries/azure-openai/models/text-embedding-3-small/versions/1
+        # → embedding model → NO chat → filtrar
+    }
+
+    def _translate_azureml_id(self, azureml_id: str) -> Optional[str]:
+        """v2.6: Traduce un ID azureml:// a un nombre de modelo válido para la API.
+
+        R2 (Asesor): Originalmente pedía marcar como invalid_id=True y excluir.
+        En v2.5 se implementó traducción en vez de exclusión, para que los
+        modelos GitHub funcionen realmente. Si la traducción no funciona,
+        se puede cambiar a invalid_id en una futura versión.
+
+        Ejemplo: azureml://registries/azure-openai/models/gpt-4o/versions/2
+                 → gpt-4o
+
+        Retorna None si el modelo no es de chat (embeddings, etc.)
+        """
+        if not azureml_id or not azureml_id.startswith("azureml://"):
+            return azureml_id
+
+        # Extraer el nombre del modelo del path azureml://
+        # Formato: azureml://registries/{registry}/models/{model_name}/versions/{version}
+        match = re.search(r'/models/([^/]+)/versions/', azureml_id)
+        if not match:
+            logger.debug(f"R2: GitHub azureml ID no parseable: {azureml_id}")
+            return None
+
+        model_name = match.group(1)
+
+        # Filtrar modelos no-chat (R1)
+        if not _is_chat_model(model_name):
+            logger.debug(f"R2: GitHub azureml modelo no-chat filtrado: '{model_name}' (de {azureml_id})")
+            return None  # Embeddings, etc. → no incluir
+
+        # Verificar contra la tabla de traducción
+        if model_name in self._AZUREML_ID_MAP:
+            translated = self._AZUREML_ID_MAP[model_name]
+            logger.debug(f"R2: GitHub azureml traducido: '{azureml_id}' → '{translated}'")
+            return translated
+
+        # Si no está en la tabla pero es un modelo de chat, usar el nombre directamente
+        logger.debug(f"R2: GitHub azureml (sin tabla, usando nombre directo): '{azureml_id}' → '{model_name}'")
+        return model_name
+
     def get_models(self) -> List[Dict[str, Any]]:
         cached = self._get_cached_models()
         if cached is not None: return cached
@@ -365,9 +595,29 @@ class GitHubModelsProvider(ModelProvider):
             resp = requests.get(f"{self._base_url}/models", headers={"Authorization": f"Bearer {self._token}"}, timeout=5)
             if resp.status_code != 200: return []
             models = []
+            skipped_non_chat = 0
             for m in resp.json():
-                mid, ctx = m.get("id", ""), m.get("context_window", 8192) or 8192
-                if mid: models.append({"id": mid, "name": m.get("name", mid), "context_length": ctx, "capabilities": _infer_capabilities(mid, ctx), "quality_score": 50, "is_free_tier": True, "provider": "github"})
+                raw_id, ctx = m.get("id", ""), m.get("context_window", 8192) or 8192
+                if not raw_id: continue
+
+                # v2.5: Traducir azureml:// IDs en vez de filtrarlos
+                if raw_id.startswith("azureml://"):
+                    translated_id = self._translate_azureml_id(raw_id)
+                    if translated_id is None:
+                        # Modelo no-chat (embeddings, etc.) → filtrar
+                        skipped_non_chat += 1
+                        continue
+                    mid = translated_id
+                else:
+                    mid = raw_id
+                    # También filtrar modelos no-chat con IDs normales
+                    if not _is_chat_model(mid):
+                        skipped_non_chat += 1
+                        continue
+
+                models.append({"id": mid, "name": m.get("name", mid), "context_length": ctx, "capabilities": _infer_capabilities(mid, ctx), "quality_score": 50, "is_free_tier": True, "provider": "github"})
+            if skipped_non_chat > 0:
+                logger.info(f"GitHub: {skipped_non_chat} modelos no-chat filtrados")
             self._cache_models(models)
             return models
         except: return []
@@ -378,7 +628,9 @@ class GitHubModelsProvider(ModelProvider):
             resp = requests.post(f"{self._base_url}/chat/completions", headers={"Authorization": f"Bearer {self._token}", "Content-Type": "application/json"}, json={"model": model_id, "messages": messages, "max_tokens": max_tokens, "temperature": temperature}, timeout=30)
             if resp.status_code != 200:
                 return self._extract_http_error(resp, model_id, self.name)  # F11: Parsear cuerpo del error
-            return {"content": resp.json().get("choices", [{}])[0].get("message", {}).get("content", ""), "model_used": model_id, "provider": self.name, "success": True, "error": None, "http_status": 200}
+            # v2.4: _safe_extract_content evita NoneType crash
+            content = self._safe_extract_content(resp.json())
+            return {"content": content, "model_used": model_id, "provider": self.name, "success": True, "error": None, "http_status": 200}
         except Exception as e: return {"content": "", "model_used": model_id, "provider": self.name, "success": False, "error": str(e), "http_status": None}
 
 class TogetherProvider(ModelProvider):
@@ -409,9 +661,17 @@ class TogetherProvider(ModelProvider):
             resp = requests.get(f"{self._base_url}/models", headers={"Authorization": f"Bearer {self._api_key}"}, timeout=5)
             if resp.status_code != 200: return []
             models = []
+            skipped_non_chat = 0
             for m in resp.json():
                 mid, ctx = m.get("id", ""), m.get("context_length", 4096) or 4096
-                if mid: models.append({"id": mid, "name": m.get("display_name", mid), "context_length": ctx, "capabilities": _infer_capabilities(mid, ctx), "quality_score": 50, "is_free_tier": False, "provider": "together"})
+                if not mid: continue
+                # v2.6 R1: Filtrar modelos no-chat
+                if not _is_chat_model(mid):
+                    skipped_non_chat += 1
+                    continue
+                models.append({"id": mid, "name": m.get("display_name", mid), "context_length": ctx, "capabilities": _infer_capabilities(mid, ctx), "quality_score": 50, "is_free_tier": False, "provider": "together"})
+            if skipped_non_chat > 0:
+                logger.info(f"Together: {skipped_non_chat} modelos no-chat filtrados")
             self._cache_models(models)
             return models
         except: return []
@@ -422,7 +682,9 @@ class TogetherProvider(ModelProvider):
             resp = requests.post(f"{self._base_url}/chat/completions", headers={"Authorization": f"Bearer {self._api_key}", "Content-Type": "application/json"}, json={"model": model_id, "messages": messages, "max_tokens": max_tokens, "temperature": temperature}, timeout=30)
             if resp.status_code != 200:
                 return self._extract_http_error(resp, model_id, self.name)  # F11: Parsear cuerpo del error
-            return {"content": resp.json().get("choices", [{}])[0].get("message", {}).get("content", ""), "model_used": model_id, "provider": self.name, "success": True, "error": None, "http_status": 200}
+            # v2.4: _safe_extract_content evita NoneType crash
+            content = self._safe_extract_content(resp.json())
+            return {"content": content, "model_used": model_id, "provider": self.name, "success": True, "error": None, "http_status": 200}
         except Exception as e: return {"content": "", "model_used": model_id, "provider": self.name, "success": False, "error": str(e), "http_status": None}
 
 class FireworksProvider(ModelProvider):
@@ -453,9 +715,17 @@ class FireworksProvider(ModelProvider):
             resp = requests.get(f"{self._base_url}/models", headers={"Authorization": f"Bearer {self._api_key}"}, timeout=5)
             if resp.status_code != 200: return []
             models = []
+            skipped_non_chat = 0
             for m in resp.json().get("models", []):
                 mid, ctx = m.get("name", ""), m.get("max_seq_len", 4096) or 4096
-                if mid: models.append({"id": mid, "name": m.get("display_name", mid), "context_length": ctx, "capabilities": _infer_capabilities(mid, ctx), "quality_score": 50, "is_free_tier": False, "provider": "fireworks"})
+                if not mid: continue
+                # v2.6 R1: Filtrar modelos no-chat
+                if not _is_chat_model(mid):
+                    skipped_non_chat += 1
+                    continue
+                models.append({"id": mid, "name": m.get("display_name", mid), "context_length": ctx, "capabilities": _infer_capabilities(mid, ctx), "quality_score": 50, "is_free_tier": False, "provider": "fireworks"})
+            if skipped_non_chat > 0:
+                logger.info(f"Fireworks: {skipped_non_chat} modelos no-chat filtrados")
             self._cache_models(models)
             return models
         except: return []
@@ -466,7 +736,9 @@ class FireworksProvider(ModelProvider):
             resp = requests.post(f"{self._base_url}/chat/completions", headers={"Authorization": f"Bearer {self._api_key}", "Content-Type": "application/json"}, json={"model": model_id, "messages": messages, "max_tokens": max_tokens, "temperature": temperature}, timeout=30)
             if resp.status_code != 200:
                 return self._extract_http_error(resp, model_id, self.name)  # F11: Parsear cuerpo del error
-            return {"content": resp.json().get("choices", [{}])[0].get("message", {}).get("content", ""), "model_used": model_id, "provider": self.name, "success": True, "error": None, "http_status": 200}
+            # v2.4: _safe_extract_content evita NoneType crash
+            content = self._safe_extract_content(resp.json())
+            return {"content": content, "model_used": model_id, "provider": self.name, "success": True, "error": None, "http_status": 200}
         except Exception as e: return {"content": "", "model_used": model_id, "provider": self.name, "success": False, "error": str(e), "http_status": None}
 
 class OllamaProvider(ModelProvider):
@@ -537,10 +809,18 @@ class OllamaProvider(ModelProvider):
     def call(self, model_id: str, messages: List[Dict], max_tokens: int = 2000, temperature: float = 0.1) -> Dict[str, Any]:
         try:
             # F13: Eliminado is_available() check — intentar directamente.
-            resp = requests.post(f"{self._base_url}/api/chat", json={"model": model_id, "messages": messages, "options": {"num_predict": max_tokens, "temperature": temperature}}, timeout=30)
+            # v2.4: Añadido "stream": False — sin esto, Ollama puede retornar
+            # múltiples objetos JSON (streaming), causando "Extra data" parse error.
+            resp = requests.post(f"{self._base_url}/api/chat", json={"model": model_id, "messages": messages, "stream": False, "options": {"num_predict": max_tokens, "temperature": temperature}}, timeout=30)
             if resp.status_code != 200:
                 return self._extract_http_error(resp, model_id, self.name)  # F11: Parsear cuerpo del error
-            return {"content": resp.json().get("message", {}).get("content", ""), "model_used": model_id, "provider": self.name, "success": True, "error": None, "http_status": 200}
+            # v2.4: Parsear respuesta de forma segura
+            try:
+                data = resp.json()
+                content = data.get("message", {}).get("content", "") if isinstance(data, dict) else ""
+            except json.JSONDecodeError:
+                content = ""
+            return {"content": content, "model_used": model_id, "provider": self.name, "success": True, "error": None, "http_status": 200}
         except requests.exceptions.ConnectionError:
             return {"content": "", "model_used": model_id, "provider": self.name, "success": False, "error": "Ollama no disponible — el servidor no está corriendo", "http_status": None}
         except Exception as e: return {"content": "", "model_used": model_id, "provider": self.name, "success": False, "error": str(e), "http_status": None}
@@ -591,7 +871,18 @@ class AnthropicProvider(ModelProvider):
             resp = requests.post(f"{self._base_url}/messages", headers={"x-api-key": self._api_key, "anthropic-version": "2023-06-01", "Content-Type": "application/json"}, json={"model": model_id, "messages": msgs, "system": sys_msg, "max_tokens": max_tokens, "temperature": temperature}, timeout=30)
             if resp.status_code != 200:
                 return self._extract_http_error(resp, model_id, self.name)  # F11: Parsear cuerpo del error
-            return {"content": resp.json().get("content", [{}])[0].get("text", ""), "model_used": model_id, "provider": self.name, "success": True, "error": None, "http_status": 200}
+            # v2.4: Anthropic usa formato diferente: content=[{text: "..."}]
+            content = ""
+            try:
+                data = resp.json()
+                content_block = data.get("content", [{}])
+                if content_block and isinstance(content_block, list) and len(content_block) > 0:
+                    first = content_block[0]
+                    if isinstance(first, dict):
+                        content = first.get("text", "")
+            except (TypeError, IndexError, AttributeError):
+                content = ""
+            return {"content": content, "model_used": model_id, "provider": self.name, "success": True, "error": None, "http_status": 200}
         except Exception as e: return {"content": "", "model_used": model_id, "provider": self.name, "success": False, "error": str(e), "http_status": None}
 
 class OpenAIProvider(ModelProvider):
@@ -638,7 +929,9 @@ class OpenAIProvider(ModelProvider):
             resp = requests.post(f"{self._base_url}/chat/completions", headers={"Authorization": f"Bearer {self._api_key}", "Content-Type": "application/json"}, json={"model": model_id, "messages": messages, "max_tokens": max_tokens, "temperature": temperature}, timeout=30)
             if resp.status_code != 200:
                 return self._extract_http_error(resp, model_id, self.name)  # F11: Parsear cuerpo del error
-            return {"content": resp.json().get("choices", [{}])[0].get("message", {}).get("content", ""), "model_used": model_id, "provider": self.name, "success": True, "error": None, "http_status": 200}
+            # v2.4: _safe_extract_content evita NoneType crash
+            content = self._safe_extract_content(resp.json())
+            return {"content": content, "model_used": model_id, "provider": self.name, "success": True, "error": None, "http_status": 200}
         except Exception as e: return {"content": "", "model_used": model_id, "provider": self.name, "success": False, "error": str(e), "http_status": None}
 
 class ProviderManager:
@@ -897,6 +1190,7 @@ class ProviderManager:
         "anthropic",
         "openai",
         "ollama",
+        "github",   # v2.7 BUG 3 FIX: GitHub Models API usa IDs simples ("gpt-4o", no "openai/gpt-4o")
     }
 
     _AGGREGATOR_PROVIDERS = {

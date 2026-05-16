@@ -1,4 +1,4 @@
-# tools/ensamblador_gui.py — Ensamblador Atómico APA (v3.1)
+# tools/ensamblador_gui.py — Ensamblador Atómico APA (v4.0)
 
 import ast
 import json
@@ -1627,19 +1627,19 @@ class App:
         self.auto_status_lbl.grid(row=0, column=0, sticky="ew", pady=(0,4))
 
         # Lista de tareas (Treeview)
-        columns = ("tarea_id", "script", "anchor", "estado", "intento")
+        columns = ("tarea_id", "script", "modo", "estado", "intento")
         self.auto_plan_tree = ttk.Treeview(
             plan_frame, columns=columns, show="headings", height=8,
             selectmode="browse")
         self.auto_plan_tree.heading("tarea_id", text="ID")
         self.auto_plan_tree.heading("script", text="Script")
-        self.auto_plan_tree.heading("anchor", text="Ancla")
+        self.auto_plan_tree.heading("modo", text="Modo")
         self.auto_plan_tree.heading("estado", text="Estado")
         self.auto_plan_tree.heading("intento", text="Intento")
         self.auto_plan_tree.column("tarea_id", width=50, minwidth=40)
-        self.auto_plan_tree.column("script", width=120, minwidth=80)
-        self.auto_plan_tree.column("anchor", width=130, minwidth=80)
-        self.auto_plan_tree.column("estado", width=90, minwidth=60)
+        self.auto_plan_tree.column("script", width=150, minwidth=80)
+        self.auto_plan_tree.column("modo", width=80, minwidth=60)
+        self.auto_plan_tree.column("estado", width=100, minwidth=60)
         self.auto_plan_tree.column("intento", width=60, minwidth=40)
         self.auto_plan_tree.grid(row=1, column=0, sticky="nsew")
 
@@ -1764,7 +1764,7 @@ class App:
 
         # Ejecutar planificación en hilo separado
         def _plan_in_thread():
-            plan_result = self._auto_agent.plan(
+            plan_result = self._auto_agent.generate_plan(
                 user_prompt=prompt,
                 target_file=target,
                 on_progress=self._auto_on_progress,
@@ -2026,7 +2026,7 @@ class App:
             self.auto_plan_tree.insert("", "end", iid=task.task_id, values=(
                 task.task_id,
                 task.script,
-                task.anchor,
+                "Integrador",  # v3.0: siempre usa Integrador, no anclas
                 status_text,
                 f"{task.attempt}/{task.max_attempts}",
             ))
@@ -2041,7 +2041,7 @@ class App:
                 self.auto_plan_tree.item(task.task_id, values=(
                     task.task_id,
                     task.script,
-                    task.anchor,
+                    "Integrador",  # v3.0
                     status_text,
                     f"{task.attempt}/{task.max_attempts}",
                 ))
@@ -2109,12 +2109,14 @@ class App:
             "planificador": "stage",
             "codificador": "info",
             "ensamblador": "info",
+            "integrador": "info",
+            "validador": "info",
             "ok": "ok",
             "error": "error",
             "warn": "warn",
         }
         display_tag = tag_map.get(tag, "info")
-        prefix = f"[{tag.upper()}] " if tag in ("planificador", "codificador", "ensamblador") else ""
+        prefix = f"[{tag.upper()}] " if tag in ("planificador", "codificador", "ensamblador", "integrador", "validador") else ""
         self.auto_output.insert(tk.END, f"{prefix}{message}\n", display_tag)
         self.auto_output.see(tk.END)
         self.auto_output.config(state="disabled")

@@ -1,7 +1,19 @@
 # apa/agents/semi_auto_agent.py
 """
-SemiAutoAgent — Agente semi-autónomo que orquesta el pipeline
-Planificador → Codificador → Ensamblador usando call_llm().
+SemiAutoAgent v3.0 — Agente semi-autónomo que orquesta el pipeline
+Planificador → Codificador → Integrador usando call_llm().
+
+CAMBIO PRINCIPAL v3.0:
+  Reemplaza el Ensamblador mecánico (anclas, indentación, parseo AST)
+  por un Integrador inteligente (LLM) que recibe:
+  1. El archivo original completo
+  2. La especificación del Planificador
+  3. El código del Codificador
+  Y produce el archivo final integrado.
+
+  El ensamblador mecánico (assembler.py) se mantiene para el Tab 2
+  (Ensamblador Manual) de la GUI, pero el modo semi-autónomo y el
+  modo autónomo de APA usan ahora el Integrador.
 
 Nivel 2 (AS3): Ejecución multi-tarea con retroalimentación paso a paso.
 
@@ -13,7 +25,7 @@ Si una tarea se rechaza, el Director puede dar instrucciones de
 corrección y APA la reintenta (máximo 2 reintentos).
 
 Flujo:
-  IDLE → plan() → PLANNED → execute_next() → EXECUTING → AWAITING_APPROVAL
+  IDLE → generate_plan() → PLANNED → execute_next() → EXECUTING → AWAITING_APPROVAL
        → approve() → PLANNED (siguiente tarea) / COMPLETED (última)
        → reject(feedback) → EXECUTING (reintento) / FAILED (máx reintentos)
 """
@@ -32,24 +44,173 @@ from enum import Enum
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from core.router import call_llm
-from core.assembler import Assembler, PlannerOutputParser
+from core.assembly_validator import AssemblyValidator
 
 logger = logging.getLogger(__name__)
+
+
+# ─── V3PlanParser: Parser sin anclas para el formato v3.0 ───
+
+class V3PlanParser:
+    """Parser del output del Planificador para el pipeline v3.0.
+    
+    A diferencia de PlannerOutputParser (assembler.py), NO requiere el campo
+    ANCLA. El Integrador se encarga de posicionar el código basándose en la
+    descripción textual del Planificador.
+    
+    Formato esperado del Planificador v3.0:
+    ```markdown
+    ## TAREA DE ENSAMBLAJE
+    - SCRIPT: ruta/archivo.py
+    - TAREA_ID: T1
+    - MODO_EJECUCION: local
+    
+    ## BLOQUE
+    # INSTRUCCIÓN PARA CODIFICADOR:
+    # {descripción}
+    
+    ## IMPORTS_NUEVOS
+    {módulo}
+    ```
+    """
+    
+    # Regex para campos escalares (tolerantes a espacios)
+    _RE_SCRIPT   = re.compile(r'(?:-|##)?\s*#?\s*SCRIPT\s*:\s*(.+)', re.IGNORECASE)
+    _RE_TAREA_ID = re.compile(r'(?:-|##)?\s*#?\s*TAREA_?ID\s*:\s*(\S+)', re.IGNORECASE)
+    _RE_MODO     = re.compile(r'(?:-|##)?\s*#?\s*MODO_?EJECUCION\s*:\s*(\S+)', re.IGNORECASE)
+    
+    @classmethod
+    def _parse_imports(cls, text: str) -> list:
+        """Parser robusto de imports desde sección ## IMPORTS_NUEVOS."""
+        imports = []
+        marker = None
+        for line in text.split('\n'):
+            if re.search(r'##\s*IMPORTS_NUEVOS', line, re.IGNORECASE):
+                marker = line
+                break
+        if marker is None:
+            return imports
+        
+        after = text.split(marker, 1)[1]
+        section_lines = []
+        for line in after.split('\n'):
+            if line.strip().startswith('##') and 'IMPORTS' not in line:
+                break
+            section_lines.append(line)
+        
+        for line in section_lines:
+            raw = line.strip()
+            if not raw or raw.startswith('#'):
+                continue
+            if raw.startswith('- '):
+                raw = raw[2:].strip()
+            elif raw.startswith('-'):
+                raw = raw[1:].strip()
+            if not raw:
+                continue
+            if raw.startswith("import ") or raw.startswith("from "):
+                canonical = raw
+            else:
+                clean = raw.strip().rstrip('.,; \t')
+                if not clean or not re.match(r'^[\w][\w\.]*$', clean):
+                    continue
+                canonical = "import " + clean
+            if canonical not in imports:
+                imports.append(canonical)
+        return imports
+    
+    @classmethod
+    def parse_single(cls, text: str) -> dict:
+        """Parsea un bloque individual del Planificador (sin requerir ANCLA)."""
+        result = {
+            "script": "",
+            "tarea_id": "",
+            "modo": "local",
+            "imports_nuevos": [],
+            "errores": [],
+        }
+        
+        # Extraer campos escalares
+        m = cls._RE_SCRIPT.search(text)
+        if m:
+            result["script"] = m.group(1).strip()
+        m = cls._RE_TAREA_ID.search(text)
+        if m:
+            result["tarea_id"] = m.group(1).strip()
+        m = cls._RE_MODO.search(text)
+        if m:
+            modo_raw = m.group(1).strip().lower()
+            result["modo"] = "nas" if "nas" in modo_raw else "local"
+        
+        # Extraer imports
+        result["imports_nuevos"] = cls._parse_imports(text)
+        
+        # Solo requerir SCRIPT (ANCLA ya no es obligatoria en v3.0)
+        if not result["script"]:
+            result["errores"].append("Falta campo SCRIPT.")
+        
+        return result
+    
+    @classmethod
+    def parse_blocks(cls, text: str) -> list:
+        """Extrae múltiples bloques del output del Planificador v3.0.
+        
+        Retorna una lista de dicts, cada uno con:
+        - script, tarea_id, modo, imports_nuevos, bloque_texto (contenido completo)
+        """
+        blocks = []
+        
+        # Estrategia 1: Buscar múltiples ## TAREA DE ENSAMBLAJE
+        task_pattern = re.compile(r'^##\s*TAREA\s*DE\s*ENSAMBLAJE', re.MULTILINE)
+        task_matches = list(task_pattern.finditer(text))
+        
+        if task_matches:
+            for i, match in enumerate(task_matches):
+                start = match.start()
+                end = task_matches[i + 1].start() if i + 1 < len(task_matches) else len(text)
+                task_text = text[start:end]
+                
+                parsed = cls.parse_single(task_text)
+                parsed["bloque_texto"] = task_text.strip()
+                blocks.append(parsed)
+            
+            if blocks:
+                return blocks
+        
+        # Estrategia 2: Un solo bloque (sin encabezado ## TAREA DE ENSAMBLAJE explícito)
+        parsed = cls.parse_single(text)
+        if not parsed["errores"]:
+            parsed["bloque_texto"] = text.strip()
+            blocks.append(parsed)
+            return blocks
+        
+        # Estrategia 3: Intentar extraer SCRIPT al menos
+        # (el Planificador puede responder en un formato ligeramente diferente)
+        m = cls._RE_SCRIPT.search(text)
+        if m:
+            parsed = {
+                "script": m.group(1).strip(),
+                "tarea_id": "T1",
+                "modo": "local",
+                "imports_nuevos": cls._parse_imports(text),
+                "errores": [],
+                "bloque_texto": text.strip(),
+            }
+            blocks.append(parsed)
+            return blocks
+        
+        # No se pudo parsear nada útil
+        return blocks
+
 
 # ─── Helpers de métricas v2.0 ───
 
 def _extract_llm_metadata(response: dict, prefix: str) -> dict:
     """Extrae métricas de una respuesta de call_llm() con un prefijo dado.
     
-    call_llm() ahora retorna: tokens_input, tokens_output, latency_ms,
-    cost_usd, arena_score, provider, model_used, success.
-    
-    El assembler._log_assembly_usage() espera claves como:
-    planning_model, planning_provider, planning_tokens_input, etc.
-    
     Args:
         response: Dict retornado por call_llm()
-        prefix: "planning" o "coding"
+        prefix: "planning", "coding" o "integration"
     
     Returns:
         Dict con claves prefijadas: {prefix}_model, {prefix}_provider, etc.
@@ -66,31 +227,6 @@ def _extract_llm_metadata(response: dict, prefix: str) -> dict:
     }
 
 
-def _build_llm_metadata(planner_metadata: dict, coder_response: dict) -> dict:
-    """Construye el dict llm_metadata completo para assembler.run_full().
-    
-    Combina la metadata del planificador (ya extraída) con la metadata
-    del codificador (recién recibida) en un solo dict que el ensamblador
-    usa para registrar 3 entradas en UsageTracker:
-    1. assembly (proceso local)
-    2. planning (LLM planificador)
-    3. coding (LLM codificador)
-    
-    Args:
-        planner_metadata: Dict de _extract_llm_metadata(planner_response, "planning")
-        coder_response: Dict retornado por call_llm() para el codificador
-    
-    Returns:
-        Dict combinado con claves planning_* y coding_*
-    """
-    coder_metadata = _extract_llm_metadata(coder_response, "coding")
-    metadata = {}
-    metadata.update(planner_metadata)
-    metadata.update(coder_metadata)
-    # Arena score global (del modelo de planning, que es el que seleccionó el router)
-    metadata["arena_score"] = planner_metadata.get("planning_arena_score")
-    return metadata
-
 # ─── Estados del agente ───
 
 class AgentState(Enum):
@@ -98,7 +234,7 @@ class AgentState(Enum):
     IDLE = "idle"
     PLANNING = "planning"
     PLANNED = "planned"            # Plan generado, esperando ejecución
-    EXECUTING = "executing"        # Ejecutando tarea (Codificador + Ensamblador)
+    EXECUTING = "executing"        # Ejecutando tarea (Codificador + Integrador)
     AWAITING_APPROVAL = "awaiting_approval"  # Tarea ejecutada, espera decisión
     COMPLETED = "completed"        # Todas las tareas completadas
     FAILED = "failed"              # Error irrecuperable
@@ -127,7 +263,7 @@ class TaskInfo:
     max_attempts: int = 3          # Máximo de intentos (1 original + 2 reintentos)
     planner_output: str = ""       # Output del Planificador para esta tarea
     coder_output: str = ""         # Output del Codificador para esta tarea
-    assembled_content: str = ""    # Contenido ensamblado resultante
+    assembled_content: str = ""    # Contenido integrado resultante (v3.0: del Integrador)
     validation_result: dict = field(default_factory=dict)
     error: Optional[str] = None
     rejection_feedback: str = ""   # Instrucciones de corrección del Director
@@ -137,20 +273,22 @@ class TaskInfo:
 class SemiAutoResult:
     """Resultado del pipeline semi-autónomo (tarea única).
 
-    v2.0: Incluye métricas completas de las llamadas LLM.
+    v3.0: Incluye métricas completas de las 3 llamadas LLM
+    (planning + coding + integration).
     """
     success: bool = False
     planner_output: str = ""
     coder_output: str = ""
-    assembled_content: str = ""
+    assembled_content: str = ""      # v3.0: Contenido del Integrador
     script_name: str = ""
     task_id: str = ""
     validation_result: dict = field(default_factory=dict)
     error: Optional[str] = None
     model_used_planner: str = ""
     model_used_coder: str = ""
+    model_used_integrator: str = ""  # v3.0: Modelo usado por el Integrador
     log: list = field(default_factory=list)
-    # v2.0: Métricas completas de las llamadas LLM
+    # Métricas de las 3 llamadas LLM
     planning_provider: str = ""
     planning_tokens_input: int = 0
     planning_tokens_output: int = 0
@@ -163,6 +301,13 @@ class SemiAutoResult:
     coding_latency_ms: int = 0
     coding_cost_usd: float = 0.0
     coding_arena_score: Optional[float] = None
+    # v3.0: Métricas del Integrador
+    integration_provider: str = ""
+    integration_tokens_input: int = 0
+    integration_tokens_output: int = 0
+    integration_latency_ms: int = 0
+    integration_cost_usd: float = 0.0
+    integration_arena_score: Optional[float] = None
 
 
 @dataclass
@@ -176,9 +321,9 @@ class PlanResult:
     log: list = field(default_factory=list)
 
 
-# ─── System Prompts (de Prompts_Iniciales_Agentes.md) ───
+# ─── System Prompts ───
 
-PLANIFICADOR_SYSTEM_PROMPT = """Eres un Ingeniero de Software Senior. Tu rol es el de Agente Planificador de Ensamblaje Atómico del proyecto APA.
+PLANIFICADOR_SYSTEM_PROMPT = """Eres un Ingeniero de Software Senior. Tu rol es el de Agente Planificador del proyecto APA.
 
 ## FORMATO DE SALIDA
 
@@ -189,14 +334,12 @@ Plantilla para UNA tarea:
 ## TAREA DE ENSAMBLAJE
 - SCRIPT: {ruta/archivo.py}
 - TAREA_ID: {ID}
-- ANCLA: {ANCLA_AST}
 - MODO_EJECUCION: {local | nas}
 
 ## BLOQUE
 
 # INSTRUCCIÓN PARA CODIFICADOR:
-# {descripción técnica}
-# INDENTACIÓN: {0 | 4 | 8}
+# {descripción técnica precisa y específica}
 # DATOS ESPECÍFICOS:
 # {contexto de estructuras existentes si aplica}
 
@@ -212,25 +355,14 @@ Para múltiples tareas, repite el bloque ## TAREA DE ENSAMBLAJE separado por ---
 
 ## REGLAS CRÍTICAS
 
-1. **UN ANCLA = UNA OPERACIÓN**: Cada tarea tiene su propia ancla.
+1. **ESPECIFICACIÓN QUIRÚRGICA**: Describe exactamente qué hay que hacer. Indica nombre exacto de la clase/método donde se inserta, nombre del método anterior/posterior, y si es un método nuevo o reemplazo.
 2. **SEPARACIÓN DE ROLES**: El BLOQUE contiene SOLO comentarios de instrucción. NUNCA código ejecutable.
-3. **DATOS ESPECÍFICOS OBLIGATORIOS**: Cuando la tarea implique estructura EXISTENTE, indica qué existe en esa posición.
+3. **DATOS ESPECÍFICOS OBLIGATORIOS**: Cuando la tarea implique estructura EXISTENTE, indica qué existe en esa posición. Nombra las funciones/métodos/classes que ya están.
 4. **REGLA ANTI-ERROR IMPORTS**: Tarea solo imports → BLOQUE VACÍO.
 5. **APIs EXTERNAS**: Especificar SIEMPRE la firma completa.
 
-## ANCLAS DISPONIBLES
-
-INICIO_ARCHIVO | FIN_ARCHIVO | FIN_CLASE:Nombre | INICIO_CLASE:Nombre
-ANTES_FUNCION:nombre | DESPUES_FUNCION:nombre | REEMPLAZAR_FUNCION:nombre
-ANTES_CLASE:Nombre | DESPUES_METODO:Clase.metodo | REEMPLAZAR_METODO:Clase.met
-FIN_IMPORTS | INSERTAR_ANTES_MAIN | REEMPLAZAR_BLOQUE_MAIN | ARCHIVO_NUEVO
-
-## REGLA DE ELECCIÓN
-
-- Archivo nuevo → ARCHIVO_NUEVO
-- Añadir algo nuevo → ANTES_FUNCION, DESPUES_FUNCION, FIN_CLASE
-- Modificar existente → REEMPLAZAR_FUNCION, REEMPLAZAR_METODO
-- Solo imports → IMPORTS_NUEVOS (BLOQUE vacío)
+## NOTA
+Ya no necesitas especificar ANCLAS AST. El Integrador se encarga de colocar el código en la posición correcta basándose en tu descripción. Simplemente describe con precisión dónde va el cambio.
 """
 
 CODIFICADOR_SYSTEM_PROMPT = """Eres un Ingeniero de Software Senior. Tu rol es el de Agente Codificador de Script Atómico del proyecto APA.
@@ -248,7 +380,7 @@ Antes de escribir, respóndete internamente:
 
 ## REGLAS DE FORMATO INTERNO
 1. Primera línea SIEMPRE: # {ruta/archivo.py}
-2. Indentación: aplica INDENTACIÓN: X espacios si se especifica.
+2. Indentación: aplica la indentación que corresponda según el contexto.
 3. Bloques completos: si piden reescribir, entrega la unidad completa.
 4. Imports: implementar CORRECTAMENTE según IMPORTS_NUEVOS recibido.
 5. Ignora comentarios # INSTRUCCIÓN... del prompt. Tu respuesta es solo código ejecutable.
@@ -262,6 +394,72 @@ Al final de TODO código, incluir exactamente:
 if __name__ == "__main__":
     # === VALIDACIÓN TAREA: {ID} ===
     [Tests ejecutables que cubran CADA criterio de la sección VALIDACIÓN]
+"""
+
+# Prompt del Integrador (importado de prompts/integrador_prompt.py)
+# Se carga perezosamente para evitar imports circulares
+_INTEGRADOR_PROMPTS = None
+
+def _get_integrador_prompts():
+    """Carga perezosa de los prompts del Integrador."""
+    global _INTEGRADOR_PROMPTS
+    if _INTEGRADOR_PROMPTS is None:
+        try:
+            from prompts.integrador_prompt import (
+                INTEGRADOR_SYSTEM_PROMPT,
+                INTEGRADOR_USER_PROMPT_TEMPLATE,
+                INTEGRADOR_CORRECCION_ADDENDUM,
+            )
+            _INTEGRADOR_PROMPTS = {
+                "system": INTEGRADOR_SYSTEM_PROMPT,
+                "user_template": INTEGRADOR_USER_PROMPT_TEMPLATE,
+                "correction_addendum": INTEGRADOR_CORRECCION_ADDENDUM,
+            }
+        except ImportError:
+            # Fallback si no se encuentra el módulo de prompts
+            _INTEGRADOR_PROMPTS = {
+                "system": _DEFAULT_INTEGRADOR_SYSTEM_PROMPT,
+                "user_template": _DEFAULT_INTEGRADOR_USER_TEMPLATE,
+                "correction_addendum": "",
+            }
+    return _INTEGRADOR_PROMPTS
+
+# Fallback embebido
+_DEFAULT_INTEGRADOR_SYSTEM_PROMPT = """Eres un Ingeniero de Software Senior. Tu rol es el de Agente Integrador del proyecto APA.
+
+Recibes:
+1. El contenido ORIGINAL de un archivo Python
+2. La ESPECIFICACIÓN de cambio del Planificador
+3. El CÓDIGO NUEVO del Codificador
+
+Debes producir el archivo FINAL completo: el original con el código nuevo integrado correctamente.
+
+REGLAS CRÍTICAS:
+1. ENTREGA el archivo COMPLETO. Nunca fragmentos.
+2. INTEGRA, no reemplaces. Fusiona el código nuevo con el existente.
+3. SI el Codificador generó una clase completa pero solo se necesitaba un método, extrae el método e insértalo donde corresponde. NO dupliques la clase.
+4. SI el código nuevo necesita imports, añádelos al bloque de imports existente.
+5. SI el código nuevo colisiona con algo existente, reemplaza la versión antigua por la nueva.
+6. MANTIENE el estilo del archivo original.
+7. NO re-planifiques. Solo integra.
+
+Formato: UN ÚNICO bloque ```python``` con el archivo completo. Primera línea: # {ruta/archivo.py}
+"""
+
+_DEFAULT_INTEGRADOR_USER_TEMPLATE = """## ARCHIVO ORIGINAL ({script_name}):
+```python
+{original_content}
+```
+
+## ESPECIFICACIÓN DE CAMBIO (del Planificador):
+{planner_specification}
+
+## CÓDIGO NUEVO DEL CODIFICADOR:
+```python
+{coder_code}
+```
+
+Integra el código nuevo en el archivo original según la especificación. Entrega el archivo completo. Primera línea: # {script_name}
 """
 
 # Prompt extra para cuando el Director corrige una tarea rechazada
@@ -279,7 +477,12 @@ pero aplica los cambios solicitados. No repitas los mismos errores.
 class SemiAutoAgent:
     """
     Agente semi-autónomo que orquesta el pipeline completo:
-    Prompt → Planificador (LLM) → Codificador (LLM) → Ensamblador
+    Prompt → Planificador (LLM) → Codificador (LLM) → Integrador (LLM) → Validación
+    
+    v3.0: El Ensamblador mecánico ha sido reemplazado por el Integrador (LLM).
+    El Integrador recibe el archivo original + especificación + código nuevo
+    y produce el archivo final integrado, evitando los problemas de anclas
+    e indentación del ensamblador mecánico.
     
     Nivel 2 (AS3): Ejecución multi-tarea con retroalimentación paso a paso.
     """
@@ -293,8 +496,8 @@ class SemiAutoAgent:
             project_id: ID del proyecto para tracking de métricas en UsageTracker.
         """
         self.project_root = project_root
-        self._project_id = project_id  # v2.0: Para tracking de métricas
-        self.assembler = Assembler()
+        self._project_id = project_id
+        self._validator = AssemblyValidator()  # v3.0: Validador independiente
         self._cancelled = False
         
         # Estado de la máquina de estados
@@ -305,7 +508,7 @@ class SemiAutoAgent:
         self._original_contents: Dict[str, str] = {}  # script → contenido original
         self._log: List[str] = []
         self._model_used_planner = ""
-        # v2.0: Metadata de la última llamada al planificador (para pasar al ensamblador)
+        # v3.0: Metadata de las llamadas LLM (planning)
         self._planner_llm_metadata: Dict[str, Any] = {}
 
     # ─── Propiedades ───
@@ -360,7 +563,7 @@ class SemiAutoAgent:
 
     # ─── Fase 1: Planificación ───
 
-    def plan(
+    def generate_plan(
         self,
         user_prompt: str,
         target_file: str = "",
@@ -394,7 +597,6 @@ class SemiAutoAgent:
         try:
             self._report(on_progress, "planificador", "Consultando Planificador...")
             
-            # Construir prompt del Planificador
             # Obtener contenido del archivo objetivo si existe
             existing_content = ""
             if target_file and self.project_root:
@@ -436,7 +638,7 @@ class SemiAutoAgent:
             result.model_used = planner_response.get("model_used", "")
             self._model_used_planner = result.model_used
             self._raw_planner_output = planner_output
-            # v2.0: Guardar metadata del planificador para pasar al ensamblador
+            # v3.0: Guardar metadata del planificador
             self._planner_llm_metadata = _extract_llm_metadata(planner_response, "planning")
             result.log = self._log.copy()
             self._log.append(f"[PLANIFICADOR] OK — modelo: {result.model_used}, intentos: {planner_response.get('attempts', '?')}")
@@ -447,37 +649,42 @@ class SemiAutoAgent:
                 result.error = "Cancelado por el usuario"
                 return result
 
-            # Parsear output del Planificador en tareas
+            # Parsear output del Planificador en tareas (v3.0: usa V3PlanParser, sin anclas)
             self._log.append(f"[PLANIFICADOR] Parseando output ({len(planner_output)} chars)...")
             self._report(on_progress, "planificador", "Parseando plan...")
-            blocks_data = PlannerOutputParser._parse_blocks(planner_output)
+            blocks_data = V3PlanParser.parse_blocks(planner_output)
             
             if not blocks_data:
-                # Intentar parseo simple (tarea única sin formato de bloques)
-                self._log.append("[PLANIFICADOR] Sin bloques multi-tarea — intentando parseo simple...")
-                parsed = PlannerOutputParser.parse(planner_output)
-                if parsed.get("errores"):
-                    result.error = f"Error de parseo: {'; '.join(parsed['errores'])}"
+                result.error = "Error de parseo: No se pudo extraer ninguna tarea del output del Planificador."
+                self._log.append(f"[PLANIFICADOR] ERROR parseo: sin bloques detectados")
+                self._state = AgentState.FAILED
+                return result
+            
+            # Verificar errores de parseo
+            parse_errors = []
+            for bd in blocks_data:
+                for err in bd.get("errores", []):
+                    parse_errors.append(err)
+            if parse_errors:
+                # Si solo faltan anclas, no es error en v3.0
+                non_anchor_errors = [e for e in parse_errors if "ANCLA" not in e.upper()]
+                if non_anchor_errors:
+                    result.error = f"Error de parseo: {'; '.join(non_anchor_errors)}"
                     self._log.append(f"[PLANIFICADOR] ERROR parseo: {result.error}")
                     self._state = AgentState.FAILED
                     return result
-                blocks_data = [{
-                    "script": parsed.get("script", target_file),
-                    "tarea_id": parsed.get("tarea_id", "T1"),
-                    "anchor": parsed.get("ancla_raw", "FIN_ARCHIVO"),
-                }]
             
             # Crear TaskInfo para cada bloque
             for bd in blocks_data:
                 task = TaskInfo(
                     task_id=bd.get("tarea_id", f"T{len(self._plan)+1}"),
                     script=bd.get("script", target_file),
-                    anchor=bd.get("anchor", "FIN_ARCHIVO"),
-                    planner_output=self._extract_task_block(planner_output, bd.get("tarea_id", "")),
+                    anchor="",  # v3.0: Ya no se usan anclas
+                    planner_output=bd.get("bloque_texto", self._extract_task_block(planner_output, bd.get("tarea_id", ""))),
                     status=TaskStatus.PENDING,
                 )
                 self._plan.append(task)
-                self._log.append(f"[PLANIFICADOR] Tarea planificada: {task.task_id} → {task.script} @ {task.anchor}")
+                self._log.append(f"[PLANIFICADOR] Tarea planificada: {task.task_id} → {task.script}")
             
             result.tasks = self._plan
             result.success = True
@@ -491,7 +698,7 @@ class SemiAutoAgent:
         except Exception as e:
             result.error = f"Error inesperado en planificación: {e}"
             self._log.append(f"EXCEPCIÓN: {e}")
-            logger.error(f"SemiAutoAgent.plan error: {e}", exc_info=True)
+            logger.error(f"SemiAutoAgent.generate_plan error: {e}", exc_info=True)
             self._state = AgentState.FAILED
             return result
 
@@ -566,7 +773,7 @@ class SemiAutoAgent:
                     # No cambiamos a FAILED global — las demás tareas pueden seguir
                     self._state = AgentState.PLANNED
                 else:
-                    # Reintento automático si es error de sintaxis (P4 del asesor)
+                    # Reintento automático si es error de sintaxis
                     val = result.validation_result or {}
                     is_syntax_error = (
                         val.get("returncode", -1) != 0 and
@@ -610,7 +817,7 @@ class SemiAutoAgent:
         if not task:
             return False
         
-        # Guardar el contenido ensamblado en disco
+        # Guardar el contenido integrado en disco
         if task.script and task.assembled_content and self.project_root:
             file_path = self._resolve_file(task.script)
             if file_path:
@@ -707,7 +914,12 @@ class SemiAutoAgent:
         task: TaskInfo,
         on_progress: Optional[Callable[[str, str], None]] = None,
     ) -> SemiAutoResult:
-        """Ejecuta una tarea individual: Codificador → Ensamblador."""
+        """Ejecuta una tarea individual: Codificador → Integrador → Validación.
+        
+        v3.0: Reemplaza el Ensamblador mecánico por el Integrador (LLM).
+        El Integrador recibe el archivo original, la especificación y el código
+        del Codificador, y produce el archivo final integrado.
+        """
         result = SemiAutoResult()
         result.task_id = task.task_id
         result.script_name = task.script
@@ -750,7 +962,7 @@ class SemiAutoAgent:
             coder_output = coder_response["content"]
             result.coder_output = coder_output
             result.model_used_coder = coder_response.get("model_used", "")
-            # v2.0: Métricas del codificador
+            # Métricas del codificador
             result.coding_provider = coder_response.get("provider", "")
             result.coding_tokens_input = coder_response.get("tokens_input", 0)
             result.coding_tokens_output = coder_response.get("tokens_output", 0)
@@ -764,52 +976,83 @@ class SemiAutoAgent:
                 result.error = "Cancelado por el usuario"
                 return result
 
-            self._report(on_progress, "codificador", "Código generado, ensamblando...")
+            # ─── ETAPA 3: Integrar (v3.0: reemplaza al Ensamblador mecánico) ───
+            self._report(on_progress, "integrador", 
+                         f"Integrando {task.task_id}...")
+            self._log.append(f"[INTEGRADOR] {task.task_id} — Integrando código en {task.script}...")
 
-            # ─── ETAPA 3: Ensamblar ───
-            self._report(on_progress, "ensamblador", 
-                         f"Ensamblando {task.task_id}...")
-            self._log.append(f"[ENSAMBLADOR] {task.task_id} — Ensamblando código en {task.script}...")
-
-            # v2.0: Construir llm_metadata con métricas de planning + coding
-            coder_llm_metadata = _build_llm_metadata(
-                planner_metadata=self._planner_llm_metadata,
-                coder_response=coder_response,
-            )
-
-            assembly_result = self.assembler.run_full(
-                planner_text=task.planner_output,
-                coder_text=coder_output,
-                original_content=original_content,
+            integrator_prompts = _get_integrador_prompts()
+            integrator_user_prompt = integrator_prompts["user_template"].format(
                 script_name=task.script,
-                duplicate_action="replace",
-                validation_override="new",
-                project_id=self._project_id,
-                llm_metadata=coder_llm_metadata,
+                original_content=original_content if original_content else "# (archivo nuevo)",
+                planner_specification=task.planner_output,
+                coder_code=self._extract_python_code(coder_output),
             )
 
-            result.assembled_content = assembly_result.assembled_content
-            result.validation_result = assembly_result.validation_result
-            result.success = assembly_result.success
-            result.planner_output = task.planner_output
-            self._log.append(f"[ENSAMBLADOR] {task.task_id} — {'OK' if assembly_result.success else 'CON ERRORES'}")
-            
-            # Log de validación
-            val = result.validation_result or {}
-            val_rc = val.get("returncode", -1)
+            # Si es un reintento, añadir contexto de corrección
+            integrator_system = integrator_prompts["system"]
+            if task.attempt > 1 and task.rejection_feedback:
+                integrator_system += integrator_prompts["correction_addendum"].format(
+                    feedback=task.rejection_feedback
+                )
+
+            integrator_response = call_llm(
+                task_type="integration",
+                system_prompt=integrator_system,
+                user_prompt=integrator_user_prompt,
+                max_tokens=8000,  # El integrador devuelve el archivo completo
+                temperature=0.1,
+                project_id=self._project_id,
+            )
+
+            if not integrator_response.get("success"):
+                result.error = f"Error del Integrador (modelo: {integrator_response.get('model_used','?')}): {integrator_response.get('error', 'sin respuesta')}"
+                self._log.append(f"[INTEGRADOR] ERROR: {result.error}")
+                self._report(on_progress, "integrador", f"Error: {integrator_response.get('error', 'sin respuesta')}")
+                return result
+
+            integrated_content = self._extract_python_code(integrator_response["content"])
+            result.assembled_content = integrated_content
+            result.model_used_integrator = integrator_response.get("model_used", "")
+            # Métricas del integrador
+            result.integration_provider = integrator_response.get("provider", "")
+            result.integration_tokens_input = integrator_response.get("tokens_input", 0)
+            result.integration_tokens_output = integrator_response.get("tokens_output", 0)
+            result.integration_latency_ms = integrator_response.get("latency_ms", 0)
+            result.integration_cost_usd = integrator_response.get("cost_usd", 0.0)
+            result.integration_arena_score = integrator_response.get("arena_score")
+
+            self._log.append(f"[INTEGRADOR] OK — modelo: {result.model_used_integrator}")
+            self._report(on_progress, "integrador", f"Código integrado (modelo: {result.model_used_integrator})")
+
+            # ─── ETAPA 4: Validar ───
+            self._report(on_progress, "validador", "Validando código integrado...")
+            self._log.append(f"[VALIDADOR] {task.task_id} — Validando...")
+
+            validation_result = AssemblyValidator.validate(
+                content=integrated_content,
+                script_path=task.script,
+                validation_mode="auto",
+            )
+            result.validation_result = validation_result
+
+            val_rc = validation_result.get("returncode", -1)
             if val_rc == 0:
-                self._log.append(f"[ENSAMBLADOR] Validación OK (sin errores de sintaxis)")
+                self._log.append(f"[VALIDADOR] Validación OK")
+                result.success = True
             else:
-                val_out = val.get("output", "")[:200]
-                self._log.append(f"[ENSAMBLADOR] Validación: returncode={val_rc}, output: {val_out}")
+                val_out = validation_result.get("output", "")[:300]
+                self._log.append(f"[VALIDADOR] Validación FALLIDA: {val_out}")
+                # v3.0: Si la validación falla, marcamos como no exitoso
+                # pero aún entregamos el contenido para que el Director decida
+                result.success = False
+                result.error = f"Validación fallida: {val_out}"
 
-            if hasattr(assembly_result, 'log') and assembly_result.log:
-                result.log = assembly_result.log
-
+            result.planner_output = task.planner_output
             self._report(
                 on_progress,
-                "ensamblador",
-                "Ensamblaje completado" if assembly_result.success else "Ensamblaje con errores"
+                "integrador",
+                "Integración completada" if result.success else "Integración con errores de validación"
             )
 
             return result
@@ -832,8 +1075,8 @@ class SemiAutoAgent:
         """
         Ejecuta el pipeline semi-autónomo completo (tarea única).
         
-        Método de compatibilidad que combina plan() + execute_next()
-        en una sola llamada. Para multi-tarea, usar plan() + execute_next().
+        Método de compatibilidad que combina generate_plan() + execute_next()
+        en una sola llamada. Para multi-tarea, usar generate_plan() + execute_next().
         """
         self._cancelled = False
         result = SemiAutoResult()
@@ -864,14 +1107,14 @@ class SemiAutoAgent:
             planner_output = planner_response["content"]
             result.planner_output = planner_output
             result.model_used_planner = planner_response.get("model_used", "")
-            # v2.0: Métricas del planificador
+            # Métricas del planificador
             result.planning_provider = planner_response.get("provider", "")
             result.planning_tokens_input = planner_response.get("tokens_input", 0)
             result.planning_tokens_output = planner_response.get("tokens_output", 0)
             result.planning_latency_ms = planner_response.get("latency_ms", 0)
             result.planning_cost_usd = planner_response.get("cost_usd", 0.0)
             result.planning_arena_score = planner_response.get("arena_score")
-            # v2.0: Guardar metadata del planificador para pasar al ensamblador
+            # Guardar metadata del planificador
             planner_llm_metadata = _extract_llm_metadata(planner_response, "planning")
             result.log.append(f"Planificador OK (modelo: {result.model_used_planner})")
 
@@ -879,10 +1122,11 @@ class SemiAutoAgent:
                 result.error = "Cancelado por el usuario"
                 return result
 
-            # ─── ETAPA 1.5: Parsear output del Planificador ───
-            parsed = PlannerOutputParser.parse(planner_output)
-            if parsed.get("errores"):
-                result.error = f"Error de parseo del Planificador: {'; '.join(parsed['errores'])}"
+            # ─── ETAPA 1.5: Parsear output del Planificador (v3.0: sin anclas) ───
+            parsed = V3PlanParser.parse_single(planner_output)
+            non_anchor_errors = [e for e in parsed.get("errores", []) if "ANCLA" not in e.upper()]
+            if non_anchor_errors:
+                result.error = f"Error de parseo del Planificador: {'; '.join(non_anchor_errors)}"
                 result.log.append(f"ERROR parseo: {result.error}")
                 return result
 
@@ -925,7 +1169,7 @@ class SemiAutoAgent:
             coder_output = coder_response["content"]
             result.coder_output = coder_output
             result.model_used_coder = coder_response.get("model_used", "")
-            # v2.0: Métricas del codificador
+            # Métricas del codificador
             result.coding_provider = coder_response.get("provider", "")
             result.coding_tokens_input = coder_response.get("tokens_input", 0)
             result.coding_tokens_output = coder_response.get("tokens_output", 0)
@@ -938,106 +1182,63 @@ class SemiAutoAgent:
                 result.error = "Cancelado por el usuario"
                 return result
 
-            self._report(on_progress, "codificador", "Código generado, ensamblando...")
+            # ─── ETAPA 3: Integrar (v3.0) ───
+            self._report(on_progress, "integrador", "Integrando código...")
 
-            # ─── ETAPA 3: Ensamblar ───
-            self._report(on_progress, "ensamblador", "Ensamblando código...")
-
-            # v2.0: Construir llm_metadata con métricas de planning + coding
-            run_llm_metadata = _build_llm_metadata(
-                planner_metadata=planner_llm_metadata,
-                coder_response=coder_response,
-            )
-
-            assembly_result = self.assembler.run_full(
-                planner_text=planner_output,
-                coder_text=coder_output,
-                original_content=original_content,
+            integrator_prompts = _get_integrador_prompts()
+            integrator_user_prompt = integrator_prompts["user_template"].format(
                 script_name=target_file,
-                duplicate_action="replace",
-                validation_override="new",
+                original_content=original_content if original_content else "# (archivo nuevo)",
+                planner_specification=planner_output,
+                coder_code=self._extract_python_code(coder_output),
+            )
+
+            integrator_response = call_llm(
+                task_type="integration",
+                system_prompt=integrator_prompts["system"],
+                user_prompt=integrator_user_prompt,
+                max_tokens=8000,
+                temperature=0.1,
                 project_id=self._project_id,
-                llm_metadata=run_llm_metadata,
             )
 
-            result.assembled_content = assembly_result.assembled_content
-            result.validation_result = assembly_result.validation_result
-            result.success = assembly_result.success
-            result.log.append(f"Ensamblaje {'OK' if assembly_result.success else 'CON ERRORES'}")
+            if not integrator_response.get("success"):
+                result.error = f"Error del Integrador: {integrator_response.get('error', 'sin respuesta')}"
+                result.log.append(f"ERROR Integrador: {result.error}")
+                return result
 
-            if hasattr(assembly_result, 'log') and assembly_result.log:
-                result.log.extend(assembly_result.log)
+            integrated_content = self._extract_python_code(integrator_response["content"])
+            result.assembled_content = integrated_content
+            result.model_used_integrator = integrator_response.get("model_used", "")
+            # Métricas del integrador
+            result.integration_provider = integrator_response.get("provider", "")
+            result.integration_tokens_input = integrator_response.get("tokens_input", 0)
+            result.integration_tokens_output = integrator_response.get("tokens_output", 0)
+            result.integration_latency_ms = integrator_response.get("latency_ms", 0)
+            result.integration_cost_usd = integrator_response.get("cost_usd", 0.0)
+            result.integration_arena_score = integrator_response.get("arena_score")
+            result.log.append(f"Integrador OK (modelo: {result.model_used_integrator})")
 
-            self._report(
-                on_progress,
-                "ensamblador",
-                "Ensamblaje completado" if assembly_result.success else "Ensamblaje con errores"
+            # ─── ETAPA 4: Validar ───
+            self._report(on_progress, "validador", "Validando...")
+
+            validation_result = AssemblyValidator.validate(
+                content=integrated_content,
+                script_path=target_file,
+                validation_mode="auto",
             )
+            result.validation_result = validation_result
+            result.success = validation_result.get("returncode", -1) == 0
+
+            result.log.append(f"Validación: {'OK' if result.success else 'CON ERRORES'}")
 
             return result
 
         except Exception as e:
             result.error = f"Error inesperado: {e}"
             result.log.append(f"EXCEPCIÓN: {e}")
-            logger.error(f"SemiAutoAgent error: {e}", exc_info=True)
+            logger.error(f"SemiAutoAgent.run error: {e}", exc_info=True)
             return result
-
-    def run_multi_task(
-        self,
-        user_prompt: str,
-        target_file: str = "",
-        original_content: str = "",
-        on_progress: Optional[Callable[[str, str], None]] = None,
-    ) -> List[SemiAutoResult]:
-        """
-        Ejecuta el pipeline para tareas múltiples.
-        El Planificador puede generar múltiples TAREA DE ENSAMBLAJE,
-        y se ejecutan secuencialmente.
-        
-        Nota: Para control paso a paso desde la GUI, usar plan() + execute_next().
-        Este método ejecuta todo de forma automática sin intervención.
-        """
-        plan_result = self.plan(user_prompt, target_file, on_progress)
-        if not plan_result.success:
-            result = SemiAutoResult(success=False, error=plan_result.error)
-            return [result]
-        
-        results = []
-        while self.state == AgentState.PLANNED:
-            # Ejecutar siguiente tarea (síncrono para este método)
-            task = None
-            for t in self._plan:
-                if t.status == TaskStatus.PENDING:
-                    task = t
-                    break
-            if not task:
-                break
-            
-            single_result = self._execute_single_task(task, on_progress)
-            results.append(single_result)
-            
-            if single_result.success:
-                # Auto-aprobar (este método es sin intervención)
-                task.status = TaskStatus.APPROVED
-                task.assembled_content = single_result.assembled_content
-                task.coder_output = single_result.coder_output
-                task.validation_result = single_result.validation_result
-                # Guardar en disco
-                if task.script and task.assembled_content and self.project_root:
-                    file_path = self._resolve_file(task.script)
-                    if file_path:
-                        os.makedirs(os.path.dirname(file_path) if os.path.dirname(file_path) else ".", exist_ok=True)
-                        with open(file_path, 'w', encoding='utf-8') as f:
-                            f.write(task.assembled_content)
-                        self._original_contents[task.script] = task.assembled_content
-                self._log.append(f"Tarea {task.task_id} auto-aprobada")
-            else:
-                task.status = TaskStatus.FAILED
-                task.error = single_result.error
-                self._log.append(f"Tarea {task.task_id} falló: {single_result.error}")
-        
-        self._state = AgentState.COMPLETED
-        return results
 
     # ─── Helpers ───
 
@@ -1047,16 +1248,19 @@ class SemiAutoAgent:
         target_file: str,
         existing_content: str,
     ) -> str:
-        """Construye el prompt de usuario para el Planificador."""
+        """Construye el prompt de usuario para el Planificador.
+        
+        v3.0: Aumenta max_content a 8000 para que el Planificador tenga
+        más contexto del archivo y pueda generar especificaciones más precisas.
+        """
         prompt_parts = [f"INSTRUCCIÓN DEL DIRECTOR:\n{user_instruction}"]
 
         if target_file:
             prompt_parts.append(f"\nSCRIPT OBJETIVO: {target_file}")
 
         if existing_content:
-            # Incluir estructura del archivo existente para contexto
-            # Limitar tamaño para no exceder tokens del modelo
-            max_content = 4000
+            # v3.0: Aumentar límite de 4000 a 8000 para mejor contexto
+            max_content = 8000
             content_to_include = existing_content
             if len(content_to_include) > max_content:
                 content_to_include = content_to_include[:max_content] + "\n# ... (truncado)"
@@ -1064,7 +1268,7 @@ class SemiAutoAgent:
 
         # Si es un archivo nuevo, indicarlo
         if not existing_content and target_file:
-            prompt_parts.append("\nNOTA: Este es un ARCHIVO NUEVO. Usa ANCLA: ARCHIVO_NUEVO.")
+            prompt_parts.append("\nNOTA: Este es un ARCHIVO NUEVO.")
 
         return "\n".join(prompt_parts)
 
@@ -1074,12 +1278,16 @@ class SemiAutoAgent:
         existing_content: str,
         correction_feedback: str = "",
     ) -> str:
-        """Construye el prompt de usuario para el Codificador."""
+        """Construye el prompt de usuario para el Codificador.
+        
+        v3.0: Aumenta max_content a 6000 para que el Codificador tenga
+        más contexto del archivo existente.
+        """
         prompt_parts = [planner_output]
 
         if existing_content:
-            # Incluir contexto del archivo existente (truncado)
-            max_content = 3000
+            # v3.0: Aumentar límite de 3000 a 6000
+            max_content = 6000
             content_to_include = existing_content
             if len(content_to_include) > max_content:
                 content_to_include = content_to_include[:max_content] + "\n# ... (truncado)"
@@ -1097,6 +1305,27 @@ class SemiAutoAgent:
             )
 
         return "\n".join(prompt_parts)
+
+    def _extract_python_code(self, llm_output: str) -> str:
+        """Extrae el código Python de la respuesta del LLM.
+        
+        El Codificador y el Integrador devuelven código envuelto en
+        ```python ... ```. Este método extrae solo el código.
+        """
+        # Intentar extraer bloque ```python ... ```
+        pattern = r'```python\s*\n(.*?)```'
+        match = re.search(pattern, llm_output, re.DOTALL)
+        if match:
+            return match.group(1).strip()
+        
+        # Intentar bloque genérico ``` ... ```
+        pattern = r'```\s*\n(.*?)```'
+        match = re.search(pattern, llm_output, re.DOTALL)
+        if match:
+            return match.group(1).strip()
+        
+        # Si no hay bloques, devolver tal cual
+        return llm_output.strip()
 
     def _extract_task_block(self, planner_output: str, task_id: str) -> str:
         """Extrae el bloque del Planificador correspondiente a una tarea específica."""

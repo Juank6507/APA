@@ -1,4 +1,53 @@
 # apa/core/router.py
+# v5.7 — CRITICAL FIX: free-first selection for unknown models (D-1b/D-2b).
+#         select_model_entry() PASO 2 ahora usa free_first=True para
+#         preferir modelos gratuitos (GitHub, Groq, OpenRouter) sobre
+#         modelos de pago (Anthropic, OpenAI) cuando no hay verified models.
+#         Esto resuelve el bug donde modelos de pago sin crédito con Arena
+#         scores altos (90+) siempre ganan sobre modelos gratuitos funcionales.
+#
+#         También: call_llm() payment discovery mejorado — payment errors
+#         NO consumen intentos reales, cascade de mark_provider_paid_models()
+#         confirmado con logging explícito.
+#
+# CAMBIOS v5.7 vs v5.6:
+#   - select_model_entry() PASO 2: get_ranked_entries(free_first=True)
+#     Modelos is_free=True se intentan ANTES que is_free=False cuando
+#     no hay modelos verificados. Esto es D-1b/D-2b: heurística práctica
+#     para modelos unknown (si no sabemos si funciona, probar gratis primero).
+#   - call_llm(): payment errors se loguean como "payment error (no cuenta)"
+#     y el continue se ejecuta ANTES de incrementar real_attempt.
+#     Se añade logging defensivo para verificar que el cascade funciona.
+#   - _sync_health_after_call(): logging mejorado del cascade.
+#
+# v5.6 — _sync_health_after_call(): mark_provider_paid_models() cascade
+#         when payment error detected (no more wasting attempts on paid models
+#         from providers without credit).
+#         OpenAI gpt-audio filtered via _is_chat_model() in providers v2.8.
+#
+# CAMBIOS v5.6 vs v5.5:
+#   - _sync_health_after_call(): payment error → mark_provider_paid_models()
+#     cascade. Cuando un modelo de pago falla por crédito, TODOS los modelos
+#     de pago del mismo provider se marcan como payment_required inmediatamente.
+#     Antes solo se marcaba el modelo individual, desperdiciando intentos en
+#     otros modelos de pago del mismo provider que también fallarían.
+#
+# v5.5 — empty_response → mark_failed (permanente), provider rate_limit cooldown,
+#         _classify_error fix: payment ANTES de rate_limit (v4.1 sync).
+#
+# CAMBIOS v5.5 vs v5.4:
+#   - _sync_health_after_call(): empty_response → mark_failed (permanente).
+#     Modelos que retornan HTTP 200 sin contenido están rotos y no
+#     funcionarán en reintentos. Antes caían a 'temporarily_unavailable'.
+#   - _sync_health_after_call(): usa model_health._classify_error() de v4.1
+#     que ahora clasifica 429+insufficient_quota como 'payment' (no rate_limit).
+#   - _sync_health_after_call(): después de N rate_limits consecutivos de
+#     un mismo provider (en modelos free), llama mark_provider_rate_limited()
+#     para cooldown de 120s. Evita desperdiciar intentos en provider saturado.
+#   - select_model_entry(): añade lógica de provider diversity — si los
+#     últimos 3 intentos fueron del mismo provider y fallaron con rate_limit,
+#     saltar al siguiente provider diferente.
+#
 # v5.4 — Fixes E2E real: populate_pool espera Arena data (F1),
 #         retry rota modelos (F3), update_arena_scores() (F4),
 #         provider null-coalescing (F2b).
@@ -581,17 +630,29 @@ def select_model_entry(task_type: str, quality_mode: str = None) -> Optional[Poo
             return best
 
         # PASO 2: Sin verified -> buscar unknown/rate_limited
+        # v5.7: free_first=True (D-1b/D-2b) — preferir modelos gratuitos
+        # cuando no hay verified models. Los modelos unknown de pago tienen
+        # scores altos pero fallarán sin crédito; los gratuitos probablemente
+        # funcionen. Dentro de cada tier (free/paid), se ordena por score.
+        #
+        # Esto resuelve el bug crítico: ANT:claude-opus-4-6 (score 90.1, unknown)
+        # siempre ganaba sobre GHU:gpt-4o (score 87.0, unknown) porque el
+        # ranking puro no distingue free de paid. Con free_first, el modelo
+        # gratuito se intenta primero.
+        #
         # F10: También excluir temporarily_unavailable (cooldown 60s)
-        # Estos modelos están en timeout temporal — no intentar de inmediato
         ranked = _global_pool.get_ranked_entries(
             task_type=task_type,
             exclude_statuses=["payment_required", "failed", "temporarily_unavailable"],
+            free_first=True,  # v5.7: D-1b/D-2b — free antes que paid
         )
 
         if ranked:
             best = ranked[0]
+            tier = "FREE" if best.is_free else "PAID"
             logger.info(f"select_model_entry({task_type}): {best.model_id} "
-                       f"via {best.provider} (score: {best.composite_score:.1f}, {best.health_status})")
+                       f"via {best.provider} (score: {best.composite_score:.1f}, "
+                       f"{best.health_status}, {tier})")
             return best
 
         # PASO 3: Fallback a método clásico (probing activo)
@@ -811,6 +872,9 @@ def _sync_health_after_call(model_id: str, provider: str, success: bool,
 
     D-3/D-4/D-5: Response-Code-Driven Scheduling.
 
+    v5.5: empty_response → mark_failed (permanente, no temporarily_unavailable).
+          Modelos que retornan HTTP 200 sin contenido están rotos.
+
     F6: model_id puede ser un prefixed_id (ej: "OPR:anthropic/claude-opus-4-6").
     - Para el Pool: se usa el prefixed_id (es la clave composite).
     - Para model_health: se extrae el base_id (model_health no conoce prefijos).
@@ -836,6 +900,22 @@ def _sync_health_after_call(model_id: str, provider: str, success: bool,
             elif error_type == "payment":
                 model_health.mark_payment_required(base_id, provider)
                 _global_pool.mark_payment_required(provider, model_id)
+                # v5.7: Cuando un modelo de pago falla por crédito, TODOS los
+                # modelos de pago del mismo provider también fallarán.
+                # Marcarlos inmediatamente para no desperdiciar intentos.
+                marked = _global_pool.mark_provider_paid_models(provider)
+                # v5.7: Logging defensivo — siempre loguear el cascade
+                logger.info(f"_sync_health_after_call: payment_required para "
+                           f"'{model_id}' (via {provider}). "
+                           f"Cascade: {marked} modelos de pago de '{provider}' "
+                           f"marcados como payment_required")
+            elif error_type == "empty_response":
+                # v5.5: empty_response → failed PERMANENTE.
+                # Modelos que retornan 200 OK sin contenido están rotos.
+                # No van a funcionar en reintentos — marcar como failed
+                # para que no se vuelvan a intentar.
+                model_health.mark_failed(base_id, provider, error)
+                _global_pool.mark_failed(provider, model_id)
             elif error_type in ("auth", "not_found"):
                 # Errores permanentes: marca como failed
                 model_health.mark_failed(base_id, provider, error)
@@ -886,7 +966,17 @@ def call_llm(
     # v5.3: Timing del ciclo completo de llamadas
     call_start_time = time.time()
     
-    for attempt in range(1, 4):
+    # v5.6: Bucle con payment discovery (no cuenta como intento real)
+    # Cuando un provider falla por falta de crédito (429 insufficient_quota),
+    # se marcan TODOS sus modelos de pago como payment_required (cascade),
+    # y se reintenta con otro provider SIN consumir un intento real.
+    MAX_REAL_ATTEMPTS = 3
+    MAX_TOTAL_ATTEMPTS = 8  # Safety: evitar loop infinito
+    real_attempt = 0
+    total_attempt = 0
+    
+    while real_attempt < MAX_REAL_ATTEMPTS and total_attempt < MAX_TOTAL_ATTEMPTS:
+        total_attempt += 1
         # v5.3: Timing por intento
         attempt_start_time = time.time()
         
@@ -917,7 +1007,7 @@ def call_llm(
                     "model_used": "",
                     "provider_used": None,
                     "success": False,
-                    "attempts": attempt,
+                    "attempts": real_attempt + 1,
                     "error": "No se pudo seleccionar modelo",
                     "tokens_input": _estimate_tokens(system_prompt + user_prompt),
                     "tokens_output": 0,
@@ -1052,7 +1142,7 @@ def call_llm(
 
                 return {
                     **result,
-                    "attempts": attempt,
+                    "attempts": real_attempt + 1,
                     "tokens_input": tokens_input,
                     "tokens_output": tokens_output,
                     "latency_ms": attempt_elapsed_ms,
@@ -1086,6 +1176,32 @@ def call_llm(
                 error_type=error_type_classified,
             )
 
+            # v5.7: Payment discovery — no cuenta como intento real
+            # Cuando un provider falla por falta de crédito (429 insufficient_quota),
+            # el cascade ya marcó TODOS sus modelos de pago como payment_required.
+            # Reintentar con otro provider SIN consumir un intento real.
+            if error_type_classified == "payment":
+                # v5.7: Logging defensivo — verificar cascade
+                provider_pr_count = sum(
+                    1 for e in _global_pool.get_all_entries()
+                    if e.provider == provider_name and e.health_status == "payment_required"
+                )
+                provider_total = sum(
+                    1 for e in _global_pool.get_all_entries()
+                    if e.provider == provider_name
+                )
+                logger.info(
+                    f"call_llm: payment error ({model_id} via {log_provider}), "
+                    f"provider sin crédito — no cuenta como intento, "
+                    f"reintentando con otro modelo... "
+                    f"[cascade: {provider_pr_count}/{provider_total} modelos de "
+                    f"'{provider_name}' marcados payment_required]"
+                )
+                continue  # NO incrementa real_attempt
+
+            # Contar como intento real
+            real_attempt += 1
+
             if result.get("error") == "rate_limit":
                 escalate_model(model_id)
                 time.sleep(1)
@@ -1093,17 +1209,17 @@ def call_llm(
                 # v5.4 (F3): continue en vez de break — permite rotar modelo
                 # El modelo actual fue marcado failed por _sync_health_after_call,
                 # así que select_model_entry() en el siguiente intento escogerá otro.
-                logger.info(f"call_llm: intento {attempt} falló ({error_type_classified}), "
-                           f"rotando modelo...")
-                # F15: Si es el último intento, retornar con error_type en el resultado
-                if attempt == 3:
+                logger.info(f"call_llm: intento {real_attempt}/{MAX_REAL_ATTEMPTS} "
+                           f"falló ({error_type_classified}), rotando modelo...")
+                # F15: Si es el último intento real, retornar con error_type
+                if real_attempt >= MAX_REAL_ATTEMPTS:
                     total_elapsed_ms = int((time.time() - call_start_time) * 1000)
                     return {
                         "content": "",
                         "model_used": model_id,
                         "provider_used": log_provider,
                         "success": False,
-                        "attempts": attempt,
+                        "attempts": real_attempt,
                         "error": error_str,
                         "error_type": error_type_classified,  # F15: Clasificación del error
                         "tokens_input": _estimate_tokens(system_prompt + user_prompt),
@@ -1158,7 +1274,7 @@ def call_llm(
         "model_used": "",
         "provider_used": None,
         "success": False,
-        "attempts": 3,
+        "attempts": total_attempt,
         "error": "Reintentos agotados",
         "error_type": "retries_exhausted",  # F15
         "tokens_input": 0,

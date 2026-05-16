@@ -1,4 +1,16 @@
 # apa/core/normalizer.py
+# v1.2 — R3 (Asesor): FALSELY_FREE_MODELS — lista explícita de modelos
+#         marcados como "free" que en realidad requieren pago.
+#         Fuente única de verdad para providers.py._get_fake_free_ids().
+#
+# CAMBIOS v1.2 vs v1.1:
+#   - NUEVO: FALSELY_FREE_MODELS — set de IDs de modelos que las APIs
+#     reportan como gratuitos (is_free=True, pricing=prompt:0,completion:0)
+#     pero que retornan HTTP 402 payment_required al llamarlos.
+#     La causa: estos modelos tienen pricing=0 en el endpoint /models
+#     pero requieren crédito en la cuenta para funcionar (no son truly free).
+#   - Documentación de cada caso con la razón de la exclusión.
+#
 # v1.1 — F7 FIX: Normalización mejorada para emparejar modelos
 #         entre proveedores y Arena. Ahora soporta:
 #         - Variantes de puntos/guiones en versiones (opus-4-6 = opus-4.6 = opus_4_6)
@@ -19,6 +31,42 @@ if not logger.handlers:
     handler = logging.StreamHandler()
     handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
     logger.addHandler(handler)
+
+# ============================================================================
+# R3 (Asesor): FALSELY_FREE_MODELS
+# ============================================================================
+# Modelos que las APIs reportan como gratuitos (pricing=0, o sufijo :free)
+# pero que RETORNAN HTTP 402 payment_required al intentar llamarlos.
+#
+# RAZÓN: Estos modelos tienen pricing=0 en el endpoint /models de OpenRouter
+# porque el proveedor original no cobra por el uso, PERO OpenRouter requiere
+# crédito en la cuenta para enrutar la petición. Esto es un error de
+# clasificación de OpenRouter (reportar como free lo que no lo es).
+#
+# EFECTO: Si estos modelos se incluyen como is_free=True, la primera llamada
+# falla con 402 y dispara mark_provider_paid_models("openrouter"), que marca
+# TODOS los modelos de pago de OpenRouter como payment_required. Esto es la
+# cascada que causó la regresión del 0% en v4.0.
+#
+# SOLUCIÓN: Marcarlos como is_free=False aquí. Así nunca se intentan en el
+# tier gratuito y no disparan la cascada de mark_provider_paid_models().
+#
+# MANTENIMIENTO: Si OpenRouter corrige la clasificación de estos modelos
+# (deja de reportar pricing=0 para modelos que requieren crédito), se pueden
+# eliminar de esta lista.
+FALSELY_FREE_MODELS = {
+    # Google Lyria 3 — modelos de generación de MÚSICA (no chat).
+    # Retornan 402 porque OpenRouter requiere crédito para música generativa.
+    # También filtrados por _NON_CHAT_PATTERNS ("lyria-"), pero se incluyen
+    # aquí como doble seguridad: si alguien quita el patrón de _NON_CHAT_PATTERNS,
+    # seguirán marcados como no-free.
+    "google/lyria-3-pro-preview",      # 402 payment required
+    "google/lyria-3-clip-preview",     # 402 payment required
+
+    # DeepSeek V4 Flash free tier — reportado como :free pero retorna 402.
+    # OpenRouter lista este modelo con pricing=0 pero requiere crédito.
+    "deepseek/deepseek-v4-flash:free", # 402 payment required
+}
 
 SUFFIXES_TO_REMOVE = (
     ":free", ":beta", ":experimental",

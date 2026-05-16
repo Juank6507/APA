@@ -1,4 +1,51 @@
 # apa/core/pool.py
+# v1.5 — free_first ranking: get_ranked_entries(free_first=True)
+#         ordena modelos gratuitos ANTES que de pago cuando no hay
+#         modelos verificados (unknown status). Esto resuelve el
+#         bug crítico donde modelos de pago sin crédito (Anthropic,
+#         OpenAI) con Arena score alto siempre ganan sobre modelos
+#         gratuitos funcionales (GitHub, Groq, OpenRouter).
+#         D-1/D-2 se respeta para modelos verified (available),
+#         pero para unknown se prefiere free-first como heurística
+#         práctica (si no sabemos si funciona, mejor probar gratis).
+#
+# CAMBIOS v1.5 vs v1.4:
+#   - NUEVO: get_ranked_entries(free_first=False) — cuando True,
+#     modelos is_free=True se ordenan ANTES que is_free=False.
+#     Dentro de cada tier (free/paid), se mantiene el orden por score.
+#     Lo usa select_model_entry() PASO 2 para preferir modelos
+#     gratuitos cuando no hay modelos verificados.
+#   - NUEVO: Test 11 — free_first ranking validation.
+#
+# CAMBIOS v1.4 vs v1.3:
+#   - NUEVO: reset_transient_statuses() — resetea rate_limited y
+#     temporarily_unavailable de vuelta a 'unknown'. Se usa entre
+#     rankings del stress test para que un modelo rate-limited en
+#     'planning' pueda reintentarse en 'coding'. Los rate limits
+#     son transitorios (por minuto/hora) y es probable que hayan
+#     expirado cuando llegamos al siguiente ranking.
+#   - NUEVO: get_working_entries() — retorna entries con status
+#     'available' (ya verificadas como funcionales). Lo usa el
+#     stress test para contar modelos que funcionan sin re-test.
+#   - FIX: payment_required y failed NO se resetean (son permanentes).
+#
+# CAMBIOS v1.3 vs v1.2:
+#   - NUEVO: mark_provider_paid_models(provider_name) — marca TODOS los
+#     modelos de pago (is_free=False) de un provider como payment_required.
+#     Se usa cuando el provider retorna 402/insufficient_quota para un
+#     modelo de pago: si uno falla por pago, TODOS los de pago también fallarán.
+#   - NUEVO: mark_provider_rate_limited(provider_name, cooldown_seconds=120) —
+#     marca todos los modelos FREE de un provider como temporarily_unavailable
+#     con cooldown. Cuando OpenRouter retorna 429 rate_limit para un modelo free,
+#     los demás modelos free del mismo provider probablemente también están
+#     rate-limited. El cooldown evita desperdiciar intentos en el mismo provider.
+#   - NUEVO: get_free_entries() — retorna entries gratuitas ordenadas por score.
+#     Lo usa el stress test para el fallback a modelos gratuitos.
+#   - FIX: empty_response → se marca como 'failed' (permanente), no como
+#     'temporarily_unavailable'. Un modelo que retorna HTTP 200 pero sin
+#     contenido está roto y no va a funcionar en reintentos.
+#
+# v1.2 — mark_provider_paid_models() (añadido por el Director)
 # v1.1 — Fix rankings: arena_scores por categoría, scoring por task_type,
 #         penalización de payment_required en composite_score.
 # v1.0 — Sprint 1: Pool con composite key (provider, model_id),
@@ -9,7 +56,8 @@
 #   P-1: Composite key (provider, model_id) — mismo LLM en 2 providers = 2 entries
 #   P-2: Provider Confidence — cada provider tiene confidence_score
 #   P-3: 3-Layer Ranking — APA > Arena ELO > Provider Confidence
-#   D-1/D-2: No free_first bias — ranking drives selection
+#   D-1/D-2: No free_first bias para VERIFIED models — ranking drives selection
+#   D-1b/D-2b: free_first para UNKNOWN models — heuristic: try free before paid
 #   D-5: payment_required status
 #   APA Ranking formula: DEFERRED (placeholder = arena_score por ahora)
 #
@@ -284,6 +332,102 @@ class Pool:
                 entry.health_status = "temporarily_unavailable"
                 entry.verified_at = time.time()
 
+    def mark_provider_paid_models(self, provider_name: str) -> int:
+        """v1.2/v1.3: Marca TODOS los modelos de pago de un provider como payment_required.
+
+        Cuando un provider retorna 402/insufficient_quota para un modelo de pago,
+        significa que la cuenta no tiene crédito. Si uno falla por pago, TODOS
+        los de pago del mismo provider también fallarán.
+
+        Solo marca modelos con is_free=False (de pago).
+        Los modelos gratuitos del mismo provider NO se afectan.
+
+        Retorna: número de modelos marcados.
+        """
+        marked = 0
+        with self._lock:
+            for key, entry in self._entries.items():
+                if entry.provider == provider_name and not entry.is_free:
+                    if entry.health_status != "available":
+                        entry.health_status = "payment_required"
+                        entry.verified_at = time.time()
+                        marked += 1
+        return marked
+
+    def reset_transient_statuses(self) -> int:
+        """v1.4: Resetea estados transitorios a 'unknown' para reusar modelos.
+
+        Los estados rate_limited y temporarily_unavailable son transitorios:
+        - rate_limited: HTTP 429 → el cooldown ya expiró entre rankings
+        - temporarily_unavailable: timeout/connection → probablemente recuperado
+
+        Estos modelos DEBEN poder reintentarse para otros task types.
+        Un modelo rate-limited en 'planning' puede funcionar en 'coding'.
+
+        NO resetea estados permanentes:
+        - payment_required: la cuenta no tiene crédito → permanente
+        - failed: empty_response, not_found, auth → el modelo está roto
+        - available: ya funciona → no tocar
+
+        Retorna: número de entries reseteadas.
+        """
+        reset_count = 0
+        with self._lock:
+            for entry in self._entries.values():
+                if entry.health_status in ("rate_limited", "temporarily_unavailable"):
+                    entry.health_status = "unknown"
+                    entry.verified_at = None
+                    reset_count += 1
+        return reset_count
+
+    def get_working_entries(self) -> List[PoolEntry]:
+        """v1.4: Retorna entries verificadas como funcionales (status='available').
+
+        Lo usa el stress test para contar modelos que ya funcionan
+        sin necesidad de re-testearlos para cada ranking.
+        """
+        with self._lock:
+            return [e for e in self._entries.values() if e.health_status == "available"]
+
+    def mark_provider_rate_limited(self, provider_name: str, cooldown_seconds: int = 120) -> int:
+        """v1.3: Marca todos los modelos FREE de un provider como temporarily_unavailable.
+
+        Cuando OpenRouter retorna 429 rate_limit para un modelo free, es probable
+        que otros modelos free del mismo provider también estén rate-limited
+        (OpenRouter tiene rate limits por cuenta para el tier gratuito).
+
+        El cooldown por defecto es 120s (2 minutos), mayor que el cooldown
+        normal de 60s para temporarily_unavailable, porque los rate limits
+        de la cuenta tardan más en resetearse.
+
+        Solo marca modelos con is_free=True (gratuitos).
+        Los modelos de pago NO se afectan (ya estarán como payment_required
+        si el provider no tiene crédito).
+
+        Retorna: número de modelos marcados.
+        """
+        marked = 0
+        now = time.time()
+        with self._lock:
+            for key, entry in self._entries.items():
+                if entry.provider == provider_name and entry.is_free:
+                    if entry.health_status not in ("available", "payment_required"):
+                        entry.health_status = "temporarily_unavailable"
+                        # Usar cooldown más largo para rate limits de provider
+                        # El cooldown normal es 60s; aquí usamos cooldown_seconds
+                        # Para implementar esto, verified_at = now - (60 - cooldown_seconds)
+                        # Así el cooldown de get_ranked_entries() (que usa 60s)
+                        # se extiende efectivamente a cooldown_seconds.
+                        # Ejemplo: cooldown_seconds=120, verificamos a now - 60
+                        # → quedan 120s - 60s = 60s de cooldown restante.
+                        # Espera, eso no es correcto. Mejor simplificar:
+                        # verified_at = now - 60 + (cooldown_seconds - 60)
+                        # → verified_at = now + (cooldown_seconds - 60)
+                        # → el cooldown de 60s se cumple en now + cooldown_seconds
+                        entry.verified_at = now + (cooldown_seconds - 60)
+                        marked += 1
+        return marked
+
     # --- Operaciones de ranking (P-3) ---
 
     def set_arena_score(self, provider: str, model_id: str, score: float) -> None:
@@ -318,17 +462,31 @@ class Pool:
         min_context: int = 0,
         only_available: bool = False,
         exclude_statuses: Optional[List[str]] = None,
+        free_first: bool = False,
     ) -> List[PoolEntry]:
         """Retorna entries ordenadas por composite_score descendente.
 
-        P-3: 3-Layer Ranking — APA > Arena > Provider Confidence.
-        D-1/D-2: No free_first bias — el ranking es puro por score.
+        P-3: 3-Layer Ranking — APA > Arena ELO > Provider Confidence.
+        D-1/D-2: No free_first bias para VERIFIED (only_available=True).
+        D-1b/D-2b: free_first para UNKNOWN models — heurística práctica.
+
+        v1.5: free_first=True ordena modelos gratuitos ANTES que de pago.
+        Esto es crucial cuando no hay modelos verificados (PASO 2 de
+        select_model_entry): los modelos unknown de pago tienen scores
+        altos (Arena 90+) pero fallarán si no hay crédito, mientras
+        que los modelos gratuitos (Arena 65-85) probablemente funcionen.
+
+        Con free_first=True:
+        - Tier 1: modelos is_free=True, ordenados por score descendente
+        - Tier 2: modelos is_free=False, ordenados por score descendente
+        Sin free_first (default=False): orden puro por score (D-1/D-2 clásico).
 
         Args:
             task_type: Tipo de tarea (para filtrar por contexto mínimo)
             min_context: Context length mínimo (0 = sin filtro)
             only_available: Si True, solo entries con health_status="available"
             exclude_statuses: Lista de statuses a excluir (ej: ["payment_required", "failed"])
+            free_first: Si True, modelos gratuitos se ordenan ANTES que de pago
         """
         # Contexto mínimo por task_type
         if task_type and min_context == 0:
@@ -365,11 +523,19 @@ class Pool:
                     continue
                 candidates.append(entry)
 
-        # D-1/D-2: Ordenar por score (task_score si hay task_type, sino composite_score)
-        # v1.1: task_score usa arena_scores por categoría cuando está disponible,
-        #       dando rankings diferentes según el tipo de tarea.
-        #       payment_required → score=0 → cae al final automáticamente.
-        candidates.sort(key=lambda e: e.task_score(task_type), reverse=True)
+        # v1.5: Ordenar — free_first o ranking puro
+        # D-1/D-2 clásico: ranking puro por score (para verified models)
+        # D-1b/D-2b: free_first para unknown models (heurística práctica)
+        if free_first:
+            # Dos tiers: free (tier=0) va ANTES que paid (tier=1)
+            # Dentro de cada tier, ordenar por score descendente
+            candidates.sort(
+                key=lambda e: (0 if e.is_free else 1, -e.task_score(task_type)),
+            )
+        else:
+            # D-1/D-2: Ranking puro por score (sin free bias)
+            # payment_required → score=0 → cae al final automáticamente.
+            candidates.sort(key=lambda e: e.task_score(task_type), reverse=True)
         return candidates
 
     def get_entries_for_model(self, model_id: str) -> List[PoolEntry]:
@@ -386,6 +552,46 @@ class Pool:
         """Retorna entries con un health_status específico."""
         with self._lock:
             return [e for e in self._entries.values() if e.health_status == status]
+
+    def get_free_entries(
+        self,
+        task_type: Optional[str] = None,
+        min_context: int = 0,
+        exclude_statuses: Optional[List[str]] = None,
+    ) -> List[PoolEntry]:
+        """v1.3: Retorna entries gratuitas (is_free=True) ordenadas por score.
+
+        Lo usa el stress test para el fallback a modelos gratuitos cuando
+        la tasa de éxito global es < 50%.
+
+        Args:
+            task_type: Tipo de tarea (para scoring por categoría)
+            min_context: Context length mínimo (0 = sin filtro)
+            exclude_statuses: Lista de statuses a excluir
+        """
+        exclude = set(exclude_statuses or [])
+        # F10: Limpiar estados temporarily_unavailable expirados (cooldown 60s)
+        now = time.time()
+        with self._lock:
+            for entry in self._entries.values():
+                if entry.health_status == "temporarily_unavailable" and entry.verified_at:
+                    if now - entry.verified_at >= 60:
+                        entry.health_status = "unknown"
+
+        with self._lock:
+            candidates = []
+            for entry in self._entries.values():
+                if not entry.is_free:
+                    continue
+                if entry.context_length < min_context:
+                    continue
+                if entry.health_status in exclude:
+                    continue
+                candidates.append(entry)
+
+        # Ordenar por score (task_score si hay task_type, sino composite_score)
+        candidates.sort(key=lambda e: e.task_score(task_type), reverse=True)
+        return candidates
 
     def health_summary(self) -> Dict[str, int]:
         """Retorna resumen de salud: {status: count}."""
@@ -588,11 +794,50 @@ def _run_validation() -> None:
     except AssertionError:
         test_results.append(("v1.1: payment_required → score=0", False))
 
+    # --- Test 11: free_first ranking (v1.5) ---
+    try:
+        pool_ff = Pool()
+        # Free model with LOWER score than paid
+        pool_ff.add_entry(PoolEntry(
+            provider="groq", model_id="GRQ:free-model",
+            is_free=True, arena_score=70.0, provider_confidence=70.0,
+        ))
+        # Paid model with HIGHER score
+        pool_ff.add_entry(PoolEntry(
+            provider="anthropic", model_id="ANT:paid-model",
+            is_free=False, arena_score=93.0, provider_confidence=90.0,
+        ))
+        # Free model with medium score
+        pool_ff.add_entry(PoolEntry(
+            provider="github", model_id="GHU:free-model-2",
+            is_free=True, arena_score=85.0, provider_confidence=70.0,
+        ))
+
+        # Sin free_first: paid model primero (D-1/D-2 clásico)
+        ranked_normal = pool_ff.get_ranked_entries(free_first=False)
+        assert ranked_normal[0].model_id == "ANT:paid-model", \
+            f"Expected paid first, got {ranked_normal[0].model_id}"
+
+        # Con free_first: free models primero, ordenados por score
+        ranked_ff = pool_ff.get_ranked_entries(free_first=True)
+        assert ranked_ff[0].is_free, \
+            f"Expected free first, got {ranked_ff[0].model_id}"
+        assert ranked_ff[0].model_id == "GHU:free-model-2", \
+            f"Expected highest-scored free first, got {ranked_ff[0].model_id}"
+        assert ranked_ff[1].is_free, \
+            f"Expected free second, got {ranked_ff[1].model_id}"
+        assert not ranked_ff[2].is_free, \
+            f"Expected paid last, got {ranked_ff[2].model_id}"
+
+        test_results.append(("v1.5: free_first ranking", True))
+    except AssertionError as e:
+        test_results.append(("v1.5: free_first ranking", False))
+
     # --- Reporte ---
     passed = sum(1 for _, ok in test_results if ok)
     failed = len(test_results) - passed
     print(f"\n{'='*60}")
-    print(f"pool.py v1.0 — Sprint 1 Validation")
+    print(f"pool.py v1.5 — Sprint 1 Validation")
     print(f"{'='*60}")
     for name, ok in test_results:
         status = "PASS" if ok else "FAIL"
