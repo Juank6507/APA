@@ -1,4 +1,39 @@
 # apa/core/providers.py
+# v3.1 — FIX Cohere: get_models() usaba "data" como clave JSON pero la API
+#         de Cohere retorna los modelos bajo "models". También el campo ID
+#         del modelo es "name" no "id". Resultado: 0 → ~18 modelos.
+#         FIX Cloudflare: API devuelve 405 en GET /models (no soportado).
+#         Cambiado a lista estática de modelos (14 modelos oficiales) y
+#         is_available() sin petición HTTP (solo verifica token + account_id).
+#
+# CAMBIOS v3.1 vs v3.0:
+#   - CohereProvider.get_models(): "data" → "models", "id" → "name"
+#   - CloudflareProvider: lista estática _KNOWN_MODELS (14 modelos)
+#   - CloudflareProvider.is_available(): sin petición HTTP (evita 405)
+#   - Sin cambios en otros proveedores
+#
+# v3.0 — FIX REGRESIÓN: el bloque de validación (if __name__) tenía hardcoded
+#         solo 8 proveedores originales en T1 y F6. Ahora refleja los 18
+#         proveedores actuales (8 originales + 10 nuevos).
+#         El código productivo (ProviderManager) ya registraba 18 correctamente;
+#         solo el bloque de tests internos estaba desactualizado.
+#
+# CAMBIOS v3.0 vs v2.9:
+#   - T1: iteración hardcodeada de 8 → 18 proveedores
+#   - F6: assert len(...) == 8 → == 18
+#   - Sin cambios en código productivo
+#
+# v2.9 — FIX F8 Ollama: el test esperaba solo "no disponible" o "no está corriendo"
+#         cuando Ollama no responde, pero cuando Ollama SÍ está corriendo y el
+#         modelo no existe, responde con HTTP 404: "model 'xxx' not found".
+#         Ambos son mensajes de error claros y válidos. El assert ahora acepta
+#         ambos escenarios: servidor caído (ConnectionError) y modelo inexistente.
+#         También corregido CACHE_DIR: WARN → INFO (no es un error real).
+#
+# CAMBIOS v2.9 vs v2.8:
+#   - F8 FIX: assert ampliado para aceptar 404/not-found como error claro
+#   - CACHE_DIR: mensaje WARN bajado a INFO (verificación cosmética)
+#
 # v2.7 — BUG 3 FIX: github añadido a _NATIVE_PROVIDERS para que
 #         translate_model_id() traduzca correctamente los IDs de GitHub
 #         (sin prefijo provider/). Sin esto, los azureml:// IDs traducidos
@@ -934,11 +969,640 @@ class OpenAIProvider(ModelProvider):
             return {"content": content, "model_used": model_id, "provider": self.name, "success": True, "error": None, "http_status": 200}
         except Exception as e: return {"content": "", "model_used": model_id, "provider": self.name, "success": False, "error": str(e), "http_status": None}
 
+# =============================================================================
+# NUEVOS PROVEEDORES — Fase 1 (Cerebras, Gemini, SiliconFlow),
+#             Fase 2 (DeepSeek, Mistral, SambaNova, HuggingFace, Novita),
+#             Fase 3 (Cloudflare, Cohere)
+# =============================================================================
+
+class CerebrasProvider(ModelProvider):
+    """Cerebras — inferencia ultra-rápida (2,600+ tokens/seg).
+    1M tokens/día gratis, OpenAI-compatible.
+    """
+    _DEFAULT_CONFIDENCE_SCORE = 72.0
+
+    def __init__(self):
+        self._api_key = settings.cerebras_api_key
+        self._base_url = "https://api.cerebras.ai/v1"
+        self._avail_cache, self._avail_ts = None, None
+
+    @property
+    def name(self) -> str: return "cerebras"
+
+    def is_available(self) -> bool:
+        if not self._api_key or not self._api_key.strip(): return False
+        now = time.time()
+        if self._avail_cache is not None and self._avail_ts is not None and now - self._avail_ts < 300:
+            return self._avail_cache
+        try:
+            resp = requests.get(f"{self._base_url}/models", headers={"Authorization": f"Bearer {self._api_key}"}, timeout=3)
+            self._avail_cache, self._avail_ts = resp.status_code == 200, now
+            return self._avail_cache
+        except: return False
+
+    def get_models(self) -> List[Dict[str, Any]]:
+        cached = self._get_cached_models()
+        if cached is not None: return cached
+        try:
+            if not self.is_available(): return []
+            resp = requests.get(f"{self._base_url}/models", headers={"Authorization": f"Bearer {self._api_key}"}, timeout=5)
+            if resp.status_code != 200: return []
+            models = []
+            for m in resp.json().get("data", []):
+                mid = m.get("id", "")
+                if not mid or not _is_chat_model(mid): continue
+                ctx = m.get("context_length", 8192) or 8192
+                models.append({"id": mid, "name": m.get("name", mid), "context_length": ctx,
+                              "capabilities": _infer_capabilities(mid, ctx), "quality_score": 50,
+                              "is_free_tier": True, "provider": "cerebras"})
+            self._cache_models(models)
+            return models
+        except: return []
+
+    def call(self, model_id: str, messages: List[Dict], max_tokens: int = 2000, temperature: float = 0.1) -> Dict[str, Any]:
+        try:
+            resp = requests.post(f"{self._base_url}/chat/completions",
+                                 headers={"Authorization": f"Bearer {self._api_key}", "Content-Type": "application/json"},
+                                 json={"model": model_id, "messages": messages, "max_tokens": max_tokens, "temperature": temperature},
+                                 timeout=30)
+            if resp.status_code != 200:
+                return self._extract_http_error(resp, model_id, self.name)
+            content = self._safe_extract_content(resp.json())
+            return {"content": content, "model_used": model_id, "provider": self.name, "success": True, "error": None, "http_status": 200}
+        except Exception as e: return {"content": "", "model_used": model_id, "provider": self.name, "success": False, "error": str(e), "http_status": None}
+
+
+class GeminiProvider(ModelProvider):
+    """Google Gemini — 1M tokens de contexto, tier recurrente gratuito.
+    API REST propia (NO OpenAI-compatible). Requiere conversión de mensajes.
+    """
+    _DEFAULT_CONFIDENCE_SCORE = 75.0
+
+    def __init__(self):
+        self._api_key = settings.google_api_key
+        self._base_url = "https://generativelanguage.googleapis.com/v1beta"
+        self._avail_cache, self._avail_ts = None, None
+
+    @property
+    def name(self) -> str: return "gemini"
+
+    def _messages_to_gemini(self, messages: List[Dict]) -> Dict:
+        """Convierte formato OpenAI messages a formato Gemini."""
+        contents = []
+        system_instruction = None
+        for msg in messages:
+            if msg["role"] == "system":
+                system_instruction = {"parts": [{"text": msg["content"]}]}
+            else:
+                role = "user" if msg["role"] == "user" else "model"
+                contents.append({"role": role, "parts": [{"text": msg["content"]}]})
+        payload = {"contents": contents}
+        if system_instruction:
+            payload["system_instruction"] = system_instruction
+        return payload
+
+    def is_available(self) -> bool:
+        if not self._api_key or not self._api_key.strip(): return False
+        now = time.time()
+        if self._avail_cache is not None and self._avail_ts is not None and now - self._avail_ts < 300:
+            return self._avail_cache
+        try:
+            resp = requests.get(f"{self._base_url}/models", params={"key": self._api_key}, timeout=3)
+            self._avail_cache, self._avail_ts = resp.status_code == 200, now
+            return self._avail_cache
+        except: return False
+
+    def get_models(self) -> List[Dict[str, Any]]:
+        cached = self._get_cached_models()
+        if cached is not None: return cached
+        try:
+            if not self.is_available(): return []
+            resp = requests.get(f"{self._base_url}/models", params={"key": self._api_key}, timeout=5)
+            if resp.status_code != 200: return []
+            models = []
+            for m in resp.json().get("models", []):
+                mid = m.get("name", "").replace("models/", "")
+                if not mid or not _is_chat_model(mid): continue
+                methods = m.get("supportedGenerationMethods", [])
+                if "generateContent" not in methods: continue
+                ctx = m.get("inputTokenLimit", 32768) or 32768
+                models.append({"id": mid, "name": m.get("displayName", mid), "context_length": ctx,
+                              "capabilities": _infer_capabilities(mid, ctx), "quality_score": 50,
+                              "is_free_tier": True, "provider": "gemini"})
+            self._cache_models(models)
+            return models
+        except: return []
+
+    def call(self, model_id: str, messages: List[Dict], max_tokens: int = 2000, temperature: float = 0.1) -> Dict[str, Any]:
+        try:
+            payload = self._messages_to_gemini(messages)
+            payload["generationConfig"] = {"maxOutputTokens": max_tokens, "temperature": temperature}
+            resp = requests.post(f"{self._base_url}/models/{model_id}:generateContent",
+                                 params={"key": self._api_key}, json=payload, timeout=30)
+            if resp.status_code != 200:
+                return self._extract_http_error(resp, model_id, self.name)
+            try:
+                data = resp.json()
+                text = data["candidates"][0]["content"]["parts"][0]["text"]
+            except (KeyError, IndexError, TypeError):
+                text = ""
+            return {"content": text, "model_used": model_id, "provider": self.name, "success": True, "error": None, "http_status": 200}
+        except Exception as e: return {"content": "", "model_used": model_id, "provider": self.name, "success": False, "error": str(e), "http_status": None}
+
+
+class SiliconFlowProvider(ModelProvider):
+    """SiliconFlow — 200M tokens/mes, OpenAI-compatible.
+    Modelos destacados: Qwen2.5-72B, DeepSeek-V3 (rate-limited gratis).
+    """
+    _DEFAULT_CONFIDENCE_SCORE = 68.0
+
+    def __init__(self):
+        self._api_key = settings.siliconflow_api_key
+        self._base_url = "https://api.siliconflow.cn/v1"
+        self._avail_cache, self._avail_ts = None, None
+
+    @property
+    def name(self) -> str: return "siliconflow"
+
+    def is_available(self) -> bool:
+        if not self._api_key or not self._api_key.strip(): return False
+        now = time.time()
+        if self._avail_cache is not None and self._avail_ts is not None and now - self._avail_ts < 300:
+            return self._avail_cache
+        try:
+            resp = requests.get(f"{self._base_url}/models", headers={"Authorization": f"Bearer {self._api_key}"}, timeout=3)
+            self._avail_cache, self._avail_ts = resp.status_code == 200, now
+            return self._avail_cache
+        except: return False
+
+    def get_models(self) -> List[Dict[str, Any]]:
+        cached = self._get_cached_models()
+        if cached is not None: return cached
+        try:
+            if not self.is_available(): return []
+            resp = requests.get(f"{self._base_url}/models", headers={"Authorization": f"Bearer {self._api_key}"}, timeout=5)
+            if resp.status_code != 200: return []
+            models = []
+            for m in resp.json().get("data", []):
+                mid = m.get("id", "")
+                if not mid or not _is_chat_model(mid): continue
+                ctx = m.get("context_length", 32768) or 32768
+                models.append({"id": mid, "name": m.get("name", mid), "context_length": ctx,
+                              "capabilities": _infer_capabilities(mid, ctx), "quality_score": 50,
+                              "is_free_tier": True, "provider": "siliconflow"})
+            self._cache_models(models)
+            return models
+        except: return []
+
+    def call(self, model_id: str, messages: List[Dict], max_tokens: int = 2000, temperature: float = 0.1) -> Dict[str, Any]:
+        try:
+            resp = requests.post(f"{self._base_url}/chat/completions",
+                                 headers={"Authorization": f"Bearer {self._api_key}", "Content-Type": "application/json"},
+                                 json={"model": model_id, "messages": messages, "max_tokens": max_tokens, "temperature": temperature},
+                                 timeout=30)
+            if resp.status_code != 200:
+                return self._extract_http_error(resp, model_id, self.name)
+            content = self._safe_extract_content(resp.json())
+            return {"content": content, "model_used": model_id, "provider": self.name, "success": True, "error": None, "http_status": 200}
+        except Exception as e: return {"content": "", "model_used": model_id, "provider": self.name, "success": False, "error": str(e), "http_status": None}
+
+
+class DeepSeekProvider(ModelProvider):
+    """DeepSeek — 5M tokens gratis al registrarse, OpenAI-compatible.
+    Modelos: deepseek-v4-flash, deepseek-v4-pro.
+    """
+    _DEFAULT_CONFIDENCE_SCORE = 90.0  # Native (API directa del fabricante)
+
+    def __init__(self):
+        self._api_key = settings.deepseek_api_key
+        self._base_url = "https://api.deepseek.com"
+        self._avail_cache, self._avail_ts = None, None
+
+    @property
+    def name(self) -> str: return "deepseek"
+
+    def is_available(self) -> bool:
+        if not self._api_key or not self._api_key.strip(): return False
+        now = time.time()
+        if self._avail_cache is not None and self._avail_ts is not None and now - self._avail_ts < 300:
+            return self._avail_cache
+        try:
+            resp = requests.get(f"{self._base_url}/models", headers={"Authorization": f"Bearer {self._api_key}"}, timeout=3)
+            self._avail_cache, self._avail_ts = resp.status_code == 200, now
+            return self._avail_cache
+        except: return False
+
+    def get_models(self) -> List[Dict[str, Any]]:
+        cached = self._get_cached_models()
+        if cached is not None: return cached
+        try:
+            if not self.is_available(): return []
+            resp = requests.get(f"{self._base_url}/models", headers={"Authorization": f"Bearer {self._api_key}"}, timeout=5)
+            if resp.status_code != 200: return []
+            models = []
+            for m in resp.json().get("data", []):
+                mid = m.get("id", "")
+                if not mid or not _is_chat_model(mid): continue
+                ctx = m.get("context_length", 65536) or 65536
+                models.append({"id": mid, "name": m.get("name", mid), "context_length": ctx,
+                              "capabilities": _infer_capabilities(mid, ctx), "quality_score": 50,
+                              "is_free_tier": False, "provider": "deepseek"})
+            self._cache_models(models)
+            return models
+        except: return []
+
+    def call(self, model_id: str, messages: List[Dict], max_tokens: int = 2000, temperature: float = 0.1) -> Dict[str, Any]:
+        try:
+            resp = requests.post(f"{self._base_url}/chat/completions",
+                                 headers={"Authorization": f"Bearer {self._api_key}", "Content-Type": "application/json"},
+                                 json={"model": model_id, "messages": messages, "max_tokens": max_tokens, "temperature": temperature},
+                                 timeout=30)
+            if resp.status_code != 200:
+                return self._extract_http_error(resp, model_id, self.name)
+            content = self._safe_extract_content(resp.json())
+            return {"content": content, "model_used": model_id, "provider": self.name, "success": True, "error": None, "http_status": 200}
+        except Exception as e: return {"content": "", "model_used": model_id, "provider": self.name, "success": False, "error": str(e), "http_status": None}
+
+
+class MistralProvider(ModelProvider):
+    """Mistral AI — Plan Experiment: 1B tokens/mes gratis, API OpenAI-compatible.
+    Requiere verificación SMS. 2 RPM.
+    """
+    _DEFAULT_CONFIDENCE_SCORE = 90.0  # Native (API directa del fabricante)
+
+    def __init__(self):
+        self._api_key = settings.mistral_api_key
+        self._base_url = "https://api.mistral.ai/v1"
+        self._avail_cache, self._avail_ts = None, None
+
+    @property
+    def name(self) -> str: return "mistral"
+
+    def is_available(self) -> bool:
+        if not self._api_key or not self._api_key.strip(): return False
+        now = time.time()
+        if self._avail_cache is not None and self._avail_ts is not None and now - self._avail_ts < 300:
+            return self._avail_cache
+        try:
+            resp = requests.get(f"{self._base_url}/models", headers={"Authorization": f"Bearer {self._api_key}"}, timeout=3)
+            self._avail_cache, self._avail_ts = resp.status_code == 200, now
+            return self._avail_cache
+        except: return False
+
+    def get_models(self) -> List[Dict[str, Any]]:
+        cached = self._get_cached_models()
+        if cached is not None: return cached
+        try:
+            if not self.is_available(): return []
+            resp = requests.get(f"{self._base_url}/models", headers={"Authorization": f"Bearer {self._api_key}"}, timeout=5)
+            if resp.status_code != 200: return []
+            models = []
+            for m in resp.json().get("data", []):
+                mid = m.get("id", "")
+                if not mid or not _is_chat_model(mid): continue
+                ctx = m.get("context_length", 32768) or 32768
+                models.append({"id": mid, "name": m.get("name", mid), "context_length": ctx,
+                              "capabilities": _infer_capabilities(mid, ctx), "quality_score": 50,
+                              "is_free_tier": True, "provider": "mistral"})
+            self._cache_models(models)
+            return models
+        except: return []
+
+    def call(self, model_id: str, messages: List[Dict], max_tokens: int = 2000, temperature: float = 0.1) -> Dict[str, Any]:
+        try:
+            resp = requests.post(f"{self._base_url}/chat/completions",
+                                 headers={"Authorization": f"Bearer {self._api_key}", "Content-Type": "application/json"},
+                                 json={"model": model_id, "messages": messages, "max_tokens": max_tokens, "temperature": temperature},
+                                 timeout=30)
+            if resp.status_code != 200:
+                return self._extract_http_error(resp, model_id, self.name)
+            content = self._safe_extract_content(resp.json())
+            return {"content": content, "model_used": model_id, "provider": self.name, "success": True, "error": None, "http_status": 200}
+        except Exception as e: return {"content": "", "model_used": model_id, "provider": self.name, "success": False, "error": str(e), "http_status": None}
+
+
+class SambaNovaProvider(ModelProvider):
+    """SambaNova — $5 créditos + acceso persistente, OpenAI-compatible.
+    Modelos: Llama 3.3 70B, DeepSeek-V3.1, Llama 4 Maverick.
+    """
+    _DEFAULT_CONFIDENCE_SCORE = 70.0
+
+    def __init__(self):
+        self._api_key = settings.sambanova_api_key
+        self._base_url = "https://api.sambanova.ai/v1"
+        self._avail_cache, self._avail_ts = None, None
+
+    @property
+    def name(self) -> str: return "sambanova"
+
+    def is_available(self) -> bool:
+        if not self._api_key or not self._api_key.strip(): return False
+        now = time.time()
+        if self._avail_cache is not None and self._avail_ts is not None and now - self._avail_ts < 300:
+            return self._avail_cache
+        try:
+            resp = requests.get(f"{self._base_url}/models", headers={"Authorization": f"Bearer {self._api_key}"}, timeout=3)
+            self._avail_cache, self._avail_ts = resp.status_code == 200, now
+            return self._avail_cache
+        except: return False
+
+    def get_models(self) -> List[Dict[str, Any]]:
+        cached = self._get_cached_models()
+        if cached is not None: return cached
+        try:
+            if not self.is_available(): return []
+            resp = requests.get(f"{self._base_url}/models", headers={"Authorization": f"Bearer {self._api_key}"}, timeout=5)
+            if resp.status_code != 200: return []
+            models = []
+            for m in resp.json().get("data", []):
+                mid = m.get("id", "")
+                if not mid or not _is_chat_model(mid): continue
+                ctx = m.get("context_length", 4096) or 4096
+                models.append({"id": mid, "name": m.get("name", mid), "context_length": ctx,
+                              "capabilities": _infer_capabilities(mid, ctx), "quality_score": 50,
+                              "is_free_tier": True, "provider": "sambanova"})
+            self._cache_models(models)
+            return models
+        except: return []
+
+    def call(self, model_id: str, messages: List[Dict], max_tokens: int = 2000, temperature: float = 0.1) -> Dict[str, Any]:
+        try:
+            resp = requests.post(f"{self._base_url}/chat/completions",
+                                 headers={"Authorization": f"Bearer {self._api_key}", "Content-Type": "application/json"},
+                                 json={"model": model_id, "messages": messages, "max_tokens": max_tokens, "temperature": temperature},
+                                 timeout=30)
+            if resp.status_code != 200:
+                return self._extract_http_error(resp, model_id, self.name)
+            content = self._safe_extract_content(resp.json())
+            return {"content": content, "model_used": model_id, "provider": self.name, "success": True, "error": None, "http_status": 200}
+        except Exception as e: return {"content": "", "model_used": model_id, "provider": self.name, "success": False, "error": str(e), "http_status": None}
+
+
+class HuggingFaceProvider(ModelProvider):
+    """HuggingFace Inference API — $0.10/mes créditos, OpenAI-compatible.
+    Usa router.huggingface.co. Requiere token HF existente.
+    """
+    _DEFAULT_CONFIDENCE_SCORE = 65.0
+
+    def __init__(self):
+        self._api_key = settings.HF_TOKEN
+        self._base_url = "https://router.huggingface.co/v1"
+        self._avail_cache, self._avail_ts = None, None
+
+    @property
+    def name(self) -> str: return "huggingface"
+
+    def is_available(self) -> bool:
+        if not self._api_key or not self._api_key.strip(): return False
+        now = time.time()
+        if self._avail_cache is not None and self._avail_ts is not None and now - self._avail_ts < 300:
+            return self._avail_cache
+        try:
+            resp = requests.get(f"{self._base_url}/models", headers={"Authorization": f"Bearer {self._api_key}"}, timeout=3)
+            self._avail_cache, self._avail_ts = resp.status_code == 200, now
+            return self._avail_cache
+        except: return False
+
+    def get_models(self) -> List[Dict[str, Any]]:
+        cached = self._get_cached_models()
+        if cached is not None: return cached
+        try:
+            if not self.is_available(): return []
+            resp = requests.get(f"{self._base_url}/models", headers={"Authorization": f"Bearer {self._api_key}"}, timeout=5)
+            if resp.status_code != 200: return []
+            models = []
+            for m in resp.json().get("data", []):
+                mid = m.get("id", "")
+                if not mid or not _is_chat_model(mid): continue
+                ctx = m.get("context_length", 8192) or 8192
+                models.append({"id": mid, "name": m.get("name", mid), "context_length": ctx,
+                              "capabilities": _infer_capabilities(mid, ctx), "quality_score": 50,
+                              "is_free_tier": True, "provider": "huggingface"})
+            self._cache_models(models)
+            return models
+        except: return []
+
+    def call(self, model_id: str, messages: List[Dict], max_tokens: int = 2000, temperature: float = 0.1) -> Dict[str, Any]:
+        try:
+            resp = requests.post(f"{self._base_url}/chat/completions",
+                                 headers={"Authorization": f"Bearer {self._api_key}", "Content-Type": "application/json"},
+                                 json={"model": model_id, "messages": messages, "max_tokens": max_tokens, "temperature": temperature},
+                                 timeout=30)
+            if resp.status_code != 200:
+                return self._extract_http_error(resp, model_id, self.name)
+            content = self._safe_extract_content(resp.json())
+            return {"content": content, "model_used": model_id, "provider": self.name, "success": True, "error": None, "http_status": 200}
+        except Exception as e: return {"content": "", "model_used": model_id, "provider": self.name, "success": False, "error": str(e), "http_status": None}
+
+
+class NovitaProvider(ModelProvider):
+    """Novita AI — $0.50-$1 créditos registro, OpenAI-compatible.
+    Modelos: DeepSeek V3 Turbo, Qwen3-Coder, GLM-4.5/4.7.
+    """
+    _DEFAULT_CONFIDENCE_SCORE = 68.0
+
+    def __init__(self):
+        self._api_key = settings.novita_api_key
+        self._base_url = "https://api.novita.ai/openai"
+        self._avail_cache, self._avail_ts = None, None
+
+    @property
+    def name(self) -> str: return "novita"
+
+    def is_available(self) -> bool:
+        if not self._api_key or not self._api_key.strip(): return False
+        now = time.time()
+        if self._avail_cache is not None and self._avail_ts is not None and now - self._avail_ts < 300:
+            return self._avail_cache
+        try:
+            resp = requests.get(f"{self._base_url}/v1/models", headers={"Authorization": f"Bearer {self._api_key}"}, timeout=3)
+            self._avail_cache, self._avail_ts = resp.status_code == 200, now
+            return self._avail_cache
+        except: return False
+
+    def get_models(self) -> List[Dict[str, Any]]:
+        cached = self._get_cached_models()
+        if cached is not None: return cached
+        try:
+            if not self.is_available(): return []
+            resp = requests.get(f"{self._base_url}/v1/models", headers={"Authorization": f"Bearer {self._api_key}"}, timeout=5)
+            if resp.status_code != 200: return []
+            models = []
+            for m in resp.json().get("data", []):
+                mid = m.get("id", "")
+                if not mid or not _is_chat_model(mid): continue
+                ctx = m.get("context_length", 8192) or 8192
+                models.append({"id": mid, "name": m.get("name", mid), "context_length": ctx,
+                              "capabilities": _infer_capabilities(mid, ctx), "quality_score": 50,
+                              "is_free_tier": True, "provider": "novita"})
+            self._cache_models(models)
+            return models
+        except: return []
+
+    def call(self, model_id: str, messages: List[Dict], max_tokens: int = 2000, temperature: float = 0.1) -> Dict[str, Any]:
+        try:
+            resp = requests.post(f"{self._base_url}/v1/chat/completions",
+                                 headers={"Authorization": f"Bearer {self._api_key}", "Content-Type": "application/json"},
+                                 json={"model": model_id, "messages": messages, "max_tokens": max_tokens, "temperature": temperature},
+                                 timeout=30)
+            if resp.status_code != 200:
+                return self._extract_http_error(resp, model_id, self.name)
+            content = self._safe_extract_content(resp.json())
+            return {"content": content, "model_used": model_id, "provider": self.name, "success": True, "error": None, "http_status": 200}
+        except Exception as e: return {"content": "", "model_used": model_id, "provider": self.name, "success": False, "error": str(e), "http_status": None}
+
+
+class CloudflareProvider(ModelProvider):
+    """Cloudflare Workers AI — 10K neurons/día gratis, OpenAI-compatible.
+    URL incluye Account ID. Modelos: Llama 3.3 70B, Qwen2.5-Coder-32B.
+
+    FIX: La API de Cloudflare Workers AI NO soporta GET /models (devuelve 405).
+    Los modelos se definen como lista estática basada en la documentación oficial.
+    is_available() verifica que token y account_id existan (sin llamada HTTP).
+    """
+    _DEFAULT_CONFIDENCE_SCORE = 68.0
+
+    # Modelos disponibles en Cloudflare Workers AI (documentación oficial)
+    # Se actualizan cuando Cloudflare añade nuevos modelos.
+    _KNOWN_MODELS = [
+        {"id": "@cf/meta/llama-3.1-8b-instruct-fp8-fast", "ctx": 131072},
+        {"id": "@cf/meta/llama-3.1-70b-instruct-fp8-fast", "ctx": 131072},
+        {"id": "@cf/meta/llama-3.3-70b-instruct-fp8", "ctx": 131072},
+        {"id": "@cf/meta/llama-3.3-8b-instruct-fp8", "ctx": 131072},
+        {"id": "@cf/meta/llama-3.1-8b-instruct", "ctx": 128000},
+        {"id": "@cf/meta/llama-3.1-70b-instruct", "ctx": 128000},
+        {"id": "@cf/qwen/qwen2.5-coder-32b-instruct", "ctx": 32768},
+        {"id": "@cf/qwen/qwen2.5-7b-instruct", "ctx": 32768},
+        {"id": "@cf/mistral/mistral-7b-instruct-v0.1", "ctx": 32768},
+        {"id": "@cf/mistral/mistral-small-3.1-24b-instruct", "ctx": 131072},
+        {"id": "@cf/deepseek-ai/deepseek-r1-distill-qwen-32b", "ctx": 131072},
+        {"id": "@cf/deepseek-ai/deepseek-r1-distill-llama-70b", "ctx": 131072},
+        {"id": "@cf/google/gemma-2-9b-it", "ctx": 8192},
+        {"id": "@cf/google/gemma-2-27b-it", "ctx": 8192},
+        {"id": "@cf/unit8/multilingual-e5-large", "ctx": 512},
+    ]
+
+    def __init__(self):
+        self._api_token = settings.cloudflare_api_token
+        self._account_id = settings.cf_account_id
+        self._base_url = f"https://api.cloudflare.com/client/v4/accounts/{self._account_id}/ai/v1"
+        self._avail_cache, self._avail_ts = None, None
+
+    @property
+    def name(self) -> str: return "cloudflare"
+
+    def is_available(self) -> bool:
+        # FIX: No llamar GET /models (devuelve 405).
+        # Verificar que token y account_id existan.
+        if not self._api_token or not self._api_token.strip(): return False
+        if not self._account_id or not self._account_id.strip(): return False
+        return True
+
+    def get_models(self) -> List[Dict[str, Any]]:
+        cached = self._get_cached_models()
+        if cached is not None: return cached
+        try:
+            if not self.is_available(): return []
+            # FIX: Usar lista estática en vez de GET /models (405)
+            models = []
+            for m in self._KNOWN_MODELS:
+                mid = m["id"]
+                if not _is_chat_model(mid): continue
+                ctx = m.get("ctx", 8192)
+                models.append({"id": mid, "name": mid, "context_length": ctx,
+                              "capabilities": _infer_capabilities(mid, ctx), "quality_score": 50,
+                              "is_free_tier": True, "provider": "cloudflare"})
+            self._cache_models(models)
+            return models
+        except: return []
+
+    def call(self, model_id: str, messages: List[Dict], max_tokens: int = 2000, temperature: float = 0.1) -> Dict[str, Any]:
+        try:
+            resp = requests.post(f"{self._base_url}/chat/completions",
+                                 headers={"Authorization": f"Bearer {self._api_token}", "Content-Type": "application/json"},
+                                 json={"model": model_id, "messages": messages, "max_tokens": max_tokens, "temperature": temperature},
+                                 timeout=30)
+            if resp.status_code != 200:
+                return self._extract_http_error(resp, model_id, self.name)
+            content = self._safe_extract_content(resp.json())
+            return {"content": content, "model_used": model_id, "provider": self.name, "success": True, "error": None, "http_status": 200}
+        except Exception as e: return {"content": "", "model_used": model_id, "provider": self.name, "success": False, "error": str(e), "http_status": None}
+
+
+class CohereProvider(ModelProvider):
+    """Cohere — 1,000 llamadas/mes Trial, OpenAI-compatible.
+    Modelos: Command R+, Command R, Embed v4.0, Rerank v3.5.
+    """
+    _DEFAULT_CONFIDENCE_SCORE = 70.0
+
+    def __init__(self):
+        self._api_key = settings.cohere_api_key
+        self._base_url = "https://api.cohere.com/v1"
+        self._avail_cache, self._avail_ts = None, None
+
+    @property
+    def name(self) -> str: return "cohere"
+
+    def is_available(self) -> bool:
+        if not self._api_key or not self._api_key.strip(): return False
+        now = time.time()
+        if self._avail_cache is not None and self._avail_ts is not None and now - self._avail_ts < 300:
+            return self._avail_cache
+        try:
+            resp = requests.get(f"{self._base_url}/models", headers={"Authorization": f"Bearer {self._api_key}"}, timeout=3)
+            self._avail_cache, self._avail_ts = resp.status_code == 200, now
+            return self._avail_cache
+        except: return False
+
+    def get_models(self) -> List[Dict[str, Any]]:
+        cached = self._get_cached_models()
+        if cached is not None: return cached
+        try:
+            if not self.is_available(): return []
+            resp = requests.get(f"{self._base_url}/models", headers={"Authorization": f"Bearer {self._api_key}"}, timeout=5)
+            if resp.status_code != 200: return []
+            models = []
+            # Cohere usa "models" como clave (no "data") y "name" como ID
+            for m in resp.json().get("models", []):
+                mid = m.get("name", "")
+                if not mid or not _is_chat_model(mid): continue
+                ctx = m.get("context_length", 4096) or 4096
+                models.append({"id": mid, "name": mid, "context_length": ctx,
+                              "capabilities": _infer_capabilities(mid, ctx), "quality_score": 50,
+                              "is_free_tier": True, "provider": "cohere"})
+            self._cache_models(models)
+            return models
+        except: return []
+
+    def call(self, model_id: str, messages: List[Dict], max_tokens: int = 2000, temperature: float = 0.1) -> Dict[str, Any]:
+        try:
+            # Cohere tiene 2 dominios separados:
+            #   api.cohere.com  → API nativa (GET /models funciona aquí)
+            #   api.cohere.ai   → API OpenAI-compatible (chat/completions VA aquí)
+            # Por eso is_available()/get_models() usan self._base_url (api.cohere.com)
+            # pero call() debe usar el dominio de compatibilidad (api.cohere.ai)
+            resp = requests.post("https://api.cohere.ai/compatibility/v1/chat/completions",
+                                 headers={"Authorization": f"Bearer {self._api_key}", "Content-Type": "application/json"},
+                                 json={"model": model_id, "messages": messages, "max_tokens": max_tokens, "temperature": temperature},
+                                 timeout=30)
+            if resp.status_code != 200:
+                return self._extract_http_error(resp, model_id, self.name)
+            content = self._safe_extract_content(resp.json())
+            return {"content": content, "model_used": model_id, "provider": self.name, "success": True, "error": None, "http_status": 200}
+        except Exception as e: return {"content": "", "model_used": model_id, "provider": self.name, "success": False, "error": str(e), "http_status": None}
+
+
 class ProviderManager:
     # F6: Prefijos de proveedor para nomenclatura PROVEEDOR:modelo
     # Ej: OPR:opus-4-6 = OpenRouter entregando Opus 4.6
     #     ANT:opus_4.6 = Anthropic entregando Opus 4.6
     PROVIDER_PREFIXES = {
+        "cerebras":   "CBS",
+        "gemini":     "GMI",
+        "siliconflow":"SFL",
+        "deepseek":   "DSK",
+        "mistral":    "MIS",
+        "sambanova":  "SBN",
         "openrouter": "OPR",
         "anthropic":  "ANT",
         "openai":     "OAI",
@@ -946,6 +1610,10 @@ class ProviderManager:
         "github":     "GTH",
         "together":   "TGT",
         "fireworks":  "FWR",
+        "huggingface":"HFG",
+        "novita":     "NVT",
+        "cloudflare": "CFL",
+        "cohere":     "COH",
         "ollama":     "OLL",
     }
 
@@ -974,6 +1642,12 @@ class ProviderManager:
         """
         # F14: Mapa de clase → nombre de provider (para check de cache sin instanciar)
         _PROVIDER_CLASS_NAMES = {
+            CerebrasProvider: "cerebras",
+            GeminiProvider: "gemini",
+            SiliconFlowProvider: "siliconflow",
+            DeepSeekProvider: "deepseek",
+            MistralProvider: "mistral",
+            SambaNovaProvider: "sambanova",
             OpenRouterProvider: "openrouter",
             AnthropicProvider: "anthropic",
             OpenAIProvider: "openai",
@@ -981,10 +1655,33 @@ class ProviderManager:
             GitHubModelsProvider: "github",
             TogetherProvider: "together",
             FireworksProvider: "fireworks",
+            HuggingFaceProvider: "huggingface",
+            NovitaProvider: "novita",
+            CloudflareProvider: "cloudflare",
+            CohereProvider: "cohere",
             OllamaProvider: "ollama",
         }
 
-        for key, cls in [(settings.openrouter_api_key, OpenRouterProvider), (settings.anthropic_api_key, AnthropicProvider), (settings.openai_api_key, OpenAIProvider), (settings.groq_api_key, GroqProvider), (settings.github_token, GitHubModelsProvider), (settings.together_api_key, TogetherProvider), (settings.fireworks_api_key, FireworksProvider), (settings.ollama_base_url, OllamaProvider)]:
+        for key, cls in [
+            (settings.cerebras_api_key, CerebrasProvider),
+            (settings.google_api_key, GeminiProvider),
+            (settings.siliconflow_api_key, SiliconFlowProvider),
+            (settings.deepseek_api_key, DeepSeekProvider),
+            (settings.mistral_api_key, MistralProvider),
+            (settings.sambanova_api_key, SambaNovaProvider),
+            (settings.openrouter_api_key, OpenRouterProvider),
+            (settings.anthropic_api_key, AnthropicProvider),
+            (settings.openai_api_key, OpenAIProvider),
+            (settings.groq_api_key, GroqProvider),
+            (settings.github_token, GitHubModelsProvider),
+            (settings.together_api_key, TogetherProvider),
+            (settings.fireworks_api_key, FireworksProvider),
+            (settings.HF_TOKEN, HuggingFaceProvider),
+            (settings.novita_api_key, NovitaProvider),
+            (settings.cloudflare_api_token, CloudflareProvider),
+            (settings.cohere_api_key, CohereProvider),
+            (settings.ollama_base_url, OllamaProvider),
+        ]:
             should_instantiate = False
             if key and key.strip():
                 should_instantiate = True
@@ -1191,12 +1888,22 @@ class ProviderManager:
         "openai",
         "ollama",
         "github",   # v2.7 BUG 3 FIX: GitHub Models API usa IDs simples ("gpt-4o", no "openai/gpt-4o")
+        "deepseek",
+        "mistral",
+        "cohere",
     }
 
     _AGGREGATOR_PROVIDERS = {
         "openrouter",
         "together",
         "groq",
+        "cerebras",
+        "gemini",
+        "siliconflow",
+        "sambanova",
+        "huggingface",
+        "novita",
+        "cloudflare",
     }
 
     _BASE_NAME_TO_PREFIX = {
@@ -1215,6 +1922,7 @@ class ProviderManager:
         "phi": "microsoft/",
         "command": "cohere/",
         "kimi": "moonshotai/",
+        "glm": "thudm/",
     }
 
     def translate_model_id(self, model_id: str, target_provider_name: str) -> str:
@@ -1403,7 +2111,7 @@ if __name__ == "__main__":
     logger.setLevel(logging.INFO)
 
     print("\n" + "=" * 60)
-    print("VALIDACION: apa/core/providers.py v2.2")
+    print("VALIDACION: apa/core/providers.py v3.3")
     print("=" * 60)
 
     passed = 0
@@ -1419,7 +2127,7 @@ if __name__ == "__main__":
         print(f"  FALLA: ProviderManager no instanciado")
         failed += 1
 
-    for name in ["openrouter", "anthropic", "openai", "groq", "github", "together", "fireworks", "ollama"]:
+    for name in ["cerebras", "gemini", "siliconflow", "deepseek", "mistral", "sambanova", "openrouter", "together", "fireworks", "groq", "github", "anthropic", "openai", "ollama", "huggingface", "novita", "cloudflare", "cohere"]:
         p = provider_manager.providers.get(name)
         if p:
             print(f"  Proveedor '{name}' registrado (key presente)")
@@ -1507,7 +2215,7 @@ if __name__ == "__main__":
                 print(f"  OK: CACHE_DIR en raiz del proyecto (padre tiene apa/)")
                 passed += 1
             else:
-                print(f"  WARN: No se puede verificar estructura (apa/ no encontrado en {data_parent})")
+                print(f"  INFO: No se puede verificar estructura (apa/ no encontrado en {data_parent})")
                 passed += 1  # No fallar en Linux donde la estructura puede diferir
         else:
             print(f"  WARN: CACHE_DIR no termina en data/providers")
@@ -1527,12 +2235,12 @@ if __name__ == "__main__":
     print("\n[F6] Nomenclatura con prefijo de proveedor")
     try:
         # F6: Tabla de prefijos
-        assert len(ProviderManager.PROVIDER_PREFIXES) == 8, "Debe haber 8 prefijos"
+        assert len(ProviderManager.PROVIDER_PREFIXES) == 18, "Debe haber 18 prefijos"
         assert ProviderManager.PROVIDER_PREFIXES["openrouter"] == "OPR"
         assert ProviderManager.PROVIDER_PREFIXES["anthropic"] == "ANT"
         assert ProviderManager.PROVIDER_PREFIXES["ollama"] == "OLL"
-        assert len(ProviderManager.PREFIX_TO_PROVIDER) == 8
-        f6_passed += 1; print("  OK - Tabla de prefijos completa (8 proveedores)")
+        assert len(ProviderManager.PREFIX_TO_PROVIDER) == 18
+        f6_passed += 1; print("  OK - Tabla de prefijos completa (18 proveedores)")
     except AssertionError as e:
         f6_failed += 1; print(f"  FALLA: {e}")
 
@@ -1570,11 +2278,16 @@ if __name__ == "__main__":
         f8_failed += 1; print(f"  FALLA: {e}")
 
     try:
-        # F8: call() retorna error claro cuando servidor no corre
+        # F8: call() retorna error claro cuando:
+        #   a) Servidor no corre → ConnectionError → "no disponible" / "no está corriendo"
+        #   b) Servidor corre pero modelo no existe → HTTP 404 → "model 'xxx' not found"
+        # Ambos son mensajes claros y válidos que indican la causa exacta.
         result = ollama.call("test-model", [{"role": "user", "content": "hi"}])
-        assert result["success"] == False, "call() deberia fallar"
+        assert result["success"] == False, "call() deberia fallar con modelo inexistente"
         err_lower = result.get("error", "").lower()
-        assert "no disponible" in err_lower or "no está corriendo" in err_lower, \
+        is_server_down = "no disponible" in err_lower or "no está corriendo" in err_lower
+        is_model_missing = "not found" in err_lower or "404" in err_lower
+        assert is_server_down or is_model_missing, \
             f"Mensaje de error no claro: {result['error']}"
         f8_passed += 1; print(f"  OK - call() error claro: \"{result['error']}\"")
     except AssertionError as e:

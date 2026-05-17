@@ -1,8 +1,17 @@
 # apa/config/settings.py
-# v1.1 — F5 FIX: Búsqueda inteligente del .env + guía al usuario
-#         si no se encuentra. Antes, pydantic-settings solo buscaba
-#         en el CWD, que a menudo no coincide con el directorio del
-#         proyecto cuando se lanza APA desde otra ubicación.
+# v1.3 — FIX typo: mensajes de error usaban "SAMBA_API_KEY" pero la variable
+#         correcta es "SAMBANOVA_API_KEY". Sin cambios funcionales.
+#
+# CAMBIOS v1.3 vs v1.2:
+#   - Corregido typo SAMBA_API_KEY → SAMBANOVA_API_KEY en mensajes de error
+#
+# v1.2 — FIX Pydantic V2: migración de class Config a SettingsConfigDict.
+#         Elimina el warning "PydanticDeprecatedSince20: Support for class-based
+#         config is deprecated, use ConfigDict instead" que aparecía al cargar.
+#
+# CAMBIOS v1.2 vs v1.1:
+#   - class Config → model_config = SettingsConfigDict(...) (formato Pydantic V2)
+#   - Sin cambios funcionales, solo elimina el warning de deprecación
 #
 # CAMBIOS v1.1 vs v1.0:
 #   - _find_env_file(): busca .env en múltiples ubicaciones lógicas
@@ -14,7 +23,7 @@ import sys
 import logging
 from typing import Optional
 from pydantic import model_validator
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -109,6 +118,34 @@ class Settings(BaseSettings):
     # Fireworks AI
     fireworks_api_key: str = ""
 
+    # Cerebras (1M tokens/día gratis)
+    cerebras_api_key: str = ""
+
+    # SiliconFlow (200M tokens/mes gratis)
+    siliconflow_api_key: str = ""
+
+    # SambaNova ($5 créditos + acceso persistente)
+    sambanova_api_key: str = ""
+
+    # Google Gemini (1M contexto, tier recurrente)
+    google_api_key: str = ""
+
+    # DeepSeek (5M tokens gratis al registrarse)
+    deepseek_api_key: str = ""
+
+    # Mistral AI (1B tokens/mes gratis, plan Experiment)
+    mistral_api_key: str = ""
+
+    # Novita AI ($1 créditos registro)
+    novita_api_key: str = ""
+
+    # Cloudflare Workers AI (10K neurons/día gratis)
+    cloudflare_api_token: str = ""
+    cf_account_id: str = ""
+
+    # Cohere (1,000 llamadas/mes Trial)
+    cohere_api_key: str = ""
+
     #Hugging Face 
     HF_TOKEN: str = ""
     
@@ -138,7 +175,7 @@ class Settings(BaseSettings):
     # Router
     default_quality_mode: str = "balanced"
     log_level: str = "INFO"
-    provider_priority: str = "openrouter,together,fireworks,groq,github,anthropic,openai,ollama"
+    provider_priority: str = "cerebras,gemini,siliconflow,deepseek,mistral,sambanova,openrouter,together,fireworks,groq,github,anthropic,openai,ollama,huggingface,novita,cloudflare,cohere"
     
     # =================================================================
     # SISTEMA DE COSTES DINÁMICOS: Ruta para BD de usage tracking
@@ -148,11 +185,13 @@ class Settings(BaseSettings):
     # F5: Flag para saber si el .env fue encontrado
     env_file_found: bool = _resolved_env_path is not None
     
-    class Config:
+    # v1.2: Migrado a SettingsConfigDict (Pydantic V2) — elimina warning de deprecación
+    model_config = SettingsConfigDict(
         # F5: Usar la ruta encontrada por _find_env_file(), o ".env" como fallback
-        env_file = _resolved_env_path if _resolved_env_path else ".env"
-        env_file_encoding = "utf-8"
-        extra = "ignore"
+        env_file=(_resolved_env_path if _resolved_env_path else ".env"),
+        env_file_encoding="utf-8",
+        extra="ignore"
+    )
     
     @model_validator(mode='after')
     def validate_at_least_one_provider(self) -> 'Settings':
@@ -173,6 +212,15 @@ class Settings(BaseSettings):
             ("github_token", self.github_token),
             ("together_api_key", self.together_api_key),
             ("fireworks_api_key", self.fireworks_api_key),
+            ("cerebras_api_key", self.cerebras_api_key),
+            ("siliconflow_api_key", self.siliconflow_api_key),
+            ("sambanova_api_key", self.sambanova_api_key),
+            ("google_api_key", self.google_api_key),
+            ("deepseek_api_key", self.deepseek_api_key),
+            ("mistral_api_key", self.mistral_api_key),
+            ("novita_api_key", self.novita_api_key),
+            ("cloudflare_api_token", self.cloudflare_api_token),
+            ("cohere_api_key", self.cohere_api_key),
         ]
         has_valid_key = any(key.strip() for _, key in providers)
         has_ollama = bool(self.ollama_base_url.strip())
@@ -190,7 +238,16 @@ class Settings(BaseSettings):
                     "  GROQ_API_KEY=gsk_...\n"
                     "  GITHUB_TOKEN=ghp_...\n"
                     "  TOGETHER_API_KEY=...\n"
-                    "  FIREWORKS_API_KEY=...\n\n"
+                    "  FIREWORKS_API_KEY=...\n"
+                    "  CEREBRAS_API_KEY=...\n"
+                    "  SILICONFLOW_API_KEY=...\n"
+                    "  SAMBANOVA_API_KEY=...\n"
+                    "  GOOGLE_API_KEY=AIza...\n"
+                    "  DEEPSEEK_API_KEY=...\n"
+                    "  MISTRAL_API_KEY=...\n"
+                    "  NOVITA_API_KEY=...\n"
+                    "  CLOUDFLARE_API_TOKEN=...\n"
+                    "  COHERE_API_KEY=...\n\n"
                     "O configure OLLAMA_BASE_URL=http://localhost:11434 si usa Ollama local\n"
                     "(nota: el servidor Ollama debe estar corriendo para usarlo)."
                 )
@@ -204,7 +261,16 @@ class Settings(BaseSettings):
                     "  GROQ_API_KEY=gsk_...\n"
                     "  GITHUB_TOKEN=ghp_...\n"
                     "  TOGETHER_API_KEY=...\n"
-                    "  FIREWORKS_API_KEY=...\n\n"
+                    "  FIREWORKS_API_KEY=...\n"
+                    "  CEREBRAS_API_KEY=...\n"
+                    "  SILICONFLOW_API_KEY=...\n"
+                    "  SAMBANOVA_API_KEY=...\n"
+                    "  GOOGLE_API_KEY=AIza...\n"
+                    "  DEEPSEEK_API_KEY=...\n"
+                    "  MISTRAL_API_KEY=...\n"
+                    "  NOVITA_API_KEY=...\n"
+                    "  CLOUDFLARE_API_TOKEN=...\n"
+                    "  COHERE_API_KEY=...\n\n"
                     "O configure OLLAMA_BASE_URL=http://localhost:11434 si usa Ollama local\n"
                     "(nota: el servidor Ollama debe estar corriendo para usarlo)."
                 )
