@@ -1,0 +1,49 @@
+{
+  "project_id": "test-proj",
+  "spec_summary": "Objetivo test",
+  "tasks": [
+    {
+      "id": "T1",
+      "name": "previa",
+      "description": "Descripción de prueba",
+      "inputs": [],
+      "expected_output": "output",
+      "acceptance_criterion": "criterio",
+      "task_type": "generation",
+      "depends_on": [],
+      "status": "completed",
+      "attempts": 0,
+      "result": {
+        "code": "ok",
+        "filename": "t1.py"
+      },
+      "model_used": null,
+      "language": "python"
+    },
+    {
+      "id": "T2",
+      "name": "falla temprano",
+      "description": "Descripción de prueba",
+      "inputs": [],
+      "expected_output": "output",
+      "acceptance_criterion": "criterio",
+      "task_type": "generation",
+      "depends_on": [
+        "T1"
+      ],
+      "status": "failed",
+      "attempts": 0,
+      "result": {
+        "success": false,
+        "code": "",
+        "filename": "",
+        "criterion_passed": false,
+        "attempts_used": 1,
+        "model_used": null,
+        "diagnosis": "Fallo en primer intento"
+      },
+      "model_used": null,
+      "language": "python"
+    }
+  ]
+}

@@ -20,7 +20,8 @@ from core.project_reader import ProjectReader
 from core.router import call_llm, get_scaling_state
 from core.pool import pool as _global_pool
 from core.pipeline_state import PipelineStateManager
-
+from core.price_estimator import estimate_price_details  
+from mcp.server import NASConnector      
 from fastapi import FastAPI, HTTPException, BackgroundTasks, Request
 from fastapi.responses import HTMLResponse, Response, StreamingResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -928,6 +929,292 @@ async def pipeline_resume(project_id: str, background_tasks: BackgroundTasks) ->
         raise
     except Exception as e:
         logger.error(f"Error en /pipeline/resume: {e}")
+        return JSONResponse(content={"error": str(e)})
+
+
+@app.get("/pipeline/{project_id}/status")
+async def pipeline_status(project_id: str) -> JSONResponse:
+    """v6.0: Estado detallado de un pipeline específico.
+
+    Retorna el PipelineState guardado para un project_id dado,
+    incluyendo fase actual, tareas, y errores.
+    """
+    try:
+        manager = PipelineStateManager()
+        state = manager.load(project_id)
+        if state is None:
+            raise HTTPException(status_code=404, detail=f"Pipeline {project_id} no encontrado")
+
+        # Calcular resumen de tareas
+        tasks_summary = []
+        for td in state.plan_tasks:
+            tasks_summary.append({
+                "task_id": td.get("task_id", ""),
+                "script": td.get("script", ""),
+                "status": td.get("status", "unknown"),
+                "attempt": td.get("attempt", 0),
+                "error": td.get("error"),
+            })
+
+        return JSONResponse(content={
+            "project_id": state.project_id,
+            "phase": state.phase,
+            "current_task_index": state.current_task_index,
+            "total_tasks": len(state.plan_tasks),
+            "tasks": tasks_summary,
+            "model_used_planner": state.model_used_planner,
+            "error": state.error,
+            "created_at": state.created_at,
+            "updated_at": state.updated_at,
+            "scaling_state": state.scaling_state,
+        })
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error en /pipeline/{project_id}/status: {e}")
+        return JSONResponse(content={"error": str(e)})
+
+
+@app.post("/pipeline/{project_id}/retry")
+async def pipeline_retry(
+    project_id: str,
+    background_tasks: BackgroundTasks,
+    force_model: Optional[str] = None,
+) -> JSONResponse:
+    """v6.0: Reintenta un pipeline fallido desde el último checkpoint.
+
+    Carga el estado guardado, resetea la tarea fallida y ejecuta
+    la reanudación en background. Soporta forzar un modelo específico
+    y reanudar desde planning o execution.
+    """
+    try:
+        manager = PipelineStateManager()
+        state = manager.load(project_id)
+        if state is None:
+            raise HTTPException(status_code=404, detail=f"Pipeline {project_id} no encontrado")
+
+        # Determinar from_step: si no hay tareas ejecutadas, replanificar
+        has_executed_tasks = any(
+            td.get("status") in ("approved", "executing", "awaiting_approval")
+            for td in state.plan_tasks
+        )
+        from_step = "execution" if has_executed_tasks else "planning"
+
+        # Registrar en projects para seguimiento
+        if project_id not in projects:
+            projects[project_id] = {
+                "status": "retrying",
+                "created_at": datetime.utcnow().isoformat(),
+                "spec_path": "",
+            }
+        else:
+            projects[project_id]["status"] = "retrying"
+
+        event_queues[project_id] = event_queues.get(project_id, [])
+
+        def run_retry():
+            try:
+                from agents.semi_auto_agent import SemiAutoAgent
+
+                agent = SemiAutoAgent(project_root=str(SPECS_DIR.parent), project_id=project_id)
+
+                def on_progress(stage: str, msg: str):
+                    if project_id in event_queues:
+                        event_queues[project_id].append({
+                            "type": "progress",
+                            "stage": stage,
+                            "message": msg,
+                            "project_id": project_id,
+                        })
+
+                result = agent.resume_pipeline(
+                    project_id=project_id,
+                    from_step=from_step,
+                    force_model=force_model,
+                )
+
+                if result.success and agent.state.name == "PLANNED":
+                    # Pipeline restaurado, ejecutar siguiente tarea
+                    def on_complete(task_result):
+                        if project_id in event_queues:
+                            event_queues[project_id].append({
+                                "type": "task_complete",
+                                "success": task_result.success,
+                                "error": task_result.error,
+                                "project_id": project_id,
+                            })
+
+                    agent.execute_next(
+                        on_progress=on_progress,
+                        on_complete=on_complete,
+                    )
+
+                projects[project_id]["status"] = "retrying"
+                projects[project_id]["result"] = {
+                    "success": result.success,
+                    "error": result.error,
+                    "tasks_restored": len(result.tasks),
+                }
+
+                logger.info(f"Pipeline {project_id} reintentado desde {from_step}")
+
+            except Exception as e:
+                logger.error(f"Error en pipeline retry: {e}")
+                projects[project_id]["status"] = "failed"
+                projects[project_id]["error"] = str(e)
+
+        background_tasks.add_task(run_retry)
+
+        return JSONResponse(content={
+            "project_id": project_id,
+            "status": "retrying",
+            "from_step": from_step,
+            "total_tasks": len(state.plan_tasks),
+            "force_model": force_model,
+            "message": f"Pipeline reintentándose desde {from_step} en background"
+        })
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error en /pipeline/{project_id}/retry: {e}")
+        return JSONResponse(content={"error": str(e)})
+
+
+@app.get("/routing/for-context/{tokens}")
+async def routing_for_context(tokens: int) -> JSONResponse:
+    """v6.0: Modelo recomendado para una capacidad de contexto dada.
+
+    Dado un número de tokens estimados, retorna el mejor modelo disponible
+    que pueda manejar esa capacidad de contexto. Útil para planificar
+    tareas y decidir si es necesario dividir el trabajo.
+    """
+    try:
+        tokens_int = int(tokens)
+        if tokens_int <= 0:
+            raise HTTPException(status_code=400, detail="tokens debe ser un entero positivo")
+
+        # Buscar el mejor modelo para el contexto requerido
+        best = _global_pool.get_best_for_context(required_context=tokens_int)
+
+        if best is None:
+            # Pool vacío
+            return JSONResponse(content={
+                "tokens_required": tokens_int,
+                "recommended_model": None,
+                "available": False,
+                "message": "Pool vacío — no hay modelos disponibles",
+            })
+
+        # Verificar si el modelo encontrado tiene suficiente contexto
+        fits = best.context_length >= tokens_int
+        capacity_pct = round((best.context_length / tokens_int) * 100, 1) if tokens_int > 0 else 0
+
+        # Obtener alternativas si no hay suficiente contexto
+        alternatives = []
+        if not fits:
+            all_entries = _global_pool.get_ranked_entries(only_available=True)
+            # Buscar el modelo con mayor contexto disponible
+            for entry in all_entries:
+                if entry.context_length > best.context_length:
+                    alternatives.append({
+                        "model_id": entry.model_id,
+                        "provider": entry.provider,
+                        "context_length": entry.context_length,
+                        "composite_score": round(entry.composite_score, 2),
+                        "is_free": entry.is_free,
+                    })
+                if len(alternatives) >= 3:
+                    break
+
+        return JSONResponse(content={
+            "tokens_required": tokens_int,
+            "recommended_model": {
+                "model_id": best.model_id,
+                "provider": best.provider,
+                "context_length": best.context_length,
+                "composite_score": round(best.composite_score, 2),
+                "health_status": best.health_status,
+                "is_free": best.is_free,
+                "fits": fits,
+                "capacity_usage_pct": capacity_pct,
+            },
+            "available": best.health_status == "available",
+            "alternatives": alternatives if not fits else [],
+            "message": (
+                f"Modelo {best.model_id} "
+                f"({'cabe' if fits else 'NO cabe'}: "
+                f"{best.context_length}/{tokens_int} tokens, "
+                f"{capacity_pct}% capacidad)"
+            ),
+        })
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error en /routing/for-context/{tokens}: {e}")
+        return JSONResponse(content={"error": str(e)})
+
+
+@app.get("/health/pool")
+async def health_pool() -> JSONResponse:
+    """v6.0: Estado de salud completo del pool de modelos.
+
+    Retorna información detallada sobre cada modelo en el pool:
+    estado de salud, contexto, ranking, y proveedor.
+    """
+    try:
+        from core.model_health import get_all_health
+
+        entries = _global_pool.get_all_entries()
+        health_data = get_all_health()
+
+        models = []
+        for entry in entries:
+            model_id = entry.model_id
+            provider = entry.provider
+
+            # Combinar datos del pool con health_data
+            health_info = health_data.get(model_id, {})
+            # También buscar por composite key (provider, model_id)
+            if not health_info:
+                health_info = health_data.get(f"{provider}/{model_id}", {})
+
+            models.append({
+                "model_id": model_id,
+                "provider": provider,
+                "context_length": entry.context_length,
+                "health_status": entry.health_status,
+                "composite_score": round(entry.composite_score, 2),
+                "is_free": entry.is_free,
+                "verified_at": entry.verified_at,
+                "model_health": {
+                    "status": health_info.get("status", entry.health_status),
+                    "error": health_info.get("error"),
+                    "provider_health": health_info.get("provider", provider),
+                },
+            })
+
+        # Ordenar por composite_score descendente
+        models.sort(key=lambda m: m["composite_score"], reverse=True)
+
+        # Resumen
+        total = len(models)
+        available = sum(1 for m in models if m["health_status"] == "available")
+        unknown = sum(1 for m in models if m["health_status"] == "unknown")
+        failed = sum(1 for m in models if m["health_status"] == "failed")
+        rate_limited = sum(1 for m in models if m["health_status"] == "rate_limited")
+        payment_required = sum(1 for m in models if m["health_status"] == "payment_required")
+
+        return JSONResponse(content={
+            "total_models": total,
+            "available": available,
+            "unknown": unknown,
+            "failed": failed,
+            "rate_limited": rate_limited,
+            "payment_required": payment_required,
+            "models": models,
+        })
+    except Exception as e:
+        logger.error(f"Error en /health/pool: {e}")
         return JSONResponse(content={"error": str(e)})
 
 

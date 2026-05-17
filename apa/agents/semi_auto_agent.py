@@ -54,6 +54,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from core.router import call_llm, re_escalate, try_re_escalate, get_scaling_state, estimate_task_size
 from core.assembly_validator import AssemblyValidator
 from core.code_signatures import build_integrator_context, extract_signatures, count_tokens_estimate
+from core.pipeline_state import PipelineState, PipelineStateManager, PipelinePhase
 
 logger = logging.getLogger(__name__)
 
@@ -519,6 +520,11 @@ class SemiAutoAgent:
         self._model_used_planner = ""
         # v3.0: Metadata de las llamadas LLM (planning)
         self._planner_llm_metadata: Dict[str, Any] = {}
+        # v6.0: PipelineState integration for persistence/resume
+        self._user_prompt = ""
+        self._target_file = ""
+        self._pipeline_state: Optional[PipelineState] = None
+        self._state_manager: Optional[PipelineStateManager] = None
 
     # ─── Propiedades ───
 
@@ -570,6 +576,225 @@ class SemiAutoAgent:
             self._state = AgentState.CANCELLED
             self._log.append("Cancelado por el usuario durante ejecución")
 
+    # ─── PipelineState: Persistencia y reanudación ───
+
+    def _init_state_manager(self) -> PipelineStateManager:
+        """Inicialización perezosa del PipelineStateManager."""
+        if self._state_manager is None:
+            self._state_manager = PipelineStateManager()
+        return self._state_manager
+
+    def _snapshot_plan_tasks(self) -> List[Dict[str, Any]]:
+        """Serializa las tareas del plan para PipelineState."""
+        return [
+            {
+                "task_id": t.task_id,
+                "script": t.script,
+                "status": t.status.value,
+                "attempt": t.attempt,
+                "max_attempts": t.max_attempts,
+                "planner_output": t.planner_output,
+                "coder_output": t.coder_output,
+                "assembled_content": t.assembled_content,
+                "error": t.error,
+                "rejection_feedback": t.rejection_feedback,
+            }
+            for t in self._plan
+        ]
+
+    def _save_checkpoint(self, phase: str, error: Optional[str] = None) -> bool:
+        """Guarda el estado actual del pipeline a disco.
+
+        Args:
+            phase: Fase del pipeline (PipelinePhase.value).
+            error: Error opcional para registrar.
+
+        Returns:
+            True si se guardó correctamente.
+        """
+        if not self._project_id:
+            logger.debug("_save_checkpoint: sin project_id, saltando")
+            return False
+
+        try:
+            manager = self._init_state_manager()
+            state = PipelineState(
+                project_id=self._project_id,
+                phase=phase,
+                current_task_index=self._current_task_index,
+                user_prompt=self._user_prompt,
+                target_file=self._target_file,
+                model_used_planner=self._model_used_planner,
+                plan_tasks=self._snapshot_plan_tasks(),
+                scaling_state=get_scaling_state(),
+                log=self._log[-50:],
+                error=error,
+            )
+            # Preservar created_at del estado anterior
+            if self._pipeline_state and self._pipeline_state.created_at > 0:
+                state.created_at = self._pipeline_state.created_at
+
+            ok = manager.save(state)
+            self._pipeline_state = state
+            if ok:
+                logger.debug(f"Checkpoint guardado: phase={phase}, tarea={self._current_task_index}")
+            return ok
+        except Exception as e:
+            logger.error(f"Error guardando checkpoint: {e}")
+            return False
+
+    def _is_context_exceeded_response(self, response: dict) -> bool:
+        """Detecta si una respuesta de call_llm() indica contexto excedido sin fallback.
+
+        Cuando _handle_context_exceeded() en router.py no encuentra un modelo
+        con contexto suficiente, devuelve error_type='context_exceeded_no_fallback'.
+        """
+        return (
+            response.get("error_type") == "context_exceeded_no_fallback"
+            or response.get("action_required") == "split_task"
+            or "context_exceeded_no_fallback" in str(response.get("error", ""))
+        )
+
+    def resume_pipeline(
+        self,
+        project_id: str,
+        from_step: Optional[str] = None,
+        force_model: Optional[str] = None,
+    ) -> PlanResult:
+        """Reanuda un pipeline desde un checkpoint guardado.
+
+        Carga el estado persistido en PipelineState y restaura el plan,
+        índice de tarea, logs y estado del agente. Permite reanudar
+        desde la fase de planificación o desde la ejecución.
+
+        Args:
+            project_id: ID del proyecto a reanudar.
+            from_step: Paso desde el cual reanudar.
+                       'planning' → re-ejecuta generate_plan() con el prompt guardado.
+                       'execution' o None → restaura el plan y continúa desde
+                       la siguiente tarea pendiente.
+            force_model: Modelo a forzar para la siguiente llamada LLM.
+                         (Se registra como preferencia; el auto-scaling puede
+                         sobreescribirlo si el modelo no está disponible.)
+
+        Returns:
+            PlanResult con las tareas restauradas, o error si no se pudo cargar.
+        """
+        result = PlanResult()
+
+        try:
+            manager = self._init_state_manager()
+            state = manager.load(project_id)
+
+            if state is None:
+                result.error = f"No se encontró estado guardado para project_id={project_id}"
+                self._log.append(f"[RESUME] {result.error}")
+                return result
+
+            self._log.append(f"[RESUME] Estado cargado: phase={state.phase}, "
+                            f"tareas={len(state.plan_tasks)}, "
+                            f"índice={state.current_task_index}")
+
+            # Restaurar estado del agente
+            self._project_id = project_id
+            self._user_prompt = state.user_prompt
+            self._target_file = state.target_file
+            self._model_used_planner = state.model_used_planner
+            self._pipeline_state = state
+
+            # Restaurar logs previos
+            if state.log:
+                self._log = list(state.log)
+            self._log.append(f"[RESUME] Reanudando pipeline desde phase={state.phase}")
+
+            # Registrar modelo forzado si se especificó
+            if force_model:
+                self._log.append(f"[RESUME] Modelo forzado solicitado: {force_model}")
+                # TODO: Integrar con router.py para forzar modelo específico
+                # Por ahora, el auto-scaling decidirá el modelo final.
+
+            if from_step == "planning":
+                # Re-ejecutar planificación desde el prompt guardado
+                self._log.append("[RESUME] Re-planificando desde el prompt original...")
+                return self.generate_plan(self._user_prompt, self._target_file)
+
+            # Restaurar plan desde las tareas serializadas
+            self._plan = []
+            for td in state.plan_tasks:
+                # Mapear string de status a enum TaskStatus
+                status_map = {s.value: s for s in TaskStatus}
+                task_status = status_map.get(td.get("status", "pending"), TaskStatus.PENDING)
+
+                task = TaskInfo(
+                    task_id=td.get("task_id", ""),
+                    script=td.get("script", ""),
+                    status=task_status,
+                    attempt=td.get("attempt", 0),
+                    max_attempts=td.get("max_attempts", 3),
+                    planner_output=td.get("planner_output", ""),
+                    coder_output=td.get("coder_output", ""),
+                    assembled_content=td.get("assembled_content", ""),
+                    error=td.get("error"),
+                    rejection_feedback=td.get("rejection_feedback", ""),
+                )
+                self._plan.append(task)
+
+            self._current_task_index = state.current_task_index
+
+            # Restaurar contenido original de archivos desde disco
+            self._original_contents = {}
+            for task in self._plan:
+                if task.script and self.project_root:
+                    file_path = self._resolve_file(task.script)
+                    if file_path and os.path.exists(file_path):
+                        try:
+                            with open(file_path, 'r', encoding='utf-8') as f:
+                                self._original_contents[task.script] = f.read()
+                        except Exception as e:
+                            self._log.append(f"[RESUME] No se pudo leer {task.script}: {e}")
+
+            # Restaurar assembled_content como original si la tarea fue aprobada
+            for task in self._plan:
+                if task.status == TaskStatus.APPROVED and task.assembled_content:
+                    self._original_contents[task.script] = task.assembled_content
+
+            # Verificar si hay tareas pendientes
+            pending = sum(1 for t in self._plan if t.status == TaskStatus.PENDING)
+            failed = sum(1 for t in self._plan if t.status == TaskStatus.FAILED)
+
+            if pending > 0:
+                self._state = AgentState.PLANNED
+                self._log.append(f"[RESUME] Listo para ejecución: {pending} tareas pendientes")
+            elif failed > 0:
+                # Todas las tareas pendientes fallaron — reintentar desde la primera fallida
+                for i, t in enumerate(self._plan):
+                    if t.status == TaskStatus.FAILED:
+                        t.status = TaskStatus.PENDING
+                        t.attempt = 0
+                        self._current_task_index = i - 1
+                        break
+                self._state = AgentState.PLANNED
+                self._log.append(f"[RESUME] Reintentando tareas fallidas")
+                self._save_checkpoint(PipelinePhase.EXECUTING.value)
+            else:
+                # Todas completadas o aprobadas
+                self._state = AgentState.COMPLETED
+                self._log.append("[RESUME] Pipeline ya completado")
+
+            result.tasks = self._plan
+            result.success = True
+            result.model_used = self._model_used_planner
+            result.log = self._log.copy()
+            self._save_checkpoint(PipelinePhase.EXECUTING.value)
+
+            return result
+
+        except Exception as e:
+            result.error = f"Error reanudando pipeline: {e}"
+            self._log.append(f"[RESUME] EXCEPCIÓN: {e}")
+            logger.error(f"SemiAutoAgent.resume_pipeline error: {e}", exc_info=True)
+            return result
+
     # ─── Fase 1: Planificación ───
 
     def generate_plan(
@@ -599,6 +824,9 @@ class SemiAutoAgent:
         self._current_task_index = -1
         self._log = []
         self._original_contents = {}
+        # v6.0: Guardar prompt y target para persistencia
+        self._user_prompt = user_prompt
+        self._target_file = target_file
         
         result = PlanResult()
         self._log.append(f"Planificación: {user_prompt[:80]}")
@@ -713,6 +941,9 @@ class SemiAutoAgent:
             self._report(on_progress, "planificador", 
                          f"Plan generado: {len(self._plan)} tarea(s)")
             
+            # v6.0: Checkpoint después de planificación exitosa
+            self._save_checkpoint(PipelinePhase.PLANNING.value)
+            
             return result
 
         except Exception as e:
@@ -773,10 +1004,29 @@ class SemiAutoAgent:
         def _run():
             result = self._execute_single_task(task, on_progress)
             
+            # v6.0: Detectar contexto excedido (sin fallback)
+            is_ctx_exceeded = (
+                result.error
+                and "[CONTEXT_EXCEEDED]" in (result.error or "")
+            )
+            
             if self._cancelled:
                 self._state = AgentState.CANCELLED
                 task.status = TaskStatus.FAILED
                 task.error = "Cancelado por el usuario"
+                # v6.0: Checkpoint en cancelación durante ejecución
+                self._save_checkpoint(PipelinePhase.CANCELLED.value)
+            elif is_ctx_exceeded:
+                # v6.0: Contexto excedido — pausar pipeline y guardar checkpoint
+                self._state = AgentState.FAILED
+                task.status = TaskStatus.FAILED
+                task.error = result.error
+                self._log.append(f"Tarea {task.task_id} PAUSADA — contexto excedido, "
+                                f"pipeline puede reanudarse con resume_pipeline()")
+                self._save_checkpoint(
+                    PipelinePhase.FAILED.value,
+                    error=f"Contexto excedido en {task.task_id}: {result.error}"
+                )
             elif result.success:
                 self._state = AgentState.AWAITING_APPROVAL
                 task.status = TaskStatus.AWAITING_APPROVAL
@@ -784,6 +1034,8 @@ class SemiAutoAgent:
                 task.assembled_content = result.assembled_content
                 task.validation_result = result.validation_result
                 self._log.append(f"Tarea {task.task_id} ejecutada OK — esperando aprobación")
+                # v6.0: Checkpoint después de ejecución exitosa
+                self._save_checkpoint(PipelinePhase.AWAITING_APPROVAL.value)
             else:
                 # Error en la ejecución
                 if task.attempt >= task.max_attempts:
@@ -792,6 +1044,8 @@ class SemiAutoAgent:
                     self._log.append(f"Tarea {task.task_id} FALLIDA tras {task.attempt} intentos: {result.error}")
                     # No cambiamos a FAILED global — las demás tareas pueden seguir
                     self._state = AgentState.PLANNED
+                    # v6.0: Checkpoint en fallo de tarea
+                    self._save_checkpoint(PipelinePhase.EXECUTING.value, error=result.error)
                 else:
                     # Reintento automático si es error de sintaxis
                     val = result.validation_result or {}
@@ -822,6 +1076,8 @@ class SemiAutoAgent:
                         task.assembled_content = result.assembled_content
                         task.validation_result = result.validation_result
                         self._log.append(f"Tarea {task.task_id} con errores — esperando decisión del Director")
+                        # v6.0: Checkpoint en tarea con errores
+                        self._save_checkpoint(PipelinePhase.EXECUTING.value, error=result.error)
             
             if on_complete:
                 on_complete(result)
@@ -868,6 +1124,11 @@ class SemiAutoAgent:
         if pending == 0:
             self._state = AgentState.COMPLETED
             self._log.append("Plan completado — todas las tareas aprobadas")
+            # v6.0: Checkpoint final — pipeline completado
+            self._save_checkpoint(PipelinePhase.COMPLETED.value)
+        else:
+            # v6.0: Checkpoint después de aprobación
+            self._save_checkpoint(PipelinePhase.EXECUTING.value)
         
         return True
 
@@ -898,6 +1159,8 @@ class SemiAutoAgent:
             task.status = TaskStatus.PENDING
             self._state = AgentState.PLANNED
             self._log.append(f"Tarea {task.task_id} — reintento {task.attempt + 1}/{task.max_attempts}")
+            # v6.0: Checkpoint en rechazo con reintento
+            self._save_checkpoint(PipelinePhase.EXECUTING.value, error=f"Rechazada: {feedback[:100]}")
             return True
         else:
             # Máximo de intentos alcanzado — marcar como fallida
@@ -908,6 +1171,8 @@ class SemiAutoAgent:
             pending = sum(1 for t in self._plan if t.status == TaskStatus.PENDING)
             if pending == 0:
                 self._state = AgentState.COMPLETED
+            # v6.0: Checkpoint en tarea fallida por rechazo
+            self._save_checkpoint(PipelinePhase.EXECUTING.value, error=f"Rechazada (máx intentos): {feedback[:100]}")
             return False
 
     def skip_task(self) -> bool:
@@ -994,7 +1259,12 @@ class SemiAutoAgent:
 
             if not coder_response.get("success"):
                 result.error = f"Error del Codificador (modelo: {coder_response.get('model_used','?')}, intentos: {coder_response.get('attempts','?')}): {coder_response.get('error', 'sin respuesta')}"
-                self._log.append(f"[CODIFICADOR] ERROR: {result.error}")
+                # v6.0: Detectar contexto excedido sin fallback
+                if self._is_context_exceeded_response(coder_response):
+                    result.error = f"[CONTEXT_EXCEEDED] {result.error}"
+                    self._log.append(f"[CODIFICADOR] ERROR: Contexto excedido — sin modelo con contexto suficiente")
+                else:
+                    self._log.append(f"[CODIFICADOR] ERROR: {result.error}")
                 self._report(on_progress, "codificador", f"Error: {coder_response.get('error', 'sin respuesta')}")
                 return result
 
@@ -1094,7 +1364,12 @@ class SemiAutoAgent:
 
             if not integrator_response.get("success"):
                 result.error = f"Error del Integrador (modelo: {integrator_response.get('model_used','?')}): {integrator_response.get('error', 'sin respuesta')}"
-                self._log.append(f"[INTEGRADOR] ERROR: {result.error}")
+                # v6.0: Detectar contexto excedido sin fallback
+                if self._is_context_exceeded_response(integrator_response):
+                    result.error = f"[CONTEXT_EXCEEDED] {result.error}"
+                    self._log.append(f"[INTEGRADOR] ERROR: Contexto excedido — sin modelo con contexto suficiente")
+                else:
+                    self._log.append(f"[INTEGRADOR] ERROR: {result.error}")
                 self._report(on_progress, "integrador", f"Error: {integrator_response.get('error', 'sin respuesta')}")
                 return result
 

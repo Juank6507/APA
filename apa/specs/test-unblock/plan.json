@@ -1,0 +1,68 @@
+{
+  "project_id": "test-proj",
+  "spec_summary": "Objetivo test",
+  "tasks": [
+    {
+      "id": "T1",
+      "name": "completada",
+      "description": "Descripción de prueba",
+      "inputs": [],
+      "expected_output": "output",
+      "acceptance_criterion": "criterio",
+      "task_type": "generation",
+      "depends_on": [],
+      "status": "completed",
+      "attempts": 0,
+      "result": {
+        "code": "ok",
+        "filename": "t1.py"
+      },
+      "model_used": null,
+      "language": "python"
+    },
+    {
+      "id": "T2",
+      "name": "fallida y replanned",
+      "description": "Descripción de prueba",
+      "inputs": [],
+      "expected_output": "output",
+      "acceptance_criterion": "criterio",
+      "task_type": "generation",
+      "depends_on": [
+        "T1"
+      ],
+      "status": "replanned",
+      "attempts": 0,
+      "result": {
+        "success": false,
+        "diagnosis": "eliminada"
+      },
+      "model_used": null,
+      "language": "python"
+    },
+    {
+      "id": "T3",
+      "name": "depende de T2",
+      "description": "Descripción de prueba",
+      "inputs": [],
+      "expected_output": "output",
+      "acceptance_criterion": "criterio",
+      "task_type": "generation",
+      "depends_on": [
+        "T2"
+      ],
+      "status": "completed",
+      "attempts": 0,
+      "result": {
+        "success": true,
+        "code": "print('t3')",
+        "filename": "t3.py",
+        "criterion_passed": true,
+        "attempts_used": 1,
+        "model_used": "mock"
+      },
+      "model_used": "mock",
+      "language": "python"
+    }
+  ]
+}

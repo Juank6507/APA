@@ -235,6 +235,252 @@ def _generate_multi_file_plan(spec: dict, project_id: str) -> dict:
     logger.info(f"Multi-file plan saved to {plan_path} with {len(tasks)} tasks")
     return plan_result
 
+def replan_task(task: dict, plan: dict, error_context: dict) -> dict:
+    """Replantea una tarea que falló tras agotar los intentos de corrección.
+
+    Recibe una tarea fallida junto con toda la información de los errores
+    y se la pasa al planificador para que decida cómo proceder:
+
+    - Dividirla en subtareas más simples
+    - Simplificarla con un enfoque menos ambicioso
+    - Sustituirla por una tarea diferente que logre el mismo objetivo
+    - Eliminarla si el planificador decide que no es necesaria
+
+    La decisión la toma el planificador (LLM), no el orquestador.
+
+    Args:
+        task: La tarea fallida, con su estado y resultado.
+        plan: El plan completo actual (para conocer el contexto del proyecto).
+        error_context: Diccionario con información del fracaso:
+            - diagnosis: motivo del fallo
+            - attempts_used: intentos consumidos
+            - last_code: último código generado (si existe)
+            - last_filename: último nombre de archivo (si existe)
+
+    Returns:
+        Diccionario con:
+        - success: bool
+        - replacement_tasks: lista de tareas nuevas (vacía si se eliminó)
+        - action: "replaced" | "removed" | "none"
+        - reasoning: explicación del planificador
+        - error: string (vacío si éxito)
+        - model_used: modelo usado
+    """
+    logger.info(
+        f"Replanificando tarea {task['id']} ({task.get('name', '')}): "
+        f"{error_context.get('diagnosis', 'Error desconocido')} "
+        f"tras {error_context.get('attempts_used', 0)} intentos"
+    )
+
+    # Contexto del proyecto para que el planificador entienda el objetivo general
+    project_goal = plan.get("spec_summary", "Objetivo no disponible")
+    other_tasks = [
+        {"id": t["id"], "name": t.get("name", ""), "status": t.get("status")}
+        for t in plan.get("tasks", [])
+        if t["id"] != task["id"]
+    ]
+
+    system_prompt = (
+        "Eres un planificador experto de proyectos de software. "
+        "Una tarea ha fallado tras múltiples intentos de generación "
+        "y corrección. Tu trabajo es analizar por qué falló y decidir "
+        "cómo proceder. Tienes libertad total para:\n"
+        "  1. Dividir la tarea en subtareas más simples\n"
+        "  2. Simplificarla cambiando el enfoque\n"
+        "  3. Sustituirla por una tarea diferente con el mismo objetivo\n"
+        "  4. Eliminarla si no es necesaria\n\n"
+        "Respondes ÚNICAMENTE con JSON válido, sin texto adicional, "
+        "sin bloques markdown."
+    )
+
+    # Construir resumen del error para el prompt
+    diagnosis = error_context.get("diagnosis", "Error desconocido")
+    last_code_preview = ""
+    if error_context.get("last_code"):
+        code = error_context["last_code"]
+        last_code_preview = code[:500] if len(code) > 500 else code
+
+    user_prompt = (
+        f"La siguiente tarea ha fallado y necesita ser replanteada.\n\n"
+        f"CONTEXTO DEL PROYECTO:\n"
+        f"- Objetivo general: {project_goal}\n"
+        f"- Otras tareas en el plan: {json.dumps(other_tasks, ensure_ascii=False)}\n\n"
+        f"TAREA FALLIDA:\n"
+        f"- ID: {task['id']}\n"
+        f"- Nombre: {task.get('name', '')}\n"
+        f"- Descripción: {task.get('description', '')}\n"
+        f"- Inputs: {task.get('inputs', [])}\n"
+        f"- Output esperado: {task.get('expected_output', '')}\n"
+        f"- Criterio de aceptación: {task.get('acceptance_criterion', '')}\n"
+        f"- Tipo: {task.get('task_type', 'generation')}\n"
+        f"- Dependencias originales: {task.get('depends_on', [])}\n"
+        f"- Lenguaje: {task.get('language', 'python')}\n\n"
+        f"INFORMACIÓN DEL FRACASO:\n"
+        f"- Motivo: {diagnosis}\n"
+        f"- Intentos consumidos: {error_context.get('attempts_used', 0)}\n"
+        f"- Último código generado (primeros 500 chars):\n"
+        f"{last_code_preview if last_code_preview else '(No se generó código)'}\n\n"
+        f"INSTRUCCIONES:\n"
+        f"Analiza por qué falló esta tarea y decide cómo proceder. "
+        f"Si decides dividirla, las subtareas deben ser secuenciales. "
+        f"La primera subtarea hereda las dependencias de la tarea original. "
+        f"Los IDs de nuevas tareas deben ser {task['id']}_r1, {task['id']}_r2, etc.\n\n"
+        f"Responde con este JSON exacto:\n"
+        f"{{\n"
+        f'    "action": "replaced" o "removed",\n'
+        f'    "reasoning": "explicación de por qué tomaste esta decisión",\n'
+        f'    "replacement_tasks": [\n'
+        f'    {{\n'
+        f'        "id": "{task["id"]}_r1",\n'
+        f'        "name": string,\n'
+        f'        "description": string,\n'
+        f'        "depends_on": array de ids,\n'
+        f'        "inputs": array de strings,\n'
+        f'        "expected_output": string,\n'
+        f'        "acceptance_criterion": string,\n'
+        f'        "task_type": "{task.get("task_type", "generation")}"\n'
+        f'    }}\n'
+        f'  ]\n'
+        f"}}\n\n"
+        f"Reglas:\n"
+        f"- Si action es 'removed', replacement_tasks debe ser []\n"
+        f"- Si action es 'replaced', debe haber al menos 1 tarea de reemplazo\n"
+        f"- Máximo 5 tareas de reemplazo\n"
+        f"- Cada tarea debe tener su propio criterio de aceptación verificable"
+    )
+
+    result = call_llm(
+        task_type="planning",
+        system_prompt=system_prompt,
+        user_prompt=user_prompt,
+        max_tokens=3000
+    )
+
+    if not result.get("success"):
+        error_msg = result.get("error", "Error desconocido")
+        logger.error(f"Error al replanificar tarea {task['id']}: {error_msg}")
+        return {
+            "success": False,
+            "replacement_tasks": [],
+            "action": "none",
+            "reasoning": "",
+            "error": error_msg,
+            "model_used": result.get("model_used")
+        }
+
+    # Parsear la respuesta del modelo
+    try:
+        cleaned = _clean_llm_response(result.get("content", ""))
+        parsed = json.loads(cleaned)
+    except json.JSONDecodeError as e:
+        logger.error(f"JSON inválido al replanificar tarea {task['id']}: {e}")
+        return {
+            "success": False,
+            "replacement_tasks": [],
+            "action": "none",
+            "reasoning": "",
+            "error": f"Respuesta inválida del planificador: {e}",
+            "model_used": result.get("model_used")
+        }
+
+    action = parsed.get("action", "none")
+    reasoning = parsed.get("reasoning", "")
+    raw_tasks = parsed.get("replacement_tasks", [])
+
+    # Validar la acción
+    if action not in ("replaced", "removed"):
+        logger.warning(
+            f"Acción desconocida '{action}' para tarea {task['id']}, "
+            f"tratando como 'none'"
+        )
+        return {
+            "success": False,
+            "replacement_tasks": [],
+            "action": "none",
+            "reasoning": reasoning,
+            "error": f"Acción no reconocida: {action}",
+            "model_used": result.get("model_used")
+        }
+
+    # Si la acción es 'removed', no hay tareas de reemplazo
+    if action == "removed":
+        logger.info(
+            f"Tarea {task['id']} eliminada por el planificador: {reasoning}"
+        )
+        return {
+            "success": True,
+            "replacement_tasks": [],
+            "action": "removed",
+            "reasoning": reasoning,
+            "error": "",
+            "model_used": result.get("model_used")
+        }
+
+    # Construir las tareas de reemplazo con el formato completo del sistema
+    if not raw_tasks:
+        logger.error(
+            f"Acción 'replaced' pero sin tareas para {task['id']}"
+        )
+        return {
+            "success": False,
+            "replacement_tasks": [],
+            "action": "none",
+            "reasoning": reasoning,
+            "error": "Acción 'replaced' pero no se proporcionaron tareas",
+            "model_used": result.get("model_used")
+        }
+
+    original_deps = task.get("depends_on", [])
+    language = task.get("language", "python")
+    replacement_tasks = []
+
+    for i, rt_data in enumerate(raw_tasks):
+        rt_id = rt_data.get("id", f"{task['id']}_r{i + 1}")
+        provided_deps = rt_data.get("depends_on", [])
+
+        # Si no tiene dependencias, la primera hereda las de la original
+        # y las demás dependen de la anterior (secuenciales)
+        if not provided_deps and i == 0:
+            deps = list(original_deps)
+        elif not provided_deps and i > 0:
+            deps = [replacement_tasks[i - 1]["id"]]
+        else:
+            deps = provided_deps
+
+        replacement_task = {
+            "id": rt_id,
+            "name": rt_data.get("name", f"Tarea reemplazo {rt_id}"),
+            "description": rt_data.get("description", ""),
+            "depends_on": deps,
+            "inputs": rt_data.get("inputs", []),
+            "expected_output": rt_data.get("expected_output", ""),
+            "acceptance_criterion": rt_data.get("acceptance_criterion", ""),
+            "task_type": rt_data.get("task_type", task.get("task_type", "generation")),
+            "status": "pending",
+            "attempts": 0,
+            "result": None,
+            "model_used": None,
+            "language": language,
+            "parent_task_id": task["id"],
+            "replan_reason": "failed_after_retries"
+        }
+        replacement_tasks.append(replacement_task)
+
+    logger.info(
+        f"Tarea {task['id']} replanificada como '{action}': "
+        f"{len(replacement_tasks)} tareas de reemplazo — {reasoning}"
+    )
+
+    return {
+        "success": True,
+        "replacement_tasks": replacement_tasks,
+        "action": action,
+        "reasoning": reasoning,
+        "error": "",
+        "model_used": result.get("model_used")
+    }
+
+
 def split_task_into_subtasks(task: dict, plan: dict, tokens_needed: int,
                               max_available_context: int) -> dict:
     """Divide una tarea demasiado grande en subtareas más pequeñas.
@@ -540,11 +786,32 @@ if __name__ == "__main__":
     import logging
     import time
     from pathlib import Path
+    from config.settings import settings
     logging.disable(logging.CRITICAL)
 
     print("\n" + "=" * 60)
     print("🔍 APA - DIAGNÓSTICO DEL PLANNER + T13/A2c MULTI-ARCHIVO")
     print("=" * 60)
+
+    # Verificar si hay proveedores de IA configurados
+    providers_ok = False
+    try:
+        from core.providers import provider_manager
+        available = provider_manager.list_available()
+        providers_ok = len(available) > 0
+    except Exception:
+        pass
+
+    if not providers_ok:
+        print("\n⚠️  No hay proveedores de IA configurados.")
+        print("   Este diagnóstico necesita al menos un proveedor activo")
+        print("   para llamar al LLM. Verifica tu archivo .env y que")
+        print("   al menos un API key esté configurado.")
+        print("\n" + "=" * 60)
+        print("✅ DIAGNÓSTICO COMPLETADO (omitido por falta de proveedor)")
+        print("=" * 60)
+        logging.disable(logging.NOTSET)
+        sys.exit(0)
 
     spec_path = Path(__file__).parents[1] / "specs" / "example.md"
     print(f"\n📄 Spec: {spec_path}")

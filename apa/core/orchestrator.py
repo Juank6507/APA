@@ -7,7 +7,7 @@ from pathlib import Path
 from datetime import datetime
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from config.settings import settings
-from core.planner import parse_spec, generate_plan, split_task_into_subtasks
+from core.planner import parse_spec, generate_plan, split_task_into_subtasks, replan_task
 from core.providers import provider_manager
 from agents.generator import GeneratorAgent
 from agents.corrector import CorrectorAgent
@@ -207,6 +207,143 @@ class Orchestrator:
                 "diagnosis": f"Excepción en ejecución: {str(e)}"
             }
 
+    def _handle_task_replan(self, task: dict, result: dict, plan: dict,
+                                 completed_tasks: dict, on_progress=None) -> bool:
+        """Gestiona la replanificación de una tarea que agotó sus intentos.
+
+        Llama al planificador con toda la información del fracaso para que
+        decida cómo proceder: dividir, simplificar, sustituir o eliminar.
+
+        Returns:
+            True si la replanificación fue exitosa, False si falló.
+        """
+        original_task_id = task["id"]
+        task_result = task.get("result", {})
+
+        logger.info(
+            f"Iniciando replanificación de tarea {original_task_id}: "
+            f"attempts={task_result.get('attempts_used', 0)}"
+        )
+
+        # Construir el contexto del error para el planificador
+        error_context = {
+            "diagnosis": task_result.get("diagnosis", "Fallo desconocido"),
+            "attempts_used": task_result.get("attempts_used", 0),
+            "last_code": task_result.get("code", ""),
+            "last_filename": task_result.get("filename", "")
+        }
+
+        replan_result = replan_task(task, plan, error_context)
+
+        if not replan_result.get("success"):
+            logger.error(
+                f"No se pudo replanificar la tarea {original_task_id}: "
+                f"{replan_result.get('error', 'Error desconocido')}"
+            )
+            return False
+
+        action = replan_result["action"]
+        replacement_tasks = replan_result["replacement_tasks"]
+        reasoning = replan_result.get("reasoning", "")
+
+        if action == "removed":
+            # Marcar como 'replanned' y no insertar nada
+            task["status"] = "replanned"
+            task["result"] = {
+                "success": False,
+                "action_required": "replanned_removed",
+                "diagnosis": f"Tarea eliminada por el planificador: {reasoning}",
+                "model_used": replan_result.get("model_used")
+            }
+
+            # Redirigir dependencias: las tareas que dependían de esta
+            # ahora dependen de las mismas dependencias que tenía la original
+            original_deps = task.get("depends_on", [])
+            for t in plan.get("tasks", []):
+                if t["id"] == original_task_id:
+                    continue
+                deps = t.get("depends_on", [])
+                if original_task_id in deps:
+                    # Si la original tenía dependencias, heredarlas
+                    # Si no, quitar la dependencia (la tarea ya no existe)
+                    new_deps = [d for d in deps if d != original_task_id]
+                    new_deps.extend(original_deps)
+                    # Eliminar duplicados
+                    t["depends_on"] = list(dict.fromkeys(new_deps))
+                    logger.info(
+                        f"Tarea {t['id']} actualizada: dependencias "
+                        f"redirigidas de {original_task_id} a {t['depends_on']}"
+                    )
+
+            self._emit(on_progress, {
+                "type": "task_replanned",
+                "original_task_id": original_task_id,
+                "original_task_name": task.get("name", ""),
+                "action": "removed",
+                "reasoning": reasoning,
+                "message": (
+                    f"Tarea '{task.get('name', original_task_id)}' eliminada "
+                    f"por el planificador: {reasoning}"
+                )
+            })
+            return True
+
+        # action == 'replaced'
+        # Marcar la tarea original como replanned
+        task["status"] = "replanned"
+        task["result"] = {
+            "success": False,
+            "action_required": "replanned_replaced",
+            "diagnosis": f"Tarea replanificada: {reasoning}",
+            "replaced_by": [rt["id"] for rt in replacement_tasks],
+            "model_used": replan_result.get("model_used")
+        }
+
+        # Redirigir dependencias: tareas que dependían de la original
+        # ahora dependen de la última tarea de reemplazo
+        last_replacement_id = replacement_tasks[-1]["id"]
+        for t in plan.get("tasks", []):
+            if t["id"] == original_task_id:
+                continue
+            deps = t.get("depends_on", [])
+            if original_task_id in deps:
+                t["depends_on"] = [
+                    last_replacement_id if d == original_task_id else d
+                    for d in deps
+                ]
+                logger.info(
+                    f"Tarea {t['id']} actualizada: depende de "
+                    f"{last_replacement_id} (era {original_task_id})"
+                )
+
+        # Insertar las tareas de reemplazo en el plan
+        plan["tasks"].extend(replacement_tasks)
+
+        # Añadir al conjunto de tareas resueltas para desbloqueo
+        # (la original queda como 'replanned', equivalente a resuelta)
+        completed_tasks[original_task_id] = {"replanned": True}
+
+        self._emit(on_progress, {
+            "type": "task_replanned",
+            "original_task_id": original_task_id,
+            "original_task_name": task.get("name", ""),
+            "action": "replaced",
+            "replacement_task_ids": [rt["id"] for rt in replacement_tasks],
+            "replacement_count": len(replacement_tasks),
+            "reasoning": reasoning,
+            "model_used": replan_result.get("model_used"),
+            "message": (
+                f"Tarea '{task.get('name', original_task_id)}' replanificada: "
+                f"{len(replacement_tasks)} tareas de reemplazo — {reasoning}"
+            )
+        })
+
+        logger.info(
+            f"Tarea {original_task_id} replanificada exitosamente: "
+            f"{len(replacement_tasks)} tareas de reemplazo"
+        )
+        return True
+
     def _handle_task_split(self, task: dict, result: dict, plan: dict,
                            completed_tasks: dict, on_progress=None) -> bool:
         """Gestiona la división de una tarea por contexto excedido.
@@ -317,11 +454,12 @@ class Orchestrator:
                 
                 executable = []
                 split_task_ids = {t["id"] for t in tasks if t["status"] == "split"}
+                replanned_task_ids = {t["id"] for t in tasks if t["status"] == "replanned"}
                 for task in pending:
                     if task["status"] != "pending":
                         continue
                     deps = task.get("depends_on", [])
-                    if all(dep_id in completed_tasks or dep_id in split_task_ids for dep_id in deps):
+                    if all(dep_id in completed_tasks or dep_id in split_task_ids or dep_id in replanned_task_ids for dep_id in deps):
                         executable.append(task)
                 
                 if not executable:
@@ -401,6 +539,21 @@ class Orchestrator:
                     else:
                         task["status"] = "failed"
                         task["result"] = result
+
+                        # F1+F2: Si se agotaron los intentos, intentar replanificar
+                        attempts = result.get("attempts_used", 0)
+                        if attempts >= 3:
+                            replan_ok = self._handle_task_replan(
+                                task, result, plan, completed_tasks, on_progress
+                            )
+                            if replan_ok:
+                                # No es failed, fue replanificada
+                                self._persist_plan(plan)
+                                if hasattr(self, 'checkpoint_mgr') and self.checkpoint_mgr:
+                                    self.checkpoint_mgr.save(self.current_plan)
+                                continue
+                            # Si la replanificación falló, queda como failed
+
                         failed_tasks[task["id"]] = {
                             "diagnosis": result.get("diagnosis", "Fallo desconocido"),
                             "attempts_used": result.get("attempts_used", 0)
@@ -483,6 +636,17 @@ class Orchestrator:
                         else:
                             task["status"] = "failed"
                             task["result"] = result
+
+                            # F1+F2: Si se agotaron los intentos, intentar replanificar
+                            attempts = result.get("attempts_used", 0)
+                            if attempts >= 3:
+                                replan_ok = self._handle_task_replan(
+                                    task, result, plan, completed_tasks, on_progress
+                                )
+                                if replan_ok:
+                                    continue
+                            # Si no se replanificó, queda como failed
+
                             failed_tasks[task["id"]] = {
                                 "diagnosis": result.get("diagnosis", "Fallo desconocido"),
                                 "attempts_used": result.get("attempts_used", 0)
@@ -521,7 +685,7 @@ class Orchestrator:
                     "diagnosis": result.get("diagnosis") if not result.get("success") else None
                 })
             
-            all_completed = all(t["status"] in ("completed", "split") for t in tasks)
+            all_completed = all(t["status"] in ("completed", "split", "replanned") for t in tasks)
             
             return {
                 "project_id": plan.get("project_id"),
@@ -790,6 +954,23 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.ERROR)
     for logger_name in ["__main__", "core.orchestrator", "core.planner", "core.checkpoint", "agents.generator", "core.router", "mcp.server", "agents.documenter"]:
         logging.getLogger(logger_name).setLevel(logging.WARNING)
+
+    # Verificar si hay proveedores de IA disponibles
+    providers_ok = False
+    try:
+        from core.providers import provider_manager
+        available = provider_manager.list_available()
+        providers_ok = len(available) > 0
+    except Exception:
+        pass
+
+    if not providers_ok:
+        print("⚠️  No hay proveedores de IA configurados.")
+        print("   Esta prueba necesita al menos un proveedor activo")
+        print("   para ejecutar el pipeline. Verifica tu archivo .env")
+        print("   y que al menos un API key esté configurado.")
+        sys.exit(0)
+
     print("=== PRUEBA 1: run completo con spec de ejemplo ===")
     from pathlib import Path
     spec_path = str(Path(__file__).parents[1] / "specs" / "example.md")
@@ -825,26 +1006,39 @@ if __name__ == "__main__":
     result = orchestrator.run(spec_path, on_progress)
 
     print(f"\n=== RESULTADO FINAL ===")
-    print(f"success: {result['success']}")
-    print(f"project_id: {result['project_id']}")
-    print(f"completed: {result['completed']}")
-    print(f"failed: {result['failed']}")
-    print(f"plan_path: {result['plan_path']}")
+    print(f"success: {result.get('success')}")
+    print(f"project_id: {result.get('project_id')}")
+    print(f"completed: {result.get('completed', 'N/A')}")
+    print(f"failed: {result.get('failed', 'N/A')}")
+    print(f"plan_path: {result.get('plan_path', 'N/A')}")
+    if result.get("error"):
+        print(f"error: {result['error']}")
     if result.get("documentation"):
         doc = result["documentation"]
         print(f"documentation: success={doc.get('success')}, files={doc.get('files_documented', 0)}")
-    print(f"\nResumen de tareas:")
-    for t in result['tasks_summary']:
-        print(f"  [{t['status']}] {t['id']}: {t['name']}")
-        print(f"    criterion_passed={t['criterion_passed']} "
-              f"attempts={t['attempts_used']}")
-        if t['filename']:
-            print(f"    archivo: {t['filename']}")
-        if t['diagnosis']:
-            print(f"    diagnosis: {t['diagnosis']}")
+    tasks_summary = result.get("tasks_summary", [])
+    if tasks_summary:
+        print(f"\nResumen de tareas:")
+        for t in tasks_summary:
+            print(f"  [{t['status']}] {t['id']}: {t['name']}")
+            print(f"    criterion_passed={t['criterion_passed']} "
+                  f"attempts={t['attempts_used']}")
+            if t['filename']:
+                print(f"    archivo: {t['filename']}")
+            if t['diagnosis']:
+                print(f"    diagnosis: {t['diagnosis']}")
 
-    print("\nORCHESTRATOR OK" if result['success']
-          else f"ORCHESTRATOR FALLÓ: {result.get('error')}")
+    if result['success']:
+        print("\n✅ ORCHESTRATOR OK")
+    else:
+        error_msg = result.get('error', '')
+        is_rate_limit = 'rate limit' in error_msg.lower() or '429' in error_msg
+        if is_rate_limit:
+            print(f"\n⚠️  PIPELINE DETENIDO: proveedores saturados temporalmente")
+            print(f"   Detalle: {error_msg}")
+            print("   Vuelve a intentarlo cuando se liberen las cuotas.")
+        else:
+            print(f"\n❌ ORCHESTRATOR FALLÓ: {error_msg}")
 
     # PRUEBA ADICIONAL: Verificar propagación de project_id
     print("\n=== PRUEBA ADICIONAL: Propagación de project_id ===")
@@ -866,7 +1060,7 @@ if __name__ == "__main__":
         assert task.get("project_id") == "test-proj-123", "project_id no se propagó a la tarea"
         return {"success": True, "code": "print('ok')", "filename": "mock.py", "execution": {"criterion_passed": True}}
     orchestrator2.generator.generate_and_test = mock_generate_and_test
-    
+
     try:
         result2 = orchestrator2._run_task(task_mock)
         assert result2.get("success") == True
