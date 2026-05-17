@@ -14,6 +14,9 @@ from agents.corrector import CorrectorAgent
 from agents.documenter import DocumenterAgent
 from core.checkpoint import CheckpointManager
 from core.parallel_executor import ParallelExecutor
+from core.pipeline_state import (
+    PipelineStateManager, PipelineState, PipelinePhase
+)
 logger = logging.getLogger(__name__)
 logger.setLevel(getattr(logging, settings.log_level.upper(), logging.WARNING))
 if not logger.handlers:
@@ -29,6 +32,7 @@ class Orchestrator:
         self.current_plan = None
         self.project_id = None
         self.checkpoint_mgr: CheckpointManager | None = None
+        self._pipeline_mgr = PipelineStateManager()
 
     def _emit(self, on_progress, event: dict):
         event["timestamp"] = datetime.utcnow().isoformat()
@@ -299,6 +303,11 @@ class Orchestrator:
             failed_tasks = {}
             tasks = plan.get("tasks", [])
             max_iterations = len(tasks) * 3
+
+            # FASE 3: Pre-poblar con tareas ya completadas (resume/checkpoint)
+            for t in tasks:
+                if t.get("status") == "completed" and t.get("result"):
+                    completed_tasks[t["id"]] = t["result"]
             
             for iteration in range(max_iterations):
                 pending = [t for t in tasks if t["status"] in ("pending", "running")]
@@ -535,6 +544,122 @@ class Orchestrator:
                 "error": str(e)
             }
 
+    def _save_pipeline_state(self, phase: PipelinePhase, error: str = None) -> None:
+        """Guarda el estado del pipeline para reanudación futura.
+
+        Toma una foto completa del plan actual (incluyendo subtareas
+        dinámicas de FASE 2) y la guarda en pipeline_state.json.
+        """
+        if not self.project_id or not self.current_plan:
+            return
+        try:
+            state = PipelineState(
+                project_id=self.project_id,
+                phase=phase.value,
+                current_task_index=-1,
+                user_prompt=self.current_plan.get("spec_summary", ""),
+                plan_tasks=self.current_plan.get("tasks", []),
+                log=[f"Phase: {phase.value}"],
+                error=error
+            )
+            self._pipeline_mgr.save(state)
+            logger.info(f"PipelineState guardado: fase={phase.value}")
+        except Exception as e:
+            logger.error(f"Error guardando PipelineState: {e}")
+
+    def resume(self, project_id: str, on_progress=None) -> dict:
+        """Reanuda un pipeline interrumpido desde el estado guardado.
+
+        Carga el pipeline_state.json, reconstruye el plan completo
+        (incluyendo subtareas dinámicas de FASE 2) y continúa
+        la ejecución desde donde se quedó.
+
+        Returns:
+            Resultado del pipeline reanudado.
+        """
+        try:
+            logging.getLogger('agents.generator').setLevel(logging.WARNING)
+            logging.getLogger('mcp.server').setLevel(logging.WARNING)
+            logging.getLogger('core.validator').setLevel(logging.WARNING)
+            logging.getLogger('core.llm_cache').setLevel(logging.WARNING)
+
+            state = self._pipeline_mgr.load(project_id)
+            if state is None:
+                return {
+                    "success": False,
+                    "error": f"No se encontró estado guardado para {project_id}",
+                    "project_id": project_id
+                }
+
+            if state.phase in (PipelinePhase.COMPLETED.value,
+                               PipelinePhase.CANCELLED.value):
+                return {
+                    "success": False,
+                    "error": f"Pipeline en estado '{state.phase}', no se puede reanudar",
+                    "project_id": project_id
+                }
+
+            # Reconstruir el plan desde el estado guardado
+            self.project_id = project_id
+            self.current_plan = {
+                "project_id": project_id,
+                "spec_summary": state.user_prompt,
+                "tasks": state.plan_tasks
+            }
+            self.checkpoint_mgr = CheckpointManager(project_id)
+
+            # Contar tareas completadas para el evento
+            completed_count = sum(
+                1 for t in state.plan_tasks if t.get("status") == "completed"
+            )
+            split_count = sum(
+                1 for t in state.plan_tasks if t.get("status") == "split"
+            )
+
+            self._emit(on_progress, {
+                "type": "pipeline_resumed",
+                "project_id": project_id,
+                "phase": state.phase,
+                "tasks_completed": completed_count,
+                "tasks_split": split_count,
+                "total_tasks": len(state.plan_tasks),
+                "message": (
+                    f"Pipeline reanudado: {completed_count} completadas, "
+                    f"{split_count} divididas, "
+                    f"{len(state.plan_tasks) - completed_count - split_count} pendientes"
+                )
+            })
+
+            # Actualizar fase a EXECUTING y guardar
+            self._save_pipeline_state(PipelinePhase.EXECUTING)
+
+            result = self._execute_tasks(self.current_plan, on_progress)
+
+            if result.get("success"):
+                self._save_pipeline_state(PipelinePhase.COMPLETED)
+                self._pipeline_mgr.clear(project_id)
+            else:
+                self._save_pipeline_state(
+                    PipelinePhase.FAILED,
+                    error=result.get("error", "Pipeline fallido tras reanudación")
+                )
+
+            if hasattr(self, 'checkpoint_mgr') and self.checkpoint_mgr:
+                self.checkpoint_mgr.clear()
+
+            doc_result = self._generate_documentation(self.current_plan, on_progress)
+            result["documentation"] = doc_result
+
+            return result
+
+        except Exception as e:
+            logger.error(f"Error en resume: {e}")
+            return {
+                "success": False,
+                "error": f"Excepción al reanudar pipeline: {str(e)}",
+                "project_id": project_id
+            }
+
     def run(self, spec_path: str, on_progress=None) -> dict:
         try:
             # A5: Reducir verbosidad de logs de módulos secundarios
@@ -583,6 +708,9 @@ class Orchestrator:
             self.project_id = plan["project_id"]
             self.checkpoint_mgr = CheckpointManager(self.project_id)
 
+            # FASE 3: Guardar estado en fase PLANNING
+            self._save_pipeline_state(PipelinePhase.PLANNING)
+
             if self.checkpoint_mgr.exists():
                 restored_plan = self.checkpoint_mgr.restore()
                 if restored_plan:
@@ -592,6 +720,9 @@ class Orchestrator:
                         "project_id": self.project_id,
                         "tasks_completed": sum(1 for t in restored_plan["tasks"] if t["status"] == "completed")
                     })
+                    # FASE 3: Actualizar estado a EXECUTING al reanudar por checkpoint
+                    self._save_pipeline_state(PipelinePhase.EXECUTING)
+
                     result = self._execute_tasks(self.current_plan, on_progress)
                     self.checkpoint_mgr.clear()
                     doc_result = self._generate_documentation(self.current_plan, on_progress)
@@ -609,8 +740,20 @@ class Orchestrator:
                 "tasks_count": len(plan.get("tasks", [])),
                 "tasks": task_summaries
             })
+
+            # FASE 3: Actualizar estado a EXECUTING
+            self._save_pipeline_state(PipelinePhase.EXECUTING)
             
             result = self._execute_tasks(plan, on_progress)
+
+            if result.get("success"):
+                self._save_pipeline_state(PipelinePhase.COMPLETED)
+                self._pipeline_mgr.clear(self.project_id)
+            else:
+                self._save_pipeline_state(
+                    PipelinePhase.FAILED,
+                    error=result.get("error", "Pipeline fallido")
+                )
 
             if hasattr(self, 'checkpoint_mgr'):
                 self.checkpoint_mgr.clear()
@@ -622,6 +765,11 @@ class Orchestrator:
             
         except Exception as e:
             logger.error(f"Error in run: {e}")
+            # FASE 3: Guardar estado FAILED si hay excepción
+            self._save_pipeline_state(
+                PipelinePhase.FAILED,
+                error=f"Excepción en orquestación: {str(e)}"
+            )
             return {
                 "success": False,
                 "error": f"Excepción en orquestación: {str(e)}",

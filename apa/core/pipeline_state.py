@@ -119,8 +119,8 @@ class PipelineStateManager:
             if state.created_at == 0:
                 state.created_at = state.updated_at
 
-            state_dir = self._state_path(state.project_id)
-            state_dir.mkdir(parents=True, exist_ok=True)
+            state_path = self._state_path(state.project_id)
+            state_path.parent.mkdir(parents=True, exist_ok=True)
 
             data = {
                 "project_id": state.project_id,
@@ -137,7 +137,7 @@ class PipelineStateManager:
                 "error": state.error,
             }
 
-            with open(state_dir, "w", encoding="utf-8") as f:
+            with open(state_path, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2, ensure_ascii=False)
 
             logger.debug(f"PipelineState guardado: {state.project_id} ({state.phase})")

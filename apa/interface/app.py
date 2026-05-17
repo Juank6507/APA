@@ -861,12 +861,12 @@ async def pipeline_states() -> JSONResponse:
         return JSONResponse(content={"error": str(e)})
 
 
-@app.get("/pipeline/retry/{project_id}")
-async def pipeline_retry(project_id: str) -> JSONResponse:
-    """v6.0: Reanuda un pipeline interrumpido.
+@app.post("/pipeline/resume/{project_id}")
+async def pipeline_resume(project_id: str, background_tasks: BackgroundTasks) -> JSONResponse:
+    """v6.1: Reanuda un pipeline interrumpido.
 
-    Carga el estado guardado y notifica al sistema que debe
-    reanudar la ejecución desde el último punto.
+    Carga el estado guardado y ejecuta la reanudación en background,
+    igual que /run. Devuelve inmediatamente el project_id.
     """
     try:
         manager = PipelineStateManager()
@@ -880,15 +880,54 @@ async def pipeline_retry(project_id: str) -> JSONResponse:
                 detail=f"Pipeline en estado '{state.phase}', no se puede reanudar"
             )
 
+        # Registrar en projects para poder consultar estado
+        if project_id not in projects:
+            projects[project_id] = {
+                "status": "resuming",
+                "created_at": datetime.utcnow().isoformat(),
+                "spec_path": ""
+            }
+        else:
+            projects[project_id]["status"] = "resuming"
+
+        event_queues[project_id] = event_queues.get(project_id, [])
+
+        def run_resume():
+            try:
+                orchestrator = Orchestrator()
+
+                def on_progress(event: dict):
+                    event["project_id"] = project_id
+                    if project_id in event_queues:
+                        event_queues[project_id].append(event)
+
+                result = orchestrator.resume(project_id, on_progress=on_progress)
+                projects[project_id]["status"] = (
+                    "completed" if result.get("success") else "failed"
+                )
+                projects[project_id]["result"] = result
+
+            except Exception as e:
+                logger.error(f"Error en pipeline resume: {e}")
+                projects[project_id]["status"] = "failed"
+                projects[project_id]["error"] = str(e)
+
+        background_tasks.add_task(run_resume)
+
         return JSONResponse(content={
-            "project_id": state.project_id,
+            "project_id": project_id,
+            "status": "resuming",
             "phase": state.phase,
-            "current_task_index": state.current_task_index,
+            "total_tasks": len(state.plan_tasks),
+            "tasks_completed": sum(
+                1 for t in state.plan_tasks if t.get("status") == "completed"
+            ),
+            "message": "Pipeline reanudándose en background"
         })
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error en /pipeline/retry: {e}")
+        logger.error(f"Error en /pipeline/resume: {e}")
         return JSONResponse(content={"error": str(e)})
 
 
