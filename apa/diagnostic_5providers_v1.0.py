@@ -155,7 +155,7 @@ if __name__ == "__main__":
     issues = diagnose_provider(
         name="SiliconFlow",
         api_key=settings.siliconflow_api_key,
-        base_url="https://api.siliconflow.cn/v1"
+        base_url="https://api.siliconflow.com/v1"
     )
     all_issues["SiliconFlow"] = issues
 

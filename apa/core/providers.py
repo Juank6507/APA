@@ -826,6 +826,62 @@ class OllamaProvider(ModelProvider):
             self._avail_cache, self._avail_ts = False, now
             return False
 
+    @staticmethod
+    def _estimate_ollama_context(model_name: str, details: dict) -> int:
+        """T1.2: Estima el context_length de un modelo Ollama.
+
+        Prioridad:
+        1. Heurística por nombre (modelos con context explícito como "128k")
+        2. Familia del modelo y tamaño de parámetros
+        3. Default 32768 (la mayoría de modelos modernos soportan 32k)
+        """
+        name_lower = model_name.lower()
+        # Modelos con context explícito en el nombre
+        for hint, ctx in [("1m", 1048576), ("512k", 524288), ("256k", 262144),
+                          ("128k", 131072), ("64k", 65536), ("32k", 32768)]:
+            if hint in name_lower:
+                return ctx
+        # Modelos grandes → contexto mayor
+        family = (details.get("family") or "").lower()
+        param_size = (details.get("parameter_size") or "").lower()
+        if any(f in family for f in ["qwen3", "qwen2.5", "llama3.1", "llama3.2", "llama3.3", "llama4"]):
+            return 131072  # 128k para familias recientes
+        if any(p in param_size for p in ["70b", "72b", "104b", "405b", "123b"]):
+            return 131072
+        return 32768
+
+    @staticmethod
+    def _ollama_quality_score(param_size: str) -> float:
+        """T1.2: Calcula quality_score basado en tamaño del modelo.
+
+        Escala aproximada basada en parámetros:
+        - 0.5B-1.5B → 40, 3B-8B → 55, 14B-32B → 65, 70B+ → 80
+        """
+        if not param_size:
+            return 50
+        ps = param_size.lower()
+        try:
+            # Extraer número antes de "b" (ej: "7.6B", "70B", "0.5B")
+            import re
+            match = re.search(r'([\d.]+)\s*b', ps)
+            if match:
+                billions = float(match.group(1))
+                if billions >= 70:
+                    return 80
+                elif billions >= 30:
+                    return 70
+                elif billions >= 14:
+                    return 65
+                elif billions >= 7:
+                    return 58
+                elif billions >= 3:
+                    return 55
+                else:
+                    return 40
+        except (ValueError, AttributeError):
+            pass
+        return 50
+
     def get_models(self) -> List[Dict[str, Any]]:
         cached = self._get_cached_models()
         if cached is not None: return cached
@@ -836,7 +892,26 @@ class OllamaProvider(ModelProvider):
             models = []
             for m in resp.json().get("models", []):
                 mid = m.get("name", "")
-                if mid: models.append({"id": mid, "name": mid, "context_length": 8192, "capabilities": _infer_capabilities(mid, 8192), "quality_score": 50, "is_free_tier": True, "provider": "ollama"})
+                if not mid:
+                    continue
+                # T1.2: Extraer metadatos reales de /api/tags
+                details = m.get("details", {}) or {}
+                param_size = details.get("parameter_size", "")
+                ctx_len = self._estimate_ollama_context(mid, details)
+                q_score = self._ollama_quality_score(param_size)
+                models.append({
+                    "id": mid, "name": mid,
+                    "context_length": ctx_len,
+                    "capabilities": _infer_capabilities(mid, ctx_len),
+                    "quality_score": q_score,
+                    "is_free_tier": True, "provider": "ollama",
+                    "metadata": {
+                        "parameter_size": param_size,
+                        "quantization_level": details.get("quantization_level", ""),
+                        "family": details.get("family", ""),
+                        "model_size_gb": round(m.get("size", 0) / (1024**3), 2),
+                    }
+                })
             self._cache_models(models)
             return models
         except: return []
@@ -1118,7 +1193,7 @@ class SiliconFlowProvider(ModelProvider):
 
     def __init__(self):
         self._api_key = settings.siliconflow_api_key
-        self._base_url = "https://api.siliconflow.cn/v1"
+        self._base_url = "https://api.siliconflow.com/v1"
         self._avail_cache, self._avail_ts = None, None
 
     @property

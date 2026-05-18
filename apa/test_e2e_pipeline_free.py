@@ -16,13 +16,10 @@
 #
 # NOTA: Requiere al menos 2 proveedores con API keys configuradas.
 #
-# ENTREGA: v1.3 — Fallback inteligente: si el modelo del pool falla
-#         (modelo inexistente, respuesta vacía, 404), reintentar
-#         automáticamente con un modelo free verificado por proveedor.
-#         Esto separa los problemas de DATOS del pool de los problemas
-#         de CONECTIVIDAD del proveedor.
-#         También actualiza KNOWN_FREE_MODELS con modelos verificados
-#         en May 2026.
+# ENTREGA: v1.3b — Fallback inteligente + modelos verificados May 2026.
+#         - gemini fallback: gemini-2.0-flash → gemini-2.5-flash-lite (deprecated Jun 1)
+#         - openrouter fallback: llama-4-scout rotated out → deepseek-v4-flash:free
+#         - Cerebras zai-glm-4.7 verificado como existente (pero retorna vacío)
 #
 # v1.2 — Fix: extrae base_id del prefixed_id del pool antes
 #         de llamar al provider (parse_prefixed_id + translate_model_id).
@@ -77,14 +74,14 @@ KNOWN_FREE_MODELS = {
 
     # Proveedores que necesitan fallback (pool selecciona modelos inexistentes)
     "cerebras": "llama3.1-8b",
-    "gemini": "gemini-2.0-flash",
+    "gemini": "gemini-2.5-flash-lite",  # gemini-2.0-flash DEPRECATED (shutdown 2026-06-01)
     "groq": "llama-3.1-8b-instant",
     "huggingface": "meta-llama/Llama-3.1-8B-Instruct",
     "novita": "meta-llama/llama-3.1-8b-instruct",
     "sambanova": "Meta-Llama-3.3-70B-Instruct",
 
     # Proveedores con crédicos/keys faltantes (402/401) — modelo correcto
-    "openrouter": "meta-llama/llama-4-scout-17b-16e-instruct:free",
+    "openrouter": "deepseek/deepseek-v4-flash:free",  # llama-4-scout rotated out May 2026
     "cohere": "command-a-03-2025",
     "together": "Meta-Llama-3-8B-Instruct",
     "deepseek": "deepseek-chat",
@@ -618,4 +615,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-    

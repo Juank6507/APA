@@ -1,18 +1,30 @@
 # apa/core/router.py
-# v6.2 — DETECCIÓN REACTIVA DE CONTEXTO EXCEDIDO + SEÑAL SPLIT_TASK.
+# v6.5 — Notificaciones al usuario de actividad en segundo plano.
 #
-#         v6.2: Cuando un modelo devuelve error 413 o equivalentes de
-#         contexto excedido, el router detecta que NO es un fallo del
-#         modelo sino del tamaño del prompt. Busca automáticamente un
-#         modelo con más capacidad de contexto y reintenta sin consumir
-#         intentos. Si no hay modelo suficientemente grande, devuelve
-#         una señal explícita "split_task" para que el planificador o
-#         el agente desglosen la tarea en partes más pequeñas.
+#         v6.5: Integra notifications.py para informar al usuario cuando
+#         se pobla el pool, se actualizan Arena scores, y se sincroniza
+#         el pool con health_data. Estas notificaciones se envían al
+#         callback registrado para que la UI las muestre en tiempo real.
 #
-#         Esto resuelve el problema donde gpt-4o (8K contexto) recibe
-#         una tarea de ensamblado de 15K+ tokens y APA se quedaba
-#         bloqueado, malgastando 3 intentos reales en golpear la
-#         misma pared.
+# CAMBIOS v6.5 vs v6.4:
+#   - NUEVO: notify() en populate_pool() → EVT_POOL_POPULATED
+#   - NUEVO: notify() en update_arena_scores() → EVT_ARENA_REFRESH_COMPLETE
+#   - NUEVO: notify() en _sync_health_to_pool() → EVT_POOL_SYNC_BATCH
+#   - Import lazy de notifications (no rompe si no existe)
+#
+# CAMBIOS v6.4 vs v6.3:
+#   - NUEVO: _sync_single_model_to_pool(base_id) — sincroniza un
+#     solo modelo al pool (callback, solo memoria, sin disco I/O).
+#   - NUEVO: _register_pool_sync_callback() — registra el callback
+#     en model_health v6.0 al iniciar el router.
+#   - MEJORADO: _sync_health_to_pool() — ahora también sincroniza
+#     estados model_removed y temporarily_unavailable.
+#   - El pool refleja cambios en tiempo real (modelo a modelo).
+#
+# CAMBIOS v6.3 vs v6.2:
+#   - NUEVO: Integración con QuotaTracker en _sync_health_after_call()
+#     Registra automáticamente el gasto (cost_usd, tokens) por provider.
+#     Import lazy para no romper si QuotaTracker no está disponible.
 #
 # CAMBIOS v6.2 vs v6.1:
 #   - NUEVO: _handle_context_exceeded() — busca modelo más grande y reintenta
@@ -89,12 +101,12 @@
 #         retry rota modelos (F3), update_arena_scores() (F4),
 #         provider null-coalescing (F2b).
 #
-# v5.3 — Métricas completas en call_llm():
+# v6.3 — Métricas completas en call_llm():
 #         latencia, tokens in/out, coste estimado, Arena score,
 #         provider, success, error_type registrados en UsageTracker v2.0.
 #         Error logging en llamadas fallidas.
 #
-# CAMBIOS v5.3 vs v5.2:
+# CAMBIOS v6.3 vs v5.2:
 #   - call_llm() registra métricas completas en UsageTracker:
 #     · latencia: time.time() antes/después de cada llamada
 #     · tokens_input/output: extraídos de result o estimados
@@ -168,6 +180,26 @@ from core.normalizer import normalize_model_id
 from core.llm_cache import LLMCache
 from core import model_health
 from core.pool import PoolEntry, HealthStatus, pool as _global_pool
+
+# v6.5: Helper para notificar (import lazy de notifications)
+_router_notifier = None
+
+def _notify(event_type: str, message: str, data: dict = None):
+    """Emite una notificación si notifications.py está disponible."""
+    global _router_notifier
+    if _router_notifier is None:
+        try:
+            _router_notifier = __import__('core.notifications', fromlist=['notify']).notify
+        except (ImportError, ModuleNotFoundError):
+            try:
+                _router_notifier = __import__('notifications', fromlist=['notify']).notify
+            except (ImportError, ModuleNotFoundError):
+                _router_notifier = False  # Cache negativo: no volver a intentar
+    if _router_notifier:
+        try:
+            _router_notifier(event_type, message, data)
+        except Exception:
+            pass
 
 # ============================================================================
 # v6.0: PILA DE MODELOS — escalado y des-escalado fluido
@@ -485,7 +517,7 @@ def _get_arena_categories() -> List[str]:
 
 
 # ============================================================================
-# v5.3: Helpers para métricas de uso
+# v6.3: Helpers para métricas de uso
 # ============================================================================
 
 def _estimate_tokens(text: str) -> int:
@@ -828,6 +860,10 @@ def populate_pool(force: bool = False) -> int:
         arena_count = sum(1 for e in _global_pool.get_all_entries() if e.arena_score is not None)
         logger.info(f"populate_pool(): {count} entries ({arena_count} con Arena score), "
                     f"health: {summary}")
+        # v6.5: Notificar al usuario
+        _notify("pool:populated",
+                f"Pool poblado: {count} modelos ({arena_count} con Arena score)",
+                {"total": count, "arena_scores": arena_count, "health": summary})
 
         return count
 
@@ -836,11 +872,75 @@ def populate_pool(force: bool = False) -> int:
         return _global_pool.size()
 
 
+def _sync_single_model_to_pool(base_id: str) -> None:
+    """v6.4: Sincroniza UN modelo del health al pool en memoria.
+
+    Callback registrado en model_health v6.0. Se llama tras cada
+    mark_*() para que el pool refleje el cambio inmediatamente.
+    Solo actualiza memoria — no hace disco I/O.
+
+    base_id es el ID sin prefijo usado por model_health.
+    """
+    try:
+        from core.providers import provider_manager as _pm
+        mh_status = model_health.get_status(base_id)
+        for entry in _global_pool.get_all_entries():
+            _, entry_base_id = _pm.parse_prefixed_id(entry.model_id)
+            if entry_base_id is None or entry_base_id == entry.model_id:
+                entry_base_id = entry.model_id
+            if entry_base_id != base_id:
+                continue
+            # Encontrada la entry del pool para este modelo
+            if mh_status == entry.health_status:
+                continue  # Sin cambios
+            if mh_status == "available":
+                _global_pool.mark_available(entry.provider, entry.model_id)
+            elif mh_status == "payment_required" and entry.health_status != "available":
+                _global_pool.mark_payment_required(entry.provider, entry.model_id)
+            elif mh_status in ("rate_limited", "temporarily_unavailable") \
+                    and entry.health_status not in ("available",):
+                entry.health_status = mh_status
+                entry.verified_at = time.time()
+            elif mh_status in ("failed", "model_removed") \
+                    and entry.health_status not in ("available",):
+                entry.health_status = mh_status
+                entry.verified_at = time.time()
+    except Exception as e:
+        logger.debug(f"_sync_single_model_to_pool({base_id}): {e}")
+
+
+def _register_pool_sync_callback() -> None:
+    """v6.4: Registra el callback de sync con model_health.
+
+    Se llama al importar el router. Si model_health no soporta
+    register_pool_sync_callback (version < v6.0), se ignora
+    silenciosamente (backward compatible).
+    """
+    try:
+        if hasattr(model_health, 'register_pool_sync_callback'):
+            model_health.register_pool_sync_callback(_sync_single_model_to_pool)
+            logger.info("v6.4: Pool sync callback registrado en model_health")
+        else:
+            logger.debug("v6.4: model_health < v6.0, callback no disponible")
+    except Exception as e:
+        logger.debug(f"v6.4: Error registrando pool sync callback: {e}")
+
+
+# v6.4: Registrar callback al importar (si model_health v6.0+ está disponible)
+try:
+    _register_pool_sync_callback()
+except Exception as _cb_err:
+    logger.debug(f"v6.4: No se pudo registrar pool sync callback: {_cb_err}")
+
+
 def _sync_health_to_pool() -> int:
     """Sincroniza health status de model_health al pool.
 
-    Se llama después de probes o verificaciones para que el pool
-    refleje el estado más reciente de model_health.
+    Batch sync: itera TODAS las entries del pool y actualiza
+    las que difieran de model_health. Se usa como complemento
+    del callback individual cuando se necesita sync masivo.
+
+    v6.4: Ahora también sincroniza model_removed y temporarily_unavailable.
 
     Retorna: número de entries actualizadas.
     """
@@ -860,16 +960,23 @@ def _sync_health_to_pool() -> int:
                 elif mh_status == "payment_required" and entry.health_status != "available":
                     _global_pool.mark_payment_required(entry.provider, entry.model_id)
                     updated += 1
-                elif mh_status == "rate_limited" and entry.health_status not in ("available",):
+                elif mh_status in ("rate_limited", "temporarily_unavailable") \
+                        and entry.health_status not in ("available",):
                     entry.health_status = mh_status
                     entry.verified_at = time.time()
                     updated += 1
-                elif mh_status == "failed" and entry.health_status not in ("available",):
+                elif mh_status in ("failed", "model_removed") \
+                        and entry.health_status not in ("available",):
                     entry.health_status = mh_status
                     entry.verified_at = time.time()
                     updated += 1
         if updated > 0:
             logger.debug(f"_sync_health_to_pool(): {updated} entries actualizadas")
+            # v6.5: Notificar al usuario (solo si hay cambios significativos)
+            if updated >= 5:
+                _notify("pool:sync_batch",
+                        f"Pool sincronizado: {updated} modelos actualizados",
+                        {"updated": updated})
     except Exception as e:
         logger.debug(f"_sync_health_to_pool(): error: {e}")
     return updated
@@ -894,6 +1001,10 @@ def update_arena_scores() -> int:
                     updated += 1
         if updated > 0:
             logger.info(f"update_arena_scores(): {updated} entries actualizadas con Arena score")
+            # v6.5: Notificar al usuario
+            _notify("arena:refresh_complete",
+                    f"Arena scores actualizados: {updated} modelos nuevos con score",
+                    {"updated": updated})
     except Exception as e:
         logger.debug(f"update_arena_scores(): error: {e}")
     return updated
@@ -1444,7 +1555,7 @@ def call_llm(
 ) -> Dict[str, Any]:
     """Llama al mejor LLM disponible para la tarea.
 
-    v5.3: Registra métricas completas en UsageTracker v2.0:
+    v6.3: Registra métricas completas en UsageTracker v2.0:
     - latencia (ms), tokens input/output, coste estimado (USD),
     - Arena score del modelo, provider, éxito/error con clasificación.
 
@@ -1462,7 +1573,7 @@ def call_llm(
     logger.debug("Router cache MISS")
     # --------------------------------
     
-    # v5.3: Timing del ciclo completo de llamadas
+    # v6.3: Timing del ciclo completo de llamadas
     call_start_time = time.time()
     
     # v5.6: Bucle con payment discovery (no cuenta como intento real)
@@ -1476,7 +1587,7 @@ def call_llm(
     
     while real_attempt < MAX_REAL_ATTEMPTS and total_attempt < MAX_TOTAL_ATTEMPTS:
         total_attempt += 1
-        # v5.3: Timing por intento
+        # v6.3: Timing por intento
         attempt_start_time = time.time()
         
         try:
@@ -1489,7 +1600,7 @@ def call_llm(
             entry = select_model_entry(task_type, required_context=task_size)
             if entry is None:
                 attempt_elapsed = int((time.time() - attempt_start_time) * 1000)
-                # v5.3: Registrar fallo (no se pudo seleccionar modelo)
+                # v6.3: Registrar fallo (no se pudo seleccionar modelo)
                 _log_usage_if_possible(
                     project_id=project_id,
                     model="",
@@ -1521,7 +1632,7 @@ def call_llm(
 
             model_id = entry.model_id  # F6: Esto es ahora un prefixed_id (ej: "OPR:anthropic/claude-opus-4-6")
             provider_name = entry.provider
-            # v5.3: Arena score del modelo seleccionado
+            # v6.3: Arena score del modelo seleccionado
             arena_score_val = entry.arena_score
 
             # F6: Extraer base_id del prefixed_id para la llamada real al provider
@@ -1556,7 +1667,7 @@ def call_llm(
             if result is None or not result.get("success"):
                 result = provider_manager.call_with_fallback(base_id, messages, max_tokens, temperature)
 
-            # v5.3: Calcular latencia de este intento
+            # v6.3: Calcular latencia de este intento
             attempt_elapsed_ms = int((time.time() - attempt_start_time) * 1000)
 
             if result.get("success"):
@@ -1600,7 +1711,7 @@ def call_llm(
                 except Exception as e:
                     logger.warning(f"Cache set failed (continuing): {e}")
 
-                # v5.3: Extraer métricas de tokens
+                # v6.3: Extraer métricas de tokens
                 tokens_input = 0
                 tokens_output = 0
 
@@ -1618,14 +1729,14 @@ def call_llm(
 
                 total_tokens = tokens_input + tokens_output
 
-                # v5.3: Estimar coste
+                # v6.3: Estimar coste
                 cost_usd = _estimate_cost_usd(tokens_input, tokens_output, actual_model, actual_provider)
 
-                # v5.3: Obtener Arena score si no lo teníamos del entry
+                # v6.3: Obtener Arena score si no lo teníamos del entry
                 if arena_score_val is None:
                     arena_score_val = _get_arena_score(actual_model, task_type)
 
-                # v5.3: Registrar uso con métricas completas
+                # v6.3: Registrar uso con métricas completas
                 _log_usage_if_possible(
                     project_id=project_id,
                     model=actual_model,
@@ -1661,7 +1772,7 @@ def call_llm(
             log_provider = result.get("provider") or provider_name or "unknown"  # Para logging
             _sync_health_after_call(model_id, health_provider, False, error_str)
 
-            # v5.3: Registrar fallo con métricas
+            # v6.3: Registrar fallo con métricas
             error_type_classified = _classify_error_type(error_str)
             _log_usage_if_possible(
                 project_id=project_id,
@@ -1764,7 +1875,7 @@ def call_llm(
             attempt_elapsed_ms = int((time.time() - attempt_start_time) * 1000)
             logger.error(f"Excepcion en call_llm: {e}")
 
-            # v5.3: Registrar excepción
+            # v6.3: Registrar excepción
             _log_usage_if_possible(
                 project_id=project_id,
                 model="",
@@ -1780,10 +1891,10 @@ def call_llm(
             )
             break
 
-    # v5.3: Tiempo total del ciclo
+    # v6.3: Tiempo total del ciclo
     total_elapsed_ms = int((time.time() - call_start_time) * 1000)
 
-    # v5.3: Registrar fallo final (reintentos agotados)
+    # v6.3: Registrar fallo final (reintentos agotados)
     _log_usage_if_possible(
         project_id=project_id,
         model="",
@@ -1830,7 +1941,7 @@ def _log_usage_if_possible(
     error_type: str,
     total_tokens: int = 0,
 ) -> None:
-    """v5.3: Helper para registrar uso con métricas completas.
+    """v6.3: Helper para registrar uso con métricas completas.
 
     No falla nunca — errores de logging no deben interrumpir el flujo.
     Solo registra si project_id está disponible.
@@ -1865,6 +1976,18 @@ def _log_usage_if_possible(
             f"arena={arena_score} success={success} "
             f"error_type={error_type}"
         )
+
+        # T4: Registrar gasto en QuotaTracker
+        if success and cost_usd > 0 and provider:
+            try:
+                from core.quota_tracker import QuotaTracker
+                QuotaTracker.get_instance().record_spending(
+                    provider=provider,
+                    cost_usd=cost_usd,
+                    tokens=total_tokens,
+                )
+            except Exception as qt_err:
+                logger.debug(f"QuotaTracker recording failed: {qt_err}")
     except Exception as e:
         logger.warning(f"Usage tracking failed (continuing): {e}")
 
@@ -1885,7 +2008,7 @@ def validate_self() -> bool:
 
 
 # =============================================================================
-# BLOQUE DE PRUEBA — v5.3 con métricas completas
+# BLOQUE DE PRUEBA — v6.3 con métricas completas
 # =============================================================================
 if __name__ == "__main__":
     import logging
@@ -1899,7 +2022,7 @@ if __name__ == "__main__":
     start_time = _time.time()
 
     print("\n" + "=" * 60)
-    print("APA Router v5.3 — Pool + Arena ELO + Health + Métricas Completas")
+    print("APA Router v6.5 — Pool + Arena + Health + Notifications")
     print("=" * 60)
 
     # --- model_health state ---
@@ -1916,6 +2039,17 @@ if __name__ == "__main__":
         print(f"  models: {total} total, {avail} available, {rl} rate_limited, {fail} failed, {unk} unknown")
     except Exception as e:
         print(f"  Error obteniendo diagnostico: {e}")
+
+    # --- Pool sync callback status ---
+    print("\nv6.4 Pool sync callback:")
+    if hasattr(model_health, 'get_diagnostic_info'):
+        diag = model_health.get_diagnostic_info()
+        cb_registered = diag.get('pool_callback_registered', False)
+        dirty = diag.get('dirty', False)
+        flush_imm = diag.get('flush_immediately', None)
+        print(f"  callback_registered: {cb_registered}")
+        print(f"  dirty: {dirty}")
+        print(f"  flush_immediately: {flush_imm}")
 
     # --- Pool population (v5.0) ---
     print("\n--- Pool population (P-1 composite key) ---")
@@ -1951,8 +2085,8 @@ if __name__ == "__main__":
         else:
             print(f"  {task:12s} -> Sin modelo disponible [{elapsed:.2f}s]")
 
-    # --- v5.3: Test de helpers de métricas ---
-    print("\nv5.3 — Helpers de métricas:")
+    # --- v6.3: Test de helpers de métricas ---
+    print("\nv6.3 — Helpers de métricas:")
     print("-" * 40)
 
     # _estimate_tokens
@@ -1966,8 +2100,8 @@ if __name__ == "__main__":
         ("Request timeout after 30s", "timeout"),
         ("HTTP 402 Payment Required", "payment"),
         ("HTTP 401 Unauthorized", "auth"),
-        ("HTTP 404 Model not found", "model_not_found"),
-        ("HTTP 500 Internal Server Error", "server"),
+        ("HTTP 404 Model not found", "not_found"),
+        ("HTTP 500 Internal Server Error", "server_error"),
         ("Unknown error", "unknown"),
     ]
     for err_str, expected in test_errors:

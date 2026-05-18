@@ -1218,6 +1218,204 @@ async def health_pool() -> JSONResponse:
         return JSONResponse(content={"error": str(e)})
 
 
+@app.get("/health/providers")
+async def health_providers() -> JSONResponse:
+    """T6.6: Resumen de salud por proveedor.
+
+    Retorna un resumen agregado por proveedor: modelos totales,
+    disponibles, caídos, y estado de conexión del proveedor.
+    """
+    try:
+        from core.providers import provider_manager
+        from core.model_health import get_all_health
+
+        health_data = get_all_health()
+        providers_summary = []
+
+        for prov_name, prov_obj in provider_manager.providers.items():
+            # Verificar si el proveedor responde
+            try:
+                is_avail = prov_obj.is_available()
+            except Exception:
+                is_avail = False
+
+            # Obtener modelos del proveedor
+            try:
+                prov_models = prov_obj.get_models()
+            except Exception:
+                prov_models = []
+
+            # Contar estados de salud de los modelos de este proveedor
+            statuses = {"available": 0, "unknown": 0, "failed": 0,
+                        "rate_limited": 0, "payment_required": 0,
+                        "model_removed": 0, "temporarily_unavailable": 0}
+
+            for m in prov_models:
+                mid = m.get("id", "")
+                h = health_data.get(mid, {})
+                st = h.get("status", "unknown") if h else "unknown"
+                if st in statuses:
+                    statuses[st] += 1
+                else:
+                    statuses["unknown"] += 1
+
+            providers_summary.append({
+                "provider": prov_name,
+                "is_available": is_avail,
+                "total_models": len(prov_models),
+                "available": statuses["available"],
+                "unknown": statuses["unknown"],
+                "failed": statuses["failed"],
+                "rate_limited": statuses["rate_limited"],
+                "payment_required": statuses["payment_required"],
+                "model_removed": statuses["model_removed"],
+                "temporarily_unavailable": statuses["temporarily_unavailable"],
+            })
+
+        providers_summary.sort(key=lambda p: p["provider"])
+
+        # Resumen global
+        total_providers = len(providers_summary)
+        active_providers = sum(1 for p in providers_summary if p["is_available"])
+        total_models = sum(p["total_models"] for p in providers_summary)
+        total_available = sum(p["available"] for p in providers_summary)
+        any_issues = any(p["failed"] + p["rate_limited"] + p["payment_required"] + p["model_removed"] > 0
+                         for p in providers_summary)
+
+        return JSONResponse(content={
+            "total_providers": total_providers,
+            "active_providers": active_providers,
+            "total_models": total_models,
+            "total_available_models": total_available,
+            "status": "healthy" if active_providers >= 3 and total_available > 10 else (
+                     "degraded" if active_providers >= 1 else "down"),
+            "providers": providers_summary,
+        })
+    except Exception as e:
+        logger.error(f"Error en /health/providers: {e}")
+        return JSONResponse(content={"error": str(e)})
+
+
+@app.get("/health")
+async def health_check() -> JSONResponse:
+    """T6.6: Health check general rápido.
+
+    Endpoint ligero para monitoreo. Retorna estado global del sistema
+    sin detallar por modelo (usar /health/providers para eso).
+    """
+    try:
+        from core.providers import provider_manager
+        from core.model_health import get_diagnostic_info
+
+        diag = get_diagnostic_info()
+
+        # Verificar proveedores activos
+        providers_up = 0
+        providers_total = len(provider_manager.providers)
+        for prov_obj in provider_manager.providers.values():
+            try:
+                if prov_obj.is_available():
+                    providers_up += 1
+            except Exception:
+                pass
+
+        total_models = diag.get("total_models", 0)
+        available_models = diag.get("available", 0)
+        model_removed = diag.get("model_removed", 0)
+        failed = diag.get("failed", 0)
+
+        # Determinar estado global
+        if providers_up >= 5 and available_models >= 20:
+            overall = "healthy"
+        elif providers_up >= 2 and available_models >= 5:
+            overall = "degraded"
+        else:
+            overall = "down"
+
+        return JSONResponse(content={
+            "status": overall,
+            "providers_up": providers_up,
+            "providers_total": providers_total,
+            "total_models": total_models,
+            "available_models": available_models,
+            "failed_models": failed,
+            "removed_models": model_removed,
+            "cache_loaded": diag.get("cache_loaded", False),
+        })
+    except Exception as e:
+        logger.error(f"Error en /health: {e}")
+        return JSONResponse(content={"status": "error", "error": str(e)})
+
+
+@app.get("/quota/status")
+async def quota_status() -> JSONResponse:
+    """T4: Estado de cuotas por proveedor.
+
+    Retorna el presupuesto diario, gasto acumulado hoy,
+    porcentaje usado, y proveedores bloqueados/alertados.
+    """
+    try:
+        from core.quota_tracker import QuotaTracker
+
+        qt = QuotaTracker.get_instance()
+        summary = qt.get_quota_summary()
+
+        return JSONResponse(content=summary)
+    except Exception as e:
+        logger.error(f"Error en /quota/status: {e}")
+        return JSONResponse(content={"error": str(e)})
+
+
+@app.get("/quota/providers")
+async def quota_providers() -> JSONResponse:
+    """T4: Lista de cuotas configuradas por proveedor."""
+    try:
+        from core.quota_tracker import QuotaTracker
+
+        qt = QuotaTracker.get_instance()
+        quotas = qt.get_all_quotas()
+        spending = qt.get_all_spending_today()
+
+        result = []
+        for q in quotas:
+            prov = q["provider"]
+            sp = spending.get(prov, {})
+            result.append({
+                "provider": prov,
+                "daily_budget_usd": q["daily_budget_usd"],
+                "alert_threshold_pct": q["alert_threshold_pct"],
+                "daily_spent_usd": sp.get("daily_spent_usd", 0),
+                "pct_used": sp.get("pct_used", 0),
+                "status": sp.get("status", "ok"),
+            })
+
+        return JSONResponse(content={
+            "total_quotas": len(result),
+            "providers": result,
+        })
+    except Exception as e:
+        logger.error(f"Error en /quota/providers: {e}")
+        return JSONResponse(content={"error": str(e)})
+
+
+@app.get("/quota/history")
+async def quota_history(days: int = 7) -> JSONResponse:
+    """T4: Historial de gastos por proveedor en los últimos N días."""
+    try:
+        from core.quota_tracker import QuotaTracker
+
+        qt = QuotaTracker.get_instance()
+        history = qt.get_spending_history(days=days)
+
+        return JSONResponse(content={
+            "days": days,
+            "providers": history,
+        })
+    except Exception as e:
+        logger.error(f"Error en /quota/history: {e}")
+        return JSONResponse(content={"error": str(e)})
+
+
 @app.get("/download/{filename}")
 async def download(filename: str):
     try:

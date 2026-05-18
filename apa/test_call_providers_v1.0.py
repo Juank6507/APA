@@ -14,7 +14,9 @@
 #   python test_call_providers_v1.0.py --provider cerebras   # solo uno
 #   python test_call_providers_v1.0.py --skip-unavailable    # no mostrar los caídos
 #
-# ENTREGA: v1.0 — Primera versión. 18 proveedores, 16 disponibles esperados.
+# ENTREGA: v1.1 — Fix modelos obsoletos: cohere command-r→command-a-03-2025,
+#         together Llama-3.1-8B-Instruct-Turbo→Meta-Llama-3-8B-Instruct.
+#         Ambos modelos fueron removidos de sus APIs en 2025.
 
 import sys
 import os
@@ -55,21 +57,20 @@ ALL_PROVIDERS = {
     "huggingface": "Qwen/Qwen2.5-Coder-32B-Instruct",
     "novita":      "deepseek/deepseek-v3-turbo",
     "cloudflare":  "@cf/meta/llama-3.1-8b-instruct-fp8-fast",
-    "cohere":      "command-r",
+    "cohere":      "command-a-03-2025",
     # --- 8 proveedores originales ---
-    "openrouter":  "meta-llama/llama-3.1-8b-instruct:free",
+    "openrouter":  "meta-llama/llama-3.3-70b-instruct:free",
     "groq":        "llama-3.1-8b-instant",
-    "github":      "Phi-3.1-mini-4k-instruct",
-    "together":    "meta-llama/Llama-3.1-8B-Instruct-Turbo",
+    "github":      "Meta-Llama-3.1-8B-Instruct",
+    "together":    "meta-llama/Meta-Llama-3-8B-Instruct",
     "fireworks":   "accounts/fireworks/models/llama-v3p1-8b-instruct",
     "anthropic":   "claude-3-haiku-20240307",
     "openai":      "gpt-4o-mini",
-    "ollama":      "qwen:0.5b",
+    "ollama":      "qwen2.5-coder:1.5b",
 }
 
 # Proveedores que se sabe caídos por causas externas (no bugs de código)
 KNOWN_DOWN = {
-    "siliconflow": "Restricción regional (geo-blocking)",
     "fireworks":   "Cuenta suspendida (HTTP 412)",
 }
 
@@ -274,7 +275,7 @@ def main():
 
     print("\n" + "=" * 70)
     print("  APA — TEST DE LLAMADA REAL (call()) — TODOS LOS PROVEEDORES")
-    print(f"  v1.0 | {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    print(f"  v1.1 | {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print("=" * 70)
 
     # Seleccionar proveedores a testear
