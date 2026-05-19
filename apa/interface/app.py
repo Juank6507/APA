@@ -27,6 +27,15 @@ from fastapi.responses import HTMLResponse, Response, StreamingResponse, JSONRes
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+# P5: Notificaciones compartidas — motor unico de presentacion (v3.0)
+# TODO el HTML/CSS/JS de notificaciones viene del bridge:
+from core.notifications import register_callback, unregister_callback, get_recent_events
+from core.notification_ui_bridge import (
+    format_event, get_event_summary, get_full_summary,
+    EVENT_TYPES_LIST, create_bridge_callback,
+    NOTIF_CSS, NOTIF_TAB_BUTTON, NOTIF_SECTION_HTML, NOTIF_JS,
+)
+
 logger = logging.getLogger(__name__)
 logger.setLevel(getattr(logging, settings.log_level.upper(), logging.INFO))
 if not logger.handlers:
@@ -41,6 +50,58 @@ SPECS_DIR.mkdir(parents=True, exist_ok=True)
 
 projects = {}
 event_queues = {}
+
+# P5: Buffer SSE para notificaciones en tiempo real
+_sse_buffer: List[Dict[str, Any]] = []
+
+
+# P5v3: Startup — conectar arena_fetcher + populate_pool para que
+# las notificaciones de ranking y pool se disparen al arrancar app.py
+def _startup_init_subsystems():
+    """Inicializa subsistemas en background al arrancar FastAPI."""
+    def _do_init():
+        try:
+            # 1) Importar arena_fetcher: dispara arena:cache_loaded + arena:refresh_*
+            from core import arena_fetcher  # noqa: F401
+        except Exception:
+            pass
+        try:
+            # 2) Poblar pool: dispara pool:populated + pool:model_updated por cada modelo
+            from core.router import populate_pool
+            populate_pool()
+        except Exception:
+            pass
+        try:
+            from core.notifications import notify
+            notify("system:startup", "APA FastAPI iniciado — subsistemas conectados",
+                   {"arena": True, "pool": True})
+        except Exception:
+            pass
+    threading.Thread(target=_do_init, daemon=True).start()
+
+
+@app.on_event("startup")
+async def _on_startup():
+    _startup_init_subsystems()
+
+_sse_buffer_lock = threading.Lock()
+
+
+def _sse_notification_callback(event_type, message, data):
+    # Callback registrado en el event bus: formatea y guarda en buffer SSE.
+    formatted = format_event({
+        'type': event_type,
+        'message': message,
+        'data': data or {},
+        'timestamp': time.time(),
+    })
+    with _sse_buffer_lock:
+        _sse_buffer.append(formatted)
+        if len(_sse_buffer) > 300:
+            _sse_buffer.pop(0)
+
+
+register_callback(_sse_notification_callback)
 
 # =============================================================================
 # FACTOR DE COSTES INDIRECTOS DE INFRAESTRUCTURA
@@ -281,6 +342,9 @@ class ChatRequest(BaseModel):
 
 @app.get("/", response_class=HTMLResponse)
 async def root():
+    # P5v3: El HTML usa placeholders <!-- __P5_*__ --> que se reemplazan
+    # con las constantes del bridge (NOTIF_CSS, NOTIF_TAB_BUTTON, etc.)
+    # Toda la visual de notificaciones vive en notification_ui_bridge.py
     html = """
 <!DOCTYPE html>
 <html>
@@ -465,6 +529,9 @@ async def root():
             visibility: visible;
             opacity: 1;
         }
+
+        /* P5: Notificaciones — motor unico notification_ui_bridge.py v3.0 */
+        <!-- __P5_CSS__ -->
     </style>
 </head>
 <body>
@@ -478,6 +545,7 @@ async def root():
             <button class="tab" onclick="switchTab('nueva-spec')">Nueva spec</button>
             <button class="tab" onclick="switchTab('analizar')">Analizar proyecto</button>
             <button class="tab" onclick="switchTab('dashboard')">Dashboard</button>
+            <!-- __P5_TAB__ -->
         </div>
 
         <!-- SECCIÓN CHAT (visible por defecto) -->
@@ -526,6 +594,9 @@ async def root():
                 Selecciona un proyecto y pulsa "Cargar métricas" para ver los datos.
             </div>
         </div>
+
+        <!-- SECCION NOTIFICACIONES — motor unico notification_ui_bridge.py v3.0 -->
+        <!-- __P5_SECTION__ -->
 
         <h3>Proyectos Recientes</h3>
         <table class="history-table">
@@ -604,6 +675,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
     console.log('Chat inicializado');
+    initNotifications();
 });
 
 // Mantener funciones de pestañas para otras secciones
@@ -615,16 +687,31 @@ function switchTab(tabName) {
     document.getElementById('nueva-spec-section').style.display = (tabName === 'nueva-spec') ? 'block' : 'none';
     document.getElementById('analyze-section').style.display = (tabName === 'analizar') ? 'block' : 'none';
     document.getElementById('dashboard-section').style.display = (tabName === 'dashboard') ? 'block' : 'none';
+    document.getElementById('notifications-section').style.display = (tabName === 'notifications') ? 'block' : 'none';
+
+    // Limpiar badge al abrir la pestana de notificaciones
+    if (tabName === 'notifications') {
+        notifUnseen = 0;
+        updateNotifBadge();
+    }
 }
 
 function runAPA() { /* implementado en JS real */ }
 function analyzeProject() { /* implementado en JS real */ }
 function loadDashboard() { /* implementado en JS real */ }
 function runAPAWithSpec() { /* implementado en JS real */ }
+
+// --- P5: Notificaciones — motor unico notification_ui_bridge.py v3.0 ---
+// <!-- __P5_JS__ -->
     </script>
 </body>
 </html>
     """
+    # P5v3: Inyectar motor de notificaciones del bridge en los placeholders
+    html = html.replace('<!-- __P5_CSS__ -->', NOTIF_CSS)
+    html = html.replace('<!-- __P5_TAB__ -->', NOTIF_TAB_BUTTON)
+    html = html.replace('<!-- __P5_SECTION__ -->', NOTIF_SECTION_HTML)
+    html = html.replace('<!-- __P5_JS__ -->', NOTIF_JS)
     return HTMLResponse(content=html)
 
 
@@ -1505,6 +1592,65 @@ async def list_projects():
 
     result.sort(key=lambda x: x.get("created_at", ""), reverse=True)
     return {"projects": result, "total": len(result)}
+
+
+# =============================================================================
+# P5: ENDPOINTS DE NOTIFICACIONES EN TIEMPO REAL
+# =============================================================================
+
+@app.get("/notifications/recent")
+async def notifications_recent() -> JSONResponse:
+    # Retorna los ultimos 100 eventos formateados + resumen completo.
+    try:
+        raw_events = get_recent_events(100)
+        formatted = [format_event(e) for e in raw_events]
+        return JSONResponse(content={
+            'events': formatted,
+            'total': len(formatted),
+            'summary': get_full_summary(),
+        })
+    except Exception as e:
+        logger.error(f"Error en /notifications/recent: {e}")
+        return JSONResponse(content={'events': [], 'total': 0, 'error': str(e)})
+
+
+@app.get("/notifications/summary")
+async def notifications_summary() -> JSONResponse:
+    # Endpoint ligero: solo el resumen de modelos/ranking/pool/top.
+    try:
+        return JSONResponse(content=get_full_summary())
+    except Exception as e:
+        logger.error(f"Error en /notifications/summary: {e}")
+        return JSONResponse(content={})
+
+
+@app.get("/notifications/stream")
+async def notifications_stream(request: Request):
+    # SSE de notificaciones en tiempo real.
+    # Los eventos nuevos del event bus se envian automaticamente
+    # al navegador via Server-Sent Events.
+    async def event_generator():
+        last_idx = 0
+        while True:
+            if await request.is_disconnected():
+                break
+            with _sse_buffer_lock:
+                buf_len = len(_sse_buffer)
+                snapshot = list(_sse_buffer)
+            for i in range(last_idx, buf_len):
+                yield f"data: {json.dumps(snapshot[i], default=str)}\n\n"
+                last_idx = i + 1
+            await asyncio.sleep(0.5)
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        }
+    )
 
 
 # =============================================================================

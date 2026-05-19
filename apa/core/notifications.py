@@ -1,5 +1,9 @@
 # apa/core/notifications.py
-# v1.0 — Sistema de notificaciones en segundo plano.
+# v1.1 — Sistema de notificaciones en segundo plano.
+#
+# v1.1: Agregados EVT_ARENA_CATEGORY_LOADED, EVT_ARENA_TOP_MODELS,
+#       EVT_SYSTEM_STARTUP para notificaciones granulares de providers
+#       y ranking Arena.
 #
 #         Permite que los módulos de APA (model_health, router, arena_fetcher)
 #         emitan eventos estructurados cuando ocurren acciones en background.
@@ -47,6 +51,8 @@ EVT_ARENA_REFRESH_START = "arena:refresh_start"                # Inicio actualiz
 EVT_ARENA_REFRESH_COMPLETE = "arena:refresh_complete"          # Arena actualizado con N modelos
 EVT_ARENA_REFRESH_FAILED = "arena:refresh_failed"              # Fallo al actualizar Arena
 EVT_ARENA_CACHE_LOADED = "arena:cache_loaded"                  # Caché Arena cargado del disco
+EVT_ARENA_CATEGORY_LOADED = "arena:category_loaded"            # Categoria de ranking procesada (v1.1)
+EVT_ARENA_TOP_MODELS = "arena:top_models"                      # Top modelos con scores (v1.1)
 
 # --- router / pool ---
 EVT_POOL_POPULATED = "pool:populated"                          # Pool poblado con N entries
@@ -56,6 +62,7 @@ EVT_POOL_SYNC_BATCH = "pool:sync_batch"                        # Sync masivo poo
 # --- general ---
 EVT_SYSTEM_SHUTDOWN = "system:shutdown"                        # APA cerrándose (atexit)
 EVT_SYSTEM_ERROR = "system:error"                              # Error no recuperable
+EVT_SYSTEM_STARTUP = "system:startup"                          # Evento de inicio/conexion (v1.1)
 
 
 # ============================================================================
@@ -116,7 +123,7 @@ def get_callback_count() -> int:
 # ============================================================================
 
 _last_events: List[Dict[str, Any]] = []  # Buffer de últimos N eventos
-_event_buffer_size = 50
+_event_buffer_size = 300
 _event_lock = threading.Lock()
 
 
@@ -184,9 +191,9 @@ def _default_log_callback(event_type: str, message: str, data: Dict[str, Any]) -
         EVT_HEALTH_CYCLE_START, EVT_HEALTH_CYCLE_END,
         EVT_HEALTH_FLUSH_DISK, EVT_HEALTH_CACHE_LOADED,
         EVT_ARENA_REFRESH_START, EVT_ARENA_REFRESH_COMPLETE, EVT_ARENA_REFRESH_FAILED,
-        EVT_ARENA_CACHE_LOADED,
+        EVT_ARENA_CACHE_LOADED, EVT_ARENA_TOP_MODELS,
         EVT_POOL_POPULATED, EVT_POOL_SYNC_BATCH,
-        EVT_SYSTEM_SHUTDOWN, EVT_SYSTEM_ERROR,
+        EVT_SYSTEM_SHUTDOWN, EVT_SYSTEM_ERROR, EVT_SYSTEM_STARTUP,
     }
     level = logging.INFO if event_type in important_events else logging.DEBUG
     logger.log(level, f"[{event_type}] {message}")
@@ -275,5 +282,12 @@ if __name__ == "__main__":
     print("  [PASS] clear_callbacks() elimina todos")
 
     print("\n" + "=" * 60)
-    print("  TODOS LOS TESTS PASARON — Notifications v1.0 OK")
+    # Test 9: Nuevos tipos de evento v1.1
+    assert EVT_ARENA_CATEGORY_LOADED == "arena:category_loaded"
+    assert EVT_ARENA_TOP_MODELS == "arena:top_models"
+    assert EVT_SYSTEM_STARTUP == "system:startup"
+    print("  [PASS] Nuevos EVT_ v1.1 definidos correctamente")
+
+    print("\n" + "=" * 60)
+    print("  TODOS LOS TESTS PASARON — Notifications v1.1 OK")
     print("=" * 60)

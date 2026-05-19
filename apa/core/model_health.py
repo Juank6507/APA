@@ -1335,7 +1335,7 @@ def on_session_close() -> None:
 _bg_reverification_started = False
 _bg_reverification_lock = threading.Lock()
 _REVERIFICATION_FIRST_DELAY = 30  # BF-4: Primera verificación a los 30s
-_REVERIFICATION_INTERVAL = 600    # Luego cada 10 minutos
+_REVERIFICATION_INTERVAL = 3600   # Luego cada 1 hora (acuerdo rendimiento)
 _PROBE_REVERIFY_DELAY = 2        # Delay entre probes de re-verificación
 
 

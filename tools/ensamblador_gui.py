@@ -32,6 +32,22 @@ try:
 except ImportError:
     PDF_AVAILABLE = False
 
+# P5: Notificaciones compartidas — motor unico (v3.0)
+# TODO el render (tags, eventos, resumen) viene del bridge:
+try:
+    from apa.core.notifications import register_callback, unregister_callback
+    from apa.core.notification_ui_bridge import (
+        format_event, get_event_summary,
+        EVENT_LABEL_MAP, EVENT_TYPES_LIST,
+        create_bridge_callback,
+        # v3.0: Motor de renderizado compartido
+        configure_tkinter_tags, render_events_to_text,
+        get_summary_display_data, SUMMARY_LABELS_CONFIG,
+    )
+    _NOTIF_AVAILABLE = True
+except ImportError:
+    _NOTIF_AVAILABLE = False
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Tooltip
 # ─────────────────────────────────────────────────────────────────────────────
@@ -195,6 +211,7 @@ class App:
         self.asm_original_content = ""           
         self.asm_baseline_content = ""
         self.asm_undo_stack   = []               
+        self._pipeline_active = False  # Rendimiento: suspender notif background durante pipeline
         self.asm_redo_stack   = []               
         self.asm_backup_path  = None   
         self.assembler = Assembler()
@@ -219,7 +236,13 @@ class App:
         nb.add(self.tab_assembler, text="🧩 Ensamblador")
         self._setup_assembler_tab()
 
-        # Tab 3: Plan de Mejoras (referencia)
+        # Tab 3: Notificaciones en tiempo real (P5)
+        if _NOTIF_AVAILABLE:
+            self.tab_notifications = ttk.Frame(nb)
+            nb.add(self.tab_notifications, text="\U0001f4e2 Notificaciones")
+            self._setup_notifications_tab()
+
+        # Tab 4: Plan de Mejoras (referencia)
         self.tab_plan = ttk.Frame(nb)
         nb.add(self.tab_plan, text="📋 Plan de Mejoras")
         self._setup_plan_tab()
@@ -236,15 +259,45 @@ class App:
         self._start_model_probing()
 
     def _start_model_probing(self):
-        """Lanza el probing de modelos en segundo plano al abrir la aplicación."""
+        """Lanza el probing de modelos en segundo plano al abrir la aplicación.
+
+        Conecta los 3 subsistemas que generan eventos:
+          - model_health  → eventos health:* (verificados, fallos, ciclos)
+          - arena_fetcher → eventos arena:* (cache, refresh ranking)
+          - pool          → eventos pool:* (poblacion, sync)
+        """
+        # 1) Importar arena_fetcher: dispara module-level init que emite
+        #    arena:cache_loaded y lanza arena:refresh_start en background.
+        try:
+            from apa.core import arena_fetcher  # noqa: F401
+        except Exception:
+            pass
+
+        # 2) Poblar el pool: dispara pool:populated y pool:model_updated x cada modelo.
+        #    populate_pool() tambien importa arena_fetcher lazy para scores.
+        try:
+            from apa.core.router import populate_pool
+            populate_pool()
+        except Exception:
+            pass
+
+        # 3) Notificar inicio del ensamblador
+        try:
+            from apa.core.notifications import notify
+            notify("system:startup",
+                   "Ensamblador GUI iniciado — subsistemas conectados",
+                   {"arena": True, "pool": True, "version": "4.0"})
+        except Exception:
+            pass
+
+        # 4) Lanzar health probing: dispara health:* events en background.
         try:
             from apa.core import model_health
             from apa.core.router import get_all_available_models
             models = get_all_available_models()
             if models:
                 model_health.start_background_probing(models)
-        except Exception as e:
-            # No bloquear la apertura si falla el probing
+        except Exception:
             pass
 
     # ─────────────────────────────────────────────────────────────────────────
@@ -313,6 +366,18 @@ class App:
             model_health.on_session_close()
         except Exception:
             pass
+
+        # P5: Limpiar callback de notificaciones y timer
+        if _NOTIF_AVAILABLE and hasattr(self, '_notif_callback_ref'):
+            try:
+                unregister_callback(self._notif_callback_ref)
+            except Exception:
+                pass
+        if hasattr(self, '_notif_summary_timer'):
+            try:
+                self.root.after_cancel(self._notif_summary_timer)
+            except Exception:
+                pass
         
         self.root.destroy()
 
@@ -1764,12 +1829,16 @@ class App:
 
         # Ejecutar planificación en hilo separado
         def _plan_in_thread():
-            plan_result = self._auto_agent.generate_plan(
-                user_prompt=prompt,
-                target_file=target,
-                on_progress=self._auto_on_progress,
-            )
-            self.root.after(0, self._auto_on_plan_complete, plan_result)
+            self._pipeline_active = True  # Suspender notif background durante pipeline
+            try:
+                plan_result = self._auto_agent.generate_plan(
+                    user_prompt=prompt,
+                    target_file=target,
+                    on_progress=self._auto_on_progress,
+                )
+                self.root.after(0, self._auto_on_plan_complete, plan_result)
+            finally:
+                self._pipeline_active = False  # Reanudar notif background
 
         self._auto_thread = threading.Thread(target=_plan_in_thread, daemon=True)
         self._auto_thread.start()
@@ -1815,10 +1884,15 @@ class App:
 
         # Ejecutar en hilo
         def _exec_thread():
-            self._auto_agent.execute_next(
-                on_progress=self._auto_on_progress,
-                on_complete=self._auto_on_task_complete,
-            )
+            self._pipeline_active = True  # Suspender notif background durante pipeline
+            try:
+                self._auto_agent.execute_next(
+                    on_progress=self._auto_on_progress,
+                    on_complete=self._auto_on_task_complete,
+                )
+            finally:
+                self._pipeline_active = False  # Reanudar notif background
+                self.root.after(100, self._notif_refresh_summary)  # Refresh inmediato al terminar
 
         self._auto_thread = threading.Thread(target=_exec_thread, daemon=True)
         self._auto_thread.start()
@@ -2192,6 +2266,355 @@ class App:
     def _auto_status(self, text, color="#60a5fa"):
         """Actualiza la etiqueta de estado del modo autónomo."""
         self.auto_status_lbl.config(text=text, foreground=color)
+
+    # ------------------------------------------------------------------
+    # P5: Pestana Notificaciones en Tiempo Real — motor unico v3.0
+    # ------------------------------------------------------------------
+
+    def _setup_notifications_tab(self):
+        if not _NOTIF_AVAILABLE:
+            return
+
+        frame = self.tab_notifications
+        # Fondo oscuro del tab coincidente con app.py
+        _dark_style = ttk.Style()
+        _dark_style.configure("Dark.TFrame", background="#0a0a0a")
+        _dark_style.configure("Dark.TLabel", background="#0a0a0a", foreground="#d4d4d4")
+        frame.configure(style="Dark.TFrame")
+
+        # === PANEL RESUMEN: Fila 1 - Contadores de modelos ===
+        sf1 = tk.Frame(frame, bg="#111", bd=1, relief="solid",
+                       highlightbackground="#333", highlightthickness=1)
+        sf1.pack(fill="x", padx=8, pady=(8, 2))
+        tk.Label(sf1, text=" MODELOS ", bg="#111", fg="#888",
+                 font=("Segoe UI", 9, "bold"), anchor="w").pack(
+                     fill="x", padx=8, pady=(4, 0))
+
+        self._summary_labels = {}
+        # v3.0: Usa SUMMARY_LABELS_CONFIG del bridge (mismo config que web)
+        sf1_grid = tk.Frame(sf1, bg="#111")
+        sf1_grid.pack(fill="x", padx=4, pady=4)
+        for idx, (key, label, color) in enumerate(SUMMARY_LABELS_CONFIG):
+            c = idx % 4
+            r = idx // 4
+            inner = tk.Frame(sf1_grid, bg="#111")
+            inner.grid(row=r, column=c, padx=6, pady=2, sticky="ew")
+            tk.Label(inner, text=label + ":", foreground="#888", bg="#111",
+                      font=("Segoe UI", 9)).pack(side="left", padx=(0, 2))
+            lbl = tk.Label(inner, text="--", foreground=color, bg="#111",
+                            font=("Segoe UI", 10, "bold"))
+            lbl.pack(side="left")
+            self._summary_labels[key] = lbl
+        sf1_grid.columnconfigure((0,1,2,3), weight=1)
+
+        # === PANEL RESUMEN: Fila 2 - Ranking + Pool ===
+        sf2 = tk.Frame(frame, bg="#111", bd=1, relief="solid",
+                       highlightbackground="#333", highlightthickness=1)
+        sf2.pack(fill="x", padx=8, pady=(2, 2))
+        tk.Label(sf2, text=" INFRAESTRUCTURA ", bg="#111", fg="#888",
+                 font=("Segoe UI", 9, "bold"), anchor="w").pack(
+                     fill="x", padx=8, pady=(4, 0))
+
+        self._infra_labels = {}
+        infra_items = [
+            ("arena_ranked",  "Ranking Arena",  "#14b8a6"),
+            ("arena_available","Arena Activo",  "#14b8a6"),
+            ("pool_total",    "Pool Total",     "#8b5cf6"),
+            ("pool_available", "Pool Dispon.",  "#8b5cf6"),
+            ("pool_arena",    "Pool c/Arena",   "#06b6d4"),
+        ]
+        infra_row = tk.Frame(sf2, bg="#111")
+        infra_row.pack(fill="x", padx=8, pady=4)
+        for idx, (key, label, color) in enumerate(infra_items):
+            tk.Label(infra_row, text=label + ":", foreground="#888", bg="#111",
+                      font=("Segoe UI", 9)).pack(side="left", padx=(0, 2))
+            lbl = tk.Label(infra_row, text="--", foreground=color, bg="#111",
+                            font=("Segoe UI", 10, "bold"))
+            lbl.pack(side="left", padx=(0, 10))
+            self._infra_labels[key] = lbl
+
+        ttk.Button(infra_row, text="Refresh",
+                   command=self._notif_refresh_summary, width=8
+                   ).pack(side="right", padx=(10, 0))
+
+        # === PANEL RESUMEN: Fila 3 - Providers ===
+        sf2b = tk.Frame(frame, bg="#111", bd=1, relief="solid",
+                        highlightbackground="#333", highlightthickness=1)
+        sf2b.pack(fill="x", padx=8, pady=(2, 2))
+        tk.Label(sf2b, text=" PROVEEDORES ", bg="#111", fg="#888",
+                 font=("Segoe UI", 9, "bold"), anchor="w").pack(
+                     fill="x", padx=8, pady=(4, 0))
+
+        self._prov_labels = {}
+        prov_row = tk.Frame(sf2b, bg="#111")
+        prov_row.pack(fill="x", padx=8, pady=4)
+        tk.Label(prov_row, text="Activos:", foreground="#888", bg="#111",
+                  font=("Segoe UI", 9)).pack(side="left", padx=(0, 2))
+        self._prov_labels["active"] = tk.Label(prov_row, text="--", foreground="#22c55e",
+                            bg="#111", font=("Segoe UI", 10, "bold"))
+        self._prov_labels["active"].pack(side="left", padx=(0, 10))
+
+        tk.Label(prov_row, text="Total:", foreground="#888", bg="#111",
+                  font=("Segoe UI", 9)).pack(side="left", padx=(0, 2))
+        self._prov_labels["total"] = tk.Label(prov_row, text="--", foreground="#94a3b8",
+                            bg="#111", font=("Segoe UI", 10, "bold"))
+        self._prov_labels["total"].pack(side="left", padx=(0, 10))
+
+        self._prov_names_lbl = tk.Label(prov_row, text="--", foreground="#d4d4d4",
+                                          bg="#111", font=("Consolas", 9), anchor="w")
+        self._prov_names_lbl.pack(side="left", padx=(4, 0), fill="x", expand=True)
+
+        # === PANEL RESUMEN: Fila 4 - Top 3 Planificacion + Top 3 Codigo ===
+        sf3 = tk.Frame(frame, bg="#111", bd=1, relief="solid",
+                       highlightbackground="#333", highlightthickness=1)
+        sf3.pack(fill="x", padx=8, pady=(2, 4))
+        tk.Label(sf3, text=" TOP MODELOS DISPONIBLES ", bg="#111", fg="#888",
+                 font=("Segoe UI", 9, "bold"), anchor="w").pack(
+                     fill="x", padx=8, pady=(4, 0))
+
+        # -- Planificacion --
+        plan_row = tk.Frame(sf3, bg="#111")
+        plan_row.pack(fill="x", padx=8, pady=2)
+        tk.Label(plan_row, text="Planificacion:", foreground="#3b82f6",
+                  bg="#111", font=("Segoe UI", 9, "bold")).pack(side="left", padx=(0, 8))
+        self._top_plan_labels = []
+        for i in range(3):
+            lbl = tk.Label(plan_row, text=f"#{i+1} --", foreground="#d4d4d4",
+                            bg="#111", font=("Consolas", 9))
+            lbl.pack(side="left", padx=4)
+            self._top_plan_labels.append(lbl)
+
+        # -- Codigo --
+        code_row = tk.Frame(sf3, bg="#111")
+        code_row.pack(fill="x", padx=8, pady=(2, 6))
+        tk.Label(code_row, text="Codigo:", foreground="#22c55e",
+                  bg="#111", font=("Segoe UI", 9, "bold")).pack(side="left", padx=(0, 8))
+        self._top_code_labels = []
+        for i in range(3):
+            lbl = tk.Label(code_row, text=f"#{i+1} --", foreground="#d4d4d4",
+                            bg="#111", font=("Consolas", 9))
+            lbl.pack(side="left", padx=4)
+            self._top_code_labels.append(lbl)
+
+        # -- Barra de controles de filtrado --
+        top_bar = tk.Frame(frame, bg="#0a0a0a")
+        top_bar.pack(fill="x", padx=8, pady=(4, 4))
+
+        tk.Label(top_bar, text="Filtrar:", fg="#aaa", bg="#0a0a0a",
+                 font=("Segoe UI", 10)).pack(side="left", padx=(0, 4))
+        self._notif_filter_var = tk.StringVar(value="Todos")
+        filter_values = ["Todos"] + list(EVENT_LABEL_MAP.values())
+        filter_cb = ttk.Combobox(
+            top_bar, textvariable=self._notif_filter_var,
+            values=filter_values, state="readonly", width=14,
+        )
+        filter_cb.pack(side="left", padx=(0, 12))
+        filter_cb.bind("<<ComboboxSelected>>", self._notif_on_filter)
+
+        self._notif_count_lbl = tk.Label(top_bar, text="0 eventos", fg="#888",
+                                          bg="#0a0a0a", font=("Segoe UI", 10))
+        self._notif_count_lbl.pack(side="left", padx=(0, 12))
+
+        ttk.Button(top_bar, text="Limpiar", command=self._notif_clear_display, width=10).pack(side="right")
+
+        # -- Panel de eventos: Text widget estilo app.py (tarjetas con borde) --
+        events_frame = tk.Frame(frame, bg="#0a0a0a", bd=1, relief="solid",
+                                highlightbackground="#333", highlightthickness=1)
+        events_frame.pack(fill="both", expand=True, padx=8, pady=4)
+
+        self._notif_text = tk.Text(
+            events_frame, wrap="word", bg="#0a0a0a", fg="#d4d4d4",
+            font=("Segoe UI", 10), relief="flat", padx=10, pady=8,
+            insertbackground="#d4d4d4", selectbackground="#264f78",
+            cursor="arrow", state="disabled", spacing1=1, spacing3=1,
+        )
+        notif_scroll = tk.Scrollbar(events_frame, orient="vertical",
+                                      command=self._notif_text.yview, bg="#1a1a1a",
+                                      troughcolor="#0a0a0a")
+        self._notif_text.configure(yscrollcommand=notif_scroll.set)
+        self._notif_text.pack(side="left", fill="both", expand=True)
+        notif_scroll.pack(side="right", fill="y")
+
+        # v3.0: Tags configurados por el bridge (misma config que web)
+        configure_tkinter_tags(self._notif_text)
+
+        # -- Barra de estado inferior --
+        self._notif_status_lbl = ttk.Label(frame, text="Esperando eventos...", anchor="w",
+                                            style="Dark.TLabel")
+        self._notif_status_lbl.pack(fill="x", padx=8, pady=(4, 8))
+
+        # -- Estado interno: lista de eventos (source of truth) --
+        # Almacenamos todos los eventos en una lista y rebuild el tree
+        # desde ella en cada filtro. Esto evita el bug de detach/reattach
+        # donde get_children() no retorna los items detachados.
+        self._notif_events_list = []
+        self._notif_total_count = 0
+
+        # -- Registrar callback del event bus --
+        self._notif_callback_ref = create_bridge_callback(self._notif_on_new_event)
+
+        # -- Debounce: evitar rebuilds excesivos cuando llegan muchos eventos --
+        self._notif_rebuild_pending = False
+
+        # -- Carga inicial: historial + resumen --
+        self.root.after(500, self._notif_load_history)
+        self.root.after(1500, self._notif_refresh_summary)
+
+        # -- Refresh periodico del resumen cada 15 segundos --
+        self._notif_summary_timer = self.root.after(15000, self._notif_periodic_summary)
+
+    # ------------------------------------------------------------------
+    # Resumen de modelos (panel superior)
+    # ------------------------------------------------------------------
+
+    def _notif_periodic_summary(self):
+        # Refresh periodico del resumen cada 15 segundos.
+        # v4.1 (Rendimiento): Se suspende cuando hay pipeline activo
+        # para no consumir CPU en el hilo principal.
+        try:
+            if not self._pipeline_active:
+                self._notif_refresh_summary()
+        except Exception:
+            pass
+        if hasattr(self, '_notif_summary_timer'):
+            self._notif_summary_timer = self.root.after(15000, self._notif_periodic_summary)
+
+    def _notif_refresh_summary(self):
+        # v3.0: Usa get_summary_display_data() del bridge para obtener
+        # los textos formateados. Actualiza widgets locales con el resultado.
+        try:
+            from apa.core.notification_ui_bridge import get_full_summary, get_summary_display_data
+            s = get_full_summary()
+            disp = get_summary_display_data(s)
+
+            # Fila 1: Contadores de modelos (usa SUMMARY_LABELS_CONFIG)
+            for key, _label, _color in SUMMARY_LABELS_CONFIG:
+                if key in self._summary_labels:
+                    self._summary_labels[key].config(text=disp.get(key, '0'))
+
+            # Fila 2: Infraestructura
+            self._infra_labels["arena_ranked"].config(text=disp.get("arena_ranked", "0"))
+            self._infra_labels["arena_available"].config(text=disp.get("arena_available", "--"))
+            self._infra_labels["pool_total"].config(text=disp.get("pool_total", "0"))
+            self._infra_labels["pool_available"].config(text=disp.get("pool_available", "0"))
+            self._infra_labels["pool_arena"].config(text=disp.get("pool_arena", "0"))
+
+            # Fila 3: Providers
+            self._prov_labels["active"].config(text=disp.get("prov_active", "--"))
+            self._prov_labels["total"].config(text=disp.get("prov_total", "--"))
+            self._prov_names_lbl.config(text=disp.get("prov_names", "--"))
+
+            # Barra de estado
+            self._notif_status_lbl.config(text=disp.get("status", "Resumen: esperando datos..."))
+
+            # Fila 4: Top 3 (datos del bridge summary directamente)
+            for i in range(3):
+                tp = s.get('top_planning', [])
+                if i < len(tp):
+                    self._top_plan_labels[i].config(
+                        text=f"#{i+1} {tp[i]['name']} ({tp[i]['score']})")
+                else:
+                    self._top_plan_labels[i].config(text=f"#{i+1} --")
+                tc = s.get('top_coding', [])
+                if i < len(tc):
+                    self._top_code_labels[i].config(
+                        text=f"#{i+1} {tc[i]['name']} ({tc[i]['score']})")
+                else:
+                    self._top_code_labels[i].config(text=f"#{i+1} --")
+        except Exception:
+            self._notif_status_lbl.config(text="Resumen: esperando datos...")
+
+    # ------------------------------------------------------------------
+    # Event bus: recibir y almacenar eventos
+    # ------------------------------------------------------------------
+
+    def _notif_load_history(self):
+        # Carga eventos historicos del buffer al arrancar.
+        try:
+            from apa.core.notifications import get_recent_events
+            raw_events = get_recent_events(100)
+            for e in raw_events:
+                formatted = format_event(e)
+                self._notif_events_list.append(formatted)
+            self._notif_events_list.reverse()
+            self._notif_total_count = len(self._notif_events_list)
+            self._notif_rebuild_events()
+        except Exception:
+            pass
+
+    def _notif_on_new_event(self, formatted):
+        # Callback puente: recibe evento formateado.
+        # Almacena en la lista y pide rebuild via root.after().
+        # Debounce: si ya hay un rebuild pendiente, no programar otro.
+        self._notif_events_list.insert(0, formatted)
+        self._notif_total_count += 1
+        if len(self._notif_events_list) > 300:
+            self._notif_events_list.pop()
+
+        # Refrescar resumen al recibir eventos que cambian el estado de modelos:
+        # - cycle_end: termino un ciclo de verificacion completo
+        # - model_verified / model_failed / model_rate_limited / model_removed:
+        #   cambio la disponibilidad de un modelo individual
+        # - pool_populated: se poblo el pool con modelos nuevos
+        # - pool_sync_batch: se sincronizaron cambios de health al pool
+        evt_type = formatted.get('type', '')
+        if any(key in evt_type for key in (
+            'cycle_end', 'model_verified', 'model_failed',
+            'model_rate_limited', 'model_removed',
+            'pool_populated', 'pool_sync_batch',
+            'pool_model_updated',
+        )):
+            self.root.after(0, self._notif_refresh_summary)
+
+        if not self._notif_rebuild_pending:
+            self._notif_rebuild_pending = True
+            self.root.after(80, self._notif_rebuild_tree_debounced)
+
+    def _notif_get_current_filter_prefix(self):
+        # Retorna el prefijo del filtro activo, o None si es "Todos".
+        selected = self._notif_filter_var.get()
+        if selected == "Todos":
+            return None
+        for prefix, label in EVENT_LABEL_MAP.items():
+            if label == selected:
+                return prefix
+        return None
+
+    def _notif_rebuild_tree_debounced(self):
+        # Wrapper con debounce para evitar rebuilds excesivos.
+        self._notif_rebuild_pending = False
+        self._notif_rebuild_events()
+
+    def _notif_rebuild_events(self):
+        # v3.0: DELEGA el render completo al bridge.
+        # render_events_to_text() maneja tags, colores, formato y filtro.
+        filter_prefix = self._notif_get_current_filter_prefix()
+        shown = render_events_to_text(
+            self._notif_text, self._notif_events_list, filter_prefix)
+
+        self._notif_count_lbl.config(text=f"{shown} eventos")
+
+        # Actualizar barra de estado con ultimo evento
+        if self._notif_events_list:
+            last = self._notif_events_list[0]
+            self._notif_status_lbl.config(
+                text=f"[{last['time_str']}] {last['category']}: {last['message']}"
+            )
+
+    def _notif_on_filter(self, _event=None):
+        # Cambia el filtro y rebuild completo.
+        self._notif_rebuild_events()
+
+    def _notif_clear_display(self):
+        # Limpia la lista interna y el widget de texto.
+        self._notif_events_list.clear()
+        self._notif_total_count = 0
+        txt = self._notif_text
+        txt.config(state="normal")
+        txt.delete("1.0", "end")
+        txt.config(state="disabled")
+        self._notif_count_lbl.config(text="0 eventos")
+        self._notif_status_lbl.config(text="Display limpiado")
 
 
 if __name__ == "__main__":

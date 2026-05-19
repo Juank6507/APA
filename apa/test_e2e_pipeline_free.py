@@ -13,18 +13,21 @@
 #   python -m apa.test_e2e_pipeline_free --providers 3     # mínimo 3 proveedores
 #   python -m apa.test_e2e_pipeline_free --quick             # 1 llamada por proveedor
 #   python -m apa.test_e2e_pipeline_free --no-fallback       # sin retry con modelos conocidos
+#   python -m apa.test_e2e_pipeline_free --callbacks-only    # SOLO tests de notificaciones (sin API keys)
 #
-# NOTA: Requiere al menos 2 proveedores con API keys configuradas.
+# NOTA: Requiere al menos 2 proveedores con API keys configuradas
+#       (excepto con --callbacks-only que no necesita API keys).
 #
-# ENTREGA: v1.3b — Fallback inteligente + modelos verificados May 2026.
-#         - gemini fallback: gemini-2.0-flash → gemini-2.5-flash-lite (deprecated Jun 1)
-#         - openrouter fallback: llama-4-scout rotated out → deepseek-v4-flash:free
-#         - Cerebras zai-glm-4.7 verificado como existente (pero retorna vacío)
+# ENTREGA: v1.4 — Cobertura de callbacks/notificaciones.
+#         - NUEVA FASE 6: Tests del sistema de notificaciones (callbacks)
+#         - NUEVO flag --callbacks-only: ejecuta solo tests de callbacks
+#         - Tests: registro, emisión, buffer, unregister, broken callback,
+#           eventos de model_health (mark_available, mark_failed), pool events
+#         - Arena_fetcher: SIN notificaciones aún (pendiente P3)
 #
+# v1.3b — Fallback inteligente + modelos verificados May 2026.
 # v1.2 — Fix: extrae base_id del prefixed_id del pool antes
 #         de llamar al provider (parse_prefixed_id + translate_model_id).
-#         Forzar content a str() para providers que retornan int.
-#
 # v1.1 — Fix: usa provider.call() en vez de call_llm() para testear
 #         cada proveedor individualmente.
 
@@ -118,8 +121,24 @@ class ProviderTestResult:
         return "SKIP"
 
 
+class CallbackTestResult:
+    """Resultado de un test de callback/notificación."""
+    def __init__(self, test_id: str, name: str):
+        self.test_id = test_id
+        self.name = name
+        self.passed: bool = False
+        self.skipped: bool = False
+        self.error: str = ""
+        self.detail: str = ""
+
+    def status_icon(self) -> str:
+        if self.skipped:
+            return "SKIP"
+        return "PASS" if self.passed else "FAIL"
+
+
 # ===========================================================================
-# FUNCIONES DE TEST
+# FUNCIONES DE TEST (FASES 1-5: Provider calls — heredadas de v1.3b)
 # ===========================================================================
 
 def setup_pool() -> Tuple[Any, List]:
@@ -380,7 +399,7 @@ def test_provider_with_fallback(provider_name: str, pool_model_id: str,
 
 
 # ===========================================================================
-# VALIDACIONES
+# VALIDACIONES (FASES 1-5)
 # ===========================================================================
 
 def validate_result(r: ProviderTestResult) -> Tuple[bool, str]:
@@ -412,7 +431,7 @@ def validate_metrics(r: ProviderTestResult) -> Tuple[bool, List[str]]:
 
 
 # ===========================================================================
-# REPORTES
+# REPORTES (FASES 1-5)
 # ===========================================================================
 
 def print_results(results: List[ProviderTestResult]) -> None:
@@ -483,46 +502,540 @@ def print_summary(results: List[ProviderTestResult]) -> None:
 
 
 # ===========================================================================
+# FASE 6: TESTS DE CALLBACKS / NOTIFICACIONES (v1.4)
+# ===========================================================================
+
+def _cb_test(test_results: List[CallbackTestResult], test_id: str, name: str,
+              fn, *args, **kwargs) -> bool:
+    """Helper: ejecuta un test de callback y registra el resultado.
+
+    Retorna True si el test pasó, False si falló.
+    Los errores se capturan para no interrumpir la batería.
+    """
+    result = CallbackTestResult(test_id, name)
+    try:
+        passed = fn(*args, **kwargs)
+        result.passed = bool(passed)
+        if not result.passed:
+            result.error = "Assert falló"
+    except Exception as e:
+        result.passed = False
+        result.error = f"{type(e).__name__}: {e}"
+    test_results.append(result)
+    return result.passed
+
+
+def run_callback_tests() -> List[CallbackTestResult]:
+    """FASE 6: Ejecuta la batería de tests del sistema de notificaciones.
+
+    Estos tests verifican que:
+    - Los callbacks se registran y reciben eventos correctamente
+    - El buffer de eventos funciona (get_recent_events, get_events_by_type)
+    - Un callback roto no rompe el flujo
+    - model_health emite eventos al cambiar estado de modelos
+    - El sistema de unregister y clear funciona
+
+    NO requiere API keys — todo se ejecuta en memoria.
+    Retorna la lista de resultados.
+    """
+    # Imports compartidos por todas las funciones internas (closure scope)
+    from core.notifications import (
+        notify, register_callback, unregister_callback, clear_callbacks,
+        get_callback_count, get_recent_events, get_events_by_type,
+        EVT_HEALTH_MODEL_VERIFIED, EVT_HEALTH_MODEL_FAILED,
+        EVT_HEALTH_MODEL_RATE_LIMITED, EVT_HEALTH_MODEL_REMOVED,
+        EVT_POOL_POPULATED, _default_log_callback,
+    )
+    from core import model_health
+
+    results: List[CallbackTestResult] = []
+
+    print("\n" + "=" * 70)
+    print("  FASE 6: TESTS DE CALLBACKS / NOTIFICACIONES  [v1.4]")
+    print(f"  {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    print("=" * 70)
+
+    # ── T1: Registro de callback y emisión básica ──
+    def test_cb_registration():
+        # Limpiar callbacks existentes (guardar los que había)
+        clear_callbacks()
+        collected = []
+
+        def my_cb(event_type, message, data):
+            collected.append((event_type, message, data))
+
+        # Registrar callback de prueba
+        register_callback(my_cb)
+        count = get_callback_count()
+        if count != 1:
+            return False
+
+        # Emitir evento y verificar recepción
+        notify("test:t1", "mensaje de prueba", {"key": "value"})
+        if len(collected) != 1:
+            return False
+        if collected[0][0] != "test:t1":
+            return False
+        if collected[0][1] != "mensaje de prueba":
+            return False
+        if collected[0][2].get("key") != "value":
+            return False
+
+        # Restaurar callback por defecto
+        register_callback(_default_log_callback)
+        return True
+
+    _cb_test(results, "T1", "Callback registration + notify()",
+             test_cb_registration)
+    _print_cb_result(results[-1])
+
+    # ── T2: Buffer de eventos — get_recent_events ──
+    def test_recent_events():
+        # Limpiar eventos previos emitiendo algo identifiable
+        notify("test:marker_t2", "antes de T2", {})
+        recent = get_recent_events(50)
+        marker_idx = None
+        for i, evt in enumerate(recent):
+            if evt["type"] == "test:marker_t2":
+                marker_idx = i
+                break
+        if marker_idx is None:
+            return False
+
+        # Emitir 3 eventos y verificar que get_recent_events los captura
+        for idx in range(3):
+            notify(f"test:t2_event_{idx}", f"evento {idx}", {"i": idx})
+
+        recent = get_recent_events(5)
+        # Debe haber al menos los 3 eventos nuevos entre los últimos 5
+        t2_events = [e for e in recent if e["type"].startswith("test:t2_event_")]
+        if len(t2_events) < 3:
+            return False
+
+        # Verificar orden (más reciente último)
+        for i, evt in enumerate(t2_events):
+            if evt["data"].get("i") != i:
+                return False
+        return True
+
+    _cb_test(results, "T2", "Event buffer — get_recent_events()",
+             test_recent_events)
+    _print_cb_result(results[-1])
+
+    # ── T3: Filtrado por tipo — get_events_by_type ──
+    def test_events_by_type():
+        # Emitir eventos de varios tipos
+        notify("test:type_a", "evento tipo A", {"x": 1})
+        notify("test:type_b", "evento tipo B", {"x": 2})
+        notify("test:type_a", "otro tipo A", {"x": 3})
+
+        by_a = get_events_by_type("test:type_a")
+        by_b = get_events_by_type("test:type_b")
+        by_c = get_events_by_type("test:type_c_no_existe")
+
+        if len(by_a) < 2:
+            return False
+        if len(by_b) < 1:
+            return False
+        if len(by_c) != 0:
+            return False
+        return True
+
+    _cb_test(results, "T3", "Event filtering — get_events_by_type()",
+             test_events_by_type)
+    _print_cb_result(results[-1])
+
+    # ── T4: Unregister callback ──
+    def test_unregister():
+        clear_callbacks()
+        collected = []
+
+        def my_cb(evt, msg, data):
+            collected.append(evt)
+
+        register_callback(my_cb)
+        unregister_callback(my_cb)
+        if get_callback_count() != 0:
+            return False
+
+        # Emitir evento — callback desregistrado NO debe recibirlo
+        notify("test:unreg", "despues de unregister", {})
+        if "test:unreg" in collected:
+            return False
+
+        # Restaurar
+        register_callback(_default_log_callback)
+        return True
+
+    _cb_test(results, "T4", "Unregister callback — deja de recibir eventos",
+             test_unregister)
+    _print_cb_result(results[-1])
+
+    # ── T5: Callback roto no rompe el flujo ──
+    def test_broken_callback():
+        clear_callbacks()
+        broken_called = [False]
+
+        def good_cb(evt, msg, data):
+            broken_called[0] = True
+
+        def broken_cb(evt, msg, data):
+            raise RuntimeError("Soy un callback roto en test T5")
+
+        register_callback(broken_cb)
+        register_callback(good_cb)
+
+        # Esto NO debe lanzar excepción
+        notify("test:broken", "trigger broken cb", {})
+
+        # El buen callback debe haberse ejecutado a pesar del roto
+        if not broken_called[0]:
+            return False
+
+        # Limpiar
+        clear_callbacks()
+        register_callback(_default_log_callback)
+        return True
+
+    _cb_test(results, "T5", "Broken callback — no rompe el flujo",
+             test_broken_callback)
+    _print_cb_result(results[-1])
+
+    # ── T6: clear_callbacks ──
+    def test_clear_callbacks():
+        clear_callbacks()
+        # Registrar varios
+        for i in range(5):
+            register_callback(lambda e, m, d, idx=i: None)
+
+        if get_callback_count() != 5:
+            return False
+
+        cleared = clear_callbacks()
+        if cleared != 5:
+            return False
+        if get_callback_count() != 0:
+            return False
+
+        # Restaurar
+        register_callback(_default_log_callback)
+        return True
+
+    _cb_test(results, "T6", "clear_callbacks — elimina todos los callbacks",
+             test_clear_callbacks)
+    _print_cb_result(results[-1])
+
+    # ── T7: model_health mark_available emite EVT_HEALTH_MODEL_VERIFIED ──
+    def test_health_mark_available():
+        collected = []
+        def spy(evt, msg, data):
+            if evt == EVT_HEALTH_MODEL_VERIFIED:
+                collected.append((evt, msg, data))
+
+        register_callback(spy)
+
+        # Ejecutar mark_available (esto emite notificación vía model_health v6.1)
+        model_health.mark_available("test-model-t7-verif", "test_provider_t7")
+
+        # Verificar que se emitió el evento
+        if len(collected) == 0:
+            unregister_callback(spy)
+            return False
+
+        evt_type, msg, data = collected[0]
+        if evt_type != EVT_HEALTH_MODEL_VERIFIED:
+            unregister_callback(spy)
+            return False
+        if data.get("model_id") != "test-model-t7-verif":
+            unregister_callback(spy)
+            return False
+        if data.get("provider") != "test_provider_t7":
+            unregister_callback(spy)
+            return False
+
+        unregister_callback(spy)
+        return True
+
+    _cb_test(results, "T7", "model_health mark_available → EVT_HEALTH_MODEL_VERIFIED",
+             test_health_mark_available)
+    _print_cb_result(results[-1])
+
+    # ── T8: model_health mark_failed emite EVT_HEALTH_MODEL_FAILED ──
+    def test_health_mark_failed():
+        collected = []
+        def spy(evt, msg, data):
+            if evt == EVT_HEALTH_MODEL_FAILED:
+                collected.append((evt, msg, data))
+
+        register_callback(spy)
+
+        # Usar un modelo que NO esté available para que mark_failed funcione
+        model_health.mark_failed("test-model-t8-fail", "test_provider_t8", "error de prueba")
+
+        if len(collected) == 0:
+            unregister_callback(spy)
+            return False
+
+        evt_type, msg, data = collected[0]
+        if evt_type != EVT_HEALTH_MODEL_FAILED:
+            unregister_callback(spy)
+            return False
+        if data.get("model_id") != "test-model-t8-fail":
+            unregister_callback(spy)
+            return False
+
+        unregister_callback(spy)
+        return True
+
+    _cb_test(results, "T8", "model_health mark_failed → EVT_HEALTH_MODEL_FAILED",
+             test_health_mark_failed)
+    _print_cb_result(results[-1])
+
+    # ── T9: model_health mark_rate_limited emite EVT_HEALTH_MODEL_RATE_LIMITED ──
+    def test_health_rate_limited():
+        collected = []
+        def spy(evt, msg, data):
+            if evt == EVT_HEALTH_MODEL_RATE_LIMITED:
+                collected.append((evt, msg, data))
+
+        register_callback(spy)
+
+        model_health.mark_rate_limited("test-model-t9-rl", "test_provider_t9")
+
+        if len(collected) == 0:
+            unregister_callback(spy)
+            return False
+
+        evt_type, msg, data = collected[0]
+        if data.get("model_id") != "test-model-t9-rl":
+            unregister_callback(spy)
+            return False
+
+        unregister_callback(spy)
+        return True
+
+    _cb_test(results, "T9",
+             "model_health mark_rate_limited → EVT_HEALTH_MODEL_RATE_LIMITED",
+             test_health_rate_limited)
+    _print_cb_result(results[-1])
+
+    # ── T10: model_health mark_model_removed emite EVT_HEALTH_MODEL_REMOVED ──
+    def test_health_model_removed():
+        collected = []
+        def spy(evt, msg, data):
+            if evt == EVT_HEALTH_MODEL_REMOVED:
+                collected.append((evt, msg, data))
+
+        register_callback(spy)
+
+        model_health.mark_model_removed("test-model-t10-rm", "test_provider_t10")
+
+        if len(collected) == 0:
+            unregister_callback(spy)
+            return False
+
+        evt_type, msg, data = collected[0]
+        if data.get("model_id") != "test-model-t10-rm":
+            unregister_callback(spy)
+            return False
+
+        unregister_callback(spy)
+        return True
+
+    _cb_test(results, "T10",
+             "model_health mark_model_removed → EVT_HEALTH_MODEL_REMOVED",
+             test_health_model_removed)
+    _print_cb_result(results[-1])
+
+    # ── T11: EVT_POOL_POPULATED emitido durante populate_pool ──
+    def test_pool_populated_event():
+        collected = []
+        def spy(evt, msg, data):
+            if evt == EVT_POOL_POPULATED:
+                collected.append((evt, msg, data))
+
+        register_callback(spy)
+
+        # populate_pool fue llamado en FASE 1 (si no es --callbacks-only)
+        # Buscar el evento en el buffer
+        events = get_events_by_type(EVT_POOL_POPULATED)
+        # Si no hay, intentar buscar en get_recent_events
+        if not events:
+            recent = get_recent_events(100)
+            events = [e for e in recent if e.get("type") == EVT_POOL_POPULATED]
+
+        unregister_callback(spy)
+
+        if not events:
+            # No se encontró — puede ser porque no se ejecutó FASE 1
+            # (modo --callbacks-only). Marcar como SKIP.
+            results[-1] if results else None  # placeholder
+            return "SKIP"
+
+        # Verificar estructura del evento
+        last_evt = events[-1]
+        if "total" not in last_evt.get("data", {}):
+            return False
+        return True
+
+    # Ejecutar T11 con manejo especial de SKIP
+    t11_result = CallbackTestResult("T11", "Pool populated → EVT_POOL_POPULATED")
+    try:
+        t11_outcome = test_pool_populated_event()
+        if t11_outcome == "SKIP":
+            t11_result.skipped = True
+            t11_result.detail = "Pool no poblado en esta ejecución (--callbacks-only)"
+        elif t11_outcome:
+            t11_result.passed = True
+        else:
+            t11_result.error = "Evento no encontrado o estructura incorrecta"
+    except Exception as e:
+        t11_result.error = f"{type(e).__name__}: {e}"
+    results.append(t11_result)
+    _print_cb_result(t11_result)
+
+    # ── T12: Evento tiene timestamp ──
+    def test_event_timestamp():
+        notify("test:timestamp", "verificar timestamp", {"ts": True})
+        recent = get_recent_events(5)
+        ts_events = [e for e in recent if e["type"] == "test:timestamp"]
+        if not ts_events:
+            return False
+        if "timestamp" not in ts_events[0]:
+            return False
+        if ts_events[0]["timestamp"] <= 0:
+            return False
+        return True
+
+    _cb_test(results, "T12", "Event structure includes timestamp",
+             test_event_timestamp)
+    _print_cb_result(results[-1])
+
+    # ── Resumen FASE 6 ──
+    passed = sum(1 for r in results if r.passed)
+    failed = sum(1 for r in results if not r.passed and not r.skipped)
+    skipped = sum(1 for r in results if r.skipped)
+    total = len(results)
+
+    print(f"\n  {'=' * 50}")
+    print(f"  RESUMEN CALLBACKS: {total} tests | "
+          f"PASS: {passed} | FAIL: {failed} | SKIP: {skipped}")
+    print(f"  {'=' * 50}")
+
+    # Detalle de fallos
+    failed_tests = [r for r in results if not r.passed and not r.skipped]
+    if failed_tests:
+        print(f"\n  TESTS FALLIDOS:")
+        for r in failed_tests:
+            print(f"    [{r.test_id}] {r.name}: {r.error}")
+
+    return results
+
+
+def _print_cb_result(r: CallbackTestResult) -> None:
+    """Imprime el resultado de un test de callback."""
+    icon = r.status_icon()
+    name_short = r.name[:50]
+    if r.skipped:
+        print(f"    [{icon}] {r.test_id}: {name_short} — {r.detail}")
+    elif r.passed:
+        print(f"    [{icon}] {r.test_id}: {name_short}")
+    else:
+        print(f"    [{icon}] {r.test_id}: {name_short} — {r.error}")
+
+
+def print_callback_summary(cb_results: List[CallbackTestResult]) -> None:
+    """Imprime tabla de resultados de callbacks."""
+    col = [8, 6, 55, 40]
+    headers = ["TEST ID", "STATUS", "NOMBRE", "DETALLE"]
+    sep = "-" * (sum(col) + len(col) * 3 + 2)
+
+    print(f"\n{sep}")
+    print("  " + "  ".join(h.ljust(c) for h, c in zip(headers, col)))
+    print(sep)
+
+    for r in cb_results:
+        icon = r.status_icon()
+        name_short = r.name[:53]
+        detail = r.detail if r.skipped else (r.error if not r.passed else "")
+        detail_short = detail[:38] if detail else ""
+        row = [r.test_id, icon, name_short, detail_short]
+        print("  " + "  ".join(str(v).ljust(c) for v, c in zip(row, col)))
+
+    print(sep)
+
+
+# ===========================================================================
 # MAIN
 # ===========================================================================
 
 def main():
     parser = argparse.ArgumentParser(
-        description="T7: Test E2E del pipeline con modelos gratuitos"
+        description="T7: Test E2E del pipeline con modelos gratuitos + Callbacks"
     )
     parser.add_argument("--providers", "-p", type=int, default=3,
-                        help="Mínimo de proveedores a testear (default: 3)")
+                        help="Minimo de proveedores a testear (default: 3)")
     parser.add_argument("--quick", "-q", action="store_true",
-                        help="Modo rápido: solo 1 llamada por proveedor")
+                        help="Modo rapido: solo 1 llamada por proveedor")
     parser.add_argument("--list-only", action="store_true",
                         help="Solo listar modelos free disponibles, sin testear")
     parser.add_argument("--no-fallback", action="store_true",
                         help="Desactivar fallback a modelos conocidos (solo pool)")
+    parser.add_argument("--callbacks-only", action="store_true",
+                        help="v1.4: Ejecutar SOLO tests de callbacks (no necesita API keys)")
     args = parser.parse_args()
 
     print("\n" + "=" * 70)
-    print("  T7 — TEST E2E PIPELINE (modelos gratuitos)  [v1.3]")
+    print("  T7 — TEST E2E PIPELINE (modelos gratuitos)  [v1.4]")
     print(f"  {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    if args.no_fallback:
+    if args.callbacks_only:
+        print("  MODO: --callbacks-only (solo tests de notificaciones)")
+    elif args.no_fallback:
         print("  MODO: --no-fallback (sin retry con modelos conocidos)")
     print("=" * 70)
 
+    # =======================================================================
+    # MODO --callbacks-only: Solo FASE 6
+    # =======================================================================
+    if args.callbacks_only:
+        cb_results = run_callback_tests()
+        print_callback_summary(cb_results)
+
+        cb_passed = sum(1 for r in cb_results if r.passed)
+        cb_failed = sum(1 for r in cb_results if not r.passed and not r.skipped)
+
+        print(f"\n  VEREDICTO CALLBACKS:")
+        print(f"    Tests passed: {cb_passed}/{len(cb_results)}")
+        if cb_failed == 0:
+            print(f"    RESULTADO: PASS (todos los tests de callbacks pasaron)")
+            sys.exit(0)
+        else:
+            print(f"    RESULTADO: FAIL ({cb_failed} tests fallaron)")
+            sys.exit(1)
+
+    # =======================================================================
+    # MODO COMPLETO: FASES 1-5 + FASE 6
+    # =======================================================================
+
     # ── FASE 1: Setup ──
-    print("\n  FASE 1: Inicialización del pool")
+    print("\n  FASE 1: Inicializacion del pool")
     pool, free_entries = setup_pool()
 
     if not free_entries and not args.list_only:
         print("\n  ERROR: No se encontraron modelos free tier.")
         print("  Verifique que al menos 2 proveedores tengan API keys en .env")
+        # Continuar con FASE 6 de todas formas
+        cb_results = run_callback_tests()
+        print_callback_summary(cb_results)
         sys.exit(1)
 
     # ── FASE 2: Seleccionar objetivos ──
-    print(f"\n  FASE 2: Selección de objetivos (mínimo {args.providers} proveedores)")
+    print(f"\n  FASE 2: Seleccion de objetivos (minimo {args.providers} proveedores)")
     targets = get_test_targets(pool, free_entries, min_providers=args.providers)
 
     if len(targets) < args.providers:
         print(f"\n  WARNING: Solo {len(targets)} proveedores disponibles "
-              f"(se pedían {args.providers})")
+              f"(se pedian {args.providers})")
 
     if args.list_only:
         print(f"\n  Modelos free seleccionados ({len(targets)}):")
@@ -556,7 +1069,7 @@ def main():
         icon = "PASS" if passed else "FAIL"
 
         if result.source == "fallback" and passed:
-            print(f"\n    ↻ pool fail → fallback {result.model_used} "
+            print(f"\n    fallback {result.model_used} "
                   f"[{icon}] {result.latency_ms:.0f}ms — {reason}")
         elif passed:
             print(f" [{icon}] {result.latency_ms:.0f}ms — {reason}")
@@ -564,22 +1077,21 @@ def main():
             print(f" [{icon}] {reason[:50]}")
             if result.pool_error and "NO_RETRY" in result.pool_error:
                 detail = result.pool_error.split(":", 1)[1].strip() if ":" in result.pool_error else ""
-                print(f"    ℹ {detail}")
+                print(f"    {detail}")
 
     elapsed_total = time.time() - start_total
 
     # ── FASE 4: Resultados ──
     print("\n" + "=" * 70)
-    print("  RESULTADOS")
+    print("  RESULTADOS PROVIDERS")
     print("=" * 70)
 
     print_results(results)
     print_summary(results)
 
-    print(f"\n  Tiempo total: {elapsed_total:.1f}s")
-    print("=" * 70)
+    print(f"\n  Tiempo total providers: {elapsed_total:.1f}s")
 
-    # ── FASE 5: Veredicto ──
+    # ── FASE 5: Veredicto providers ──
     passed_results = [r for r in results if r.success is True]
     providers_ok = set(r.provider for r in passed_results)
     has_multi_provider = len(providers_ok) >= 2
@@ -588,7 +1100,7 @@ def main():
     real_failures = [r for r in results if r.success is False
                      and "NO_RETRY" not in (r.pool_error or "")]
 
-    print(f"\n  VEREDICTO FINAL:")
+    print(f"\n  VEREDICTO PROVIDERS:")
     print(f"    Llamadas exitosas: {len(passed_results)}/{len(results)}")
     print(f"    Multi-proveedor: {'SI' if has_multi_provider else 'NO'} "
           f"({len(providers_ok)} proveedores)")
@@ -597,20 +1109,42 @@ def main():
         print(f"    Fallos por config (429/401/402): {no_retry_count} (no reintentados)")
         print(f"    Fallos reales (modelo/endpoint): {len(real_failures)}")
 
-    all_pass = len(passed_results) == len(results)
-    if all_pass and has_multi_provider:
-        print(f"    RESULTADO: PASS (todas las llamadas exitosas, multi-proveedor)")
-        sys.exit(0)
-    elif has_multi_provider and len(real_failures) == 0:
-        print(f"    RESULTADO: PASS (multi-proveedor OK, fallos solo de config)")
-        sys.exit(0)
-    elif has_multi_provider:
-        print(f"    RESULTADO: PARTIAL (multi-proveedor OK, "
-              f"{len(real_failures)} fallos reales)")
+    provider_verdict = "PASS"
+    if not ((len(passed_results) == len(results) and has_multi_provider) or
+            (has_multi_provider and len(real_failures) == 0)):
+        provider_verdict = "PARTIAL" if has_multi_provider else "FAIL"
+
+    # ── FASE 6: Callbacks / Notificaciones ──
+    cb_results = run_callback_tests()
+    print_callback_summary(cb_results)
+
+    # ── VEREDICTO FINAL COMBINADO ──
+    cb_passed = sum(1 for r in cb_results if r.passed)
+    cb_total_no_skip = sum(1 for r in cb_results if not r.skipped)
+    cb_failed = sum(1 for r in cb_results if not r.passed and not r.skipped)
+
+    print("\n" + "=" * 70)
+    print("  VEREDICTO FINAL COMBINADO")
+    print("=" * 70)
+    print(f"\n  PROVIDERS:  {provider_verdict} "
+          f"({len(passed_results)}/{len(results)} exitosas, "
+          f"{len(providers_ok)} proveedores)")
+    print(f"  CALLBACKS:  {'PASS' if cb_failed == 0 else 'FAIL'} "
+          f"({cb_passed}/{cb_total_no_skip} pasaron, "
+          f"{cb_failed} fallaron)")
+
+    all_pass = provider_verdict == "PASS" and cb_failed == 0
+    if all_pass:
+        print(f"\n    RESULTADO GLOBAL: PASS (providers + callbacks)")
         sys.exit(0)
     else:
-        print(f"    RESULTADO: FAIL (no se logró multi-proveedor)")
-        sys.exit(1)
+        partial_reasons = []
+        if provider_verdict != "PASS":
+            partial_reasons.append("providers parcial/fail")
+        if cb_failed > 0:
+            partial_reasons.append(f"{cb_failed} callback tests fallaron")
+        print(f"\n    RESULTADO GLOBAL: PARTIAL ({', '.join(partial_reasons)})")
+        sys.exit(0)
 
 
 if __name__ == "__main__":

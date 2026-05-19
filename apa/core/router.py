@@ -751,9 +751,9 @@ def populate_pool(force: bool = False) -> int:
     P-2: Provider Confidence se obtiene del provider.
     P-3: Arena scores se obtienen de arena_fetcher.
 
-    v5.4 (F1): Espera hasta 15s a que Arena data esté disponible
-    antes de iterar los modelos, para que los scores se carguen
-    correctamente en el pool.
+    v6.0 (Rendimiento): Ya NO espera a Arena data. Carga inmediata
+    desde cache local. Los Arena scores se actualizan cuando el
+    periodic refresh completa en background.
 
     Retorna: número de entries en el pool.
     """
@@ -765,23 +765,17 @@ def populate_pool(force: bool = False) -> int:
     try:
         from core.providers import provider_manager
 
-        # v5.4 (F1): Esperar a que Arena data esté disponible (hasta 15s)
-        # Cuando el cache expira, arena_fetcher lanza un refresh en background
-        # que tarda 5-15s. Sin esta espera, todos los scores llegan como None.
+        # v6.0: Cache-first inmediato — sin spin-lock.
+        # Arena ya cargó cache local al importar (Phase 0).
+        # Si no hay datos de Arena, se poblará sin scores y se
+        # actualizará cuando el periodic refresh complete.
         af = _get_arena_module()
-        for wait_i in range(15):
-            with af._refresh_lock:
-                has_data = bool(af._arena_data) and len(af._arena_data) > 0
-            if has_data:
-                if wait_i > 0:
-                    logger.info(f"populate_pool(): Arena data disponible tras {wait_i}s de espera")
-                break
-            if wait_i == 0:
-                logger.info("populate_pool(): Esperando Arena data...")
-            time.sleep(1)
+        with af._refresh_lock:
+            has_data = bool(af._arena_data) and len(af._arena_data) > 0
+        if has_data:
+            logger.info(f"populate_pool(): Arena data disponible desde cache ({len(af._arena_data)} modelos)")
         else:
-            logger.warning("populate_pool(): Arena data NO disponible tras 15s, "
-                          "continuando sin Arena scores")
+            logger.info("populate_pool(): Arena data no disponible, poblando sin Arena scores")
 
         # P-1: Obtener modelos con provider (sin deduplicar por model_id)
         all_models = provider_manager.get_all_models_with_provider()
@@ -795,6 +789,7 @@ def populate_pool(force: bool = False) -> int:
             _global_pool.clear()
 
         count = 0
+        notable_count = 0  # Modelos con arena_score o status != unknown
         for m in all_models:
             # F6: Usar prefixed_id como identificador principal del modelo
             # prefixed_id = "OPR:anthropic/claude-opus-4-6" o "ANT:claude-opus-4-6"
@@ -849,6 +844,21 @@ def populate_pool(force: bool = False) -> int:
             _global_pool.add_entry(entry)
             count += 1
 
+            # v6.6: Notificar SOLO modelos notables al pool para no inundar
+            # el buffer de eventos. Se notifica individualmente solo si:
+            #   - Tiene arena_score (modelo rankeado), o
+            #   - Su health_status no es 'unknown' (verificado/fallido/etc.)
+            # Los demas se notifican en lotes via pool:sync_batch al final.
+            is_notable = entry.arena_score is not None or entry.health_status != "unknown"
+            if is_notable:
+                notable_count += 1
+                _notify("pool:model_updated",
+                        f"Pool + {base_id} [{entry.health_status}]"
+                        + (f" score:{entry.arena_score:.0f}" if entry.arena_score else ""),
+                        {"model": base_id, "provider": provider_name,
+                         "health": entry.health_status,
+                         "arena_score": entry.arena_score})
+
         # P-2: Set provider confidence para cada provider
         for prov_name, prov_obj in provider_manager.providers.items():
             _global_pool.set_provider_confidence(prov_name, prov_obj.confidence_score)
@@ -865,6 +875,14 @@ def populate_pool(force: bool = False) -> int:
                 f"Pool poblado: {count} modelos ({arena_count} con Arena score)",
                 {"total": count, "arena_scores": arena_count, "health": summary})
 
+        # Notificar el lote de modelos no-notables (sin arena_score y unknown)
+        unknown_count = count - notable_count
+        if unknown_count > 0:
+            _notify("pool:sync_batch",
+                    f"Pool + {unknown_count} modelos sin ranking (cargados al pool)",
+                    {"batch_count": unknown_count, "notable_count": notable_count,
+                     "total": count})
+
         return count
 
     except Exception as e:
@@ -873,13 +891,11 @@ def populate_pool(force: bool = False) -> int:
 
 
 def _sync_single_model_to_pool(base_id: str) -> None:
-    """v6.4: Sincroniza UN modelo del health al pool en memoria.
+    """v6.6: Sincroniza UN modelo del health al pool en memoria.
 
     Callback registrado en model_health v6.0. Se llama tras cada
     mark_*() para que el pool refleje el cambio inmediatamente.
-    Solo actualiza memoria — no hace disco I/O.
-
-    base_id es el ID sin prefijo usado por model_health.
+    Emite pool:model_updated por cada cambio de estado.
     """
     try:
         from core.providers import provider_manager as _pm
@@ -891,20 +907,27 @@ def _sync_single_model_to_pool(base_id: str) -> None:
             if entry_base_id != base_id:
                 continue
             # Encontrada la entry del pool para este modelo
-            if mh_status == entry.health_status:
+            old_status = entry.health_status
+            if mh_status == old_status:
                 continue  # Sin cambios
             if mh_status == "available":
                 _global_pool.mark_available(entry.provider, entry.model_id)
-            elif mh_status == "payment_required" and entry.health_status != "available":
+            elif mh_status == "payment_required" and old_status != "available":
                 _global_pool.mark_payment_required(entry.provider, entry.model_id)
             elif mh_status in ("rate_limited", "temporarily_unavailable") \
-                    and entry.health_status not in ("available",):
+                    and old_status not in ("available",):
                 entry.health_status = mh_status
                 entry.verified_at = time.time()
             elif mh_status in ("failed", "model_removed") \
-                    and entry.health_status not in ("available",):
+                    and old_status not in ("available",):
                 entry.health_status = mh_status
                 entry.verified_at = time.time()
+            # v6.6: Notificar cambio individual
+            _notify("pool:model_updated",
+                    f"Pool ~ {base_id}: {old_status} -> {mh_status}",
+                    {"model": base_id, "provider": entry.provider,
+                     "old_health": old_status, "new_health": mh_status})
+            break  # Solo primera entry encontrada
     except Exception as e:
         logger.debug(f"_sync_single_model_to_pool({base_id}): {e}")
 
